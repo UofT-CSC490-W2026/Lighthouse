@@ -1,0 +1,246 @@
+\documentclass[a4paper,12pt]{article}
+
+\usepackage{a4wide}
+\usepackage{amsfonts}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{csquotes}
+\usepackage{lipsum}
+\usepackage{bm}
+\usepackage{tabularx}
+
+\usepackage{graphicx}  % For including images
+\usepackage{xcolor}  % For a colorfull presentation
+\usepackage{listings}  % For presenting code 
+
+\usepackage{algorithm}
+\usepackage[noend]{algpseudocode}
+\makeatletter
+\def\BState{\State\hskip-\ALG@thistlm}
+\makeatletter
+\usepackage[normalem]{ulem}
+\usepackage{array}
+\usepackage{hyperref}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue,
+  urlcolor=blue,
+  citecolor=blue
+}
+\newcommand{\bluehref}[2]{\href{#1}{\textcolor{blue}{\uline{#2}}}}
+\makeatletter
+\newcommand*{\citelinktext}[2]{%
+  \hyper@@link[cite]{}{cite.#1}{#2}}
+\makeatother
+
+\usepackage{booktabs} 
+\usepackage{enumitem}
+\usepackage{bbm}
+
+
+\usepackage{minted}
+\usepackage{subcaption}
+
+\usepackage[font=small,labelfont=bf]{caption}
+
+\usepackage{fullpage,amsmath,amsthm,amssymb}
+\newtheorem*{solution}{Solution}
+\newtheorem*{part1}{Part 1}
+\newtheorem*{part2}{Part 2}
+
+\newcommand{\Cov}{\mathrm{Cov}}
+\newcommand{\Var}{\mathrm{Var}}
+\newcommand{\rank}{\mathrm{rank}}
+\newcommand{\Span}{\mathrm{span}}
+\newcommand{\clip}{\mathrm{clip}}
+\newcommand{\Dim}{\mathrm{dim}}
+
+
+\usepackage{changepage}
+\newenvironment{restoretext}%
+    {
+     \begin{adjustwidth}{}{\leftmargin}%
+    }{\end{adjustwidth}
+     }
+
+% Definition of a style for code, matter of taste
+\lstdefinestyle{mystyle}{
+  language=Python,
+  basicstyle=\ttfamily\footnotesize,
+  backgroundcolor=\color[HTML]{F7F7F7},
+  rulecolor=\color[HTML]{EEEEEE},
+  identifierstyle=\color[HTML]{24292E},
+  emphstyle=\color[HTML]{005CC5},
+  keywordstyle=\color[HTML]{D73A49},
+  commentstyle=\color[HTML]{6A737D},
+  stringstyle=\color[HTML]{032F62},
+  emph={@property,self,range,True,False},
+  morekeywords={super,with,as,lambda},
+  literate=%
+    {+}{{{\color[HTML]{D73A49}+}}}1
+    {-}{{{\color[HTML]{D73A49}-}}}1
+    {*}{{{\color[HTML]{D73A49}*}}}1
+    {/}{{{\color[HTML]{D73A49}/}}}1
+    {=}{{{\color[HTML]{D73A49}=}}}1
+    {/=}{{{\color[HTML]{D73A49}=}}}1,
+  breakatwhitespace=false,
+  breaklines=true,
+  captionpos=b,
+  keepspaces=true,
+  numbers=none,
+  showspaces=false,
+  showstringspaces=false,
+  showtabs=false,
+  tabsize=4,
+  frame=single,
+}
+\lstset{style=mystyle}
+
+\begin{document}
+\begin{titlepage}
+    \centering
+    \vspace*{1cm}
+    
+    \Huge
+    \textbf{CSC490: Assignment 2}
+    
+    \vspace{0.5cm}
+    
+    \vspace{1.5cm}
+    
+    \textbf{Team Members}
+    
+    \vspace{0.8cm}
+    
+    \large
+    \begin{tabular}{ll}
+        \textbf{Name} & \textbf{Student ID} \\
+        \midrule
+        Aarya Prakash & 1008790257 \\
+        Derek Huynh & 1008849052 \\
+        Merrick Liu & 1008951920 \\
+        Rhys Balevicius & 1000801974 \\
+    \end{tabular}
+    
+    \vfill
+    
+    \large
+    University of Toronto\\
+    Department of Computer Science    
+\end{titlepage}
+
+% \title{CSC490 ML Engineering Capstone (2026)\\Assignment 1}
+% \author{\color{red}Rhys Balevicius, Merrick Liu, Aarya Prakash, Derek Huynh}
+% \title{}
+% \date{}
+% \maketitle
+
+% \tableofcontents % Generates the table of contents
+% \newpage % Start a new page after the table of contents
+
+% ================================================================================================
+%
+%
+%
+%
+%
+% ================================================================================================
+
+
+\section{Aspirational Datasets}
+
+% Imagine you had a magic wand, what datasets would your team need to be successful in this project? Create an aspirational list of datasets with the data schemas you would like.
+
+
+
+% ================================================================================================
+%
+%
+%
+%
+%
+% ================================================================================================
+
+\section{Reality Check}
+
+% Now review which datasets are actually available. Create a table of datasets that you could use for your project. Include public datasets, data you can scrape or data you can generate. For each dataset include a link to the source, a description of the data and commentary on why it is relevant to your project.
+
+
+
+
+% ================================================================================================
+%
+%
+%
+%
+%
+% ================================================================================================
+
+\section{Data-processing pipelines}
+
+% Design and implement a data processing pipeline for your project. This should include data ingestion, cleaning, transformation and data lake/warehouse design.
+
+% Key Requirements:
+% • Data schemas
+% • Pipeline diagrams with the technologies you are using (open source frameworks are helpful) • When the pipelines will run and for which use cases
+% • Code for an initial version of this pipeline
+% • Include next steps for features you did not implement in the writeup
+
+
+
+% ================================================================================================
+%
+%
+%
+%
+%
+% ================================================================================================
+
+\section{IaC Implementation}
+
+% Implement your pipeline infrastructure using code. You may choose any IaC framework, but your de- ployments should be straightforward and maintainable. For infrastructure components without existing modules:
+% • Create your own modules when possible (e.g., creating a Terraform module instead of using scripts) • If using scripts, provide clear justification for this choice
+% 4.1 Marking criteria:
+% • Code clarity and organization
+% • Infrastructure completeness
+% • Alignment with parts 1,2,3
+% • Implementation of multiple environments
+
+
+% ================================================================================================
+%
+%
+%
+%
+%
+% ================================================================================================
+
+\section{Disaster Recovery Demonstration}
+
+% Disaster has struck! Record a screen capture of your team deleting your production environment and your IaaC to restore it. Marks will be given on the completeness of the deletion restoration and clarity of the process/code.
+
+% Demo should include:
+% • Data processing services or deployed applications • Database systems and their data
+% • Configuration settings
+% • Access controls and security settings
+% • Verification of system functionality 
+
+
+
+% ================================================================================================
+%
+%
+%
+%
+%
+% ================================================================================================
+
+% \bibliography{bibliography} 
+% \begin{thebibliography}{9}
+
+% % \bibitem{bib:ucb1} Sébastien Bubeck and Nicolò Cesa-Bianchi. Regret analysis of stochastic and nonstochastic multi-armed bandit problems. \textit{Foundations and Trends in Machine Learning}, 5, 2012.
+
+% \end{thebibliography}
+
+\end{document}
