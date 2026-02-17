@@ -9,6 +9,7 @@ from .routes import Router
 
 log = get_logger(__name__)
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:

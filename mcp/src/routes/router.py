@@ -50,7 +50,9 @@ class Router:
             for route in router.routes:
                 if hasattr(route, "methods"):
                     for method in route.methods:
-                        pretty_print(method.ljust(method_padding, " "), Colour.bold_cyan)
+                        pretty_print(
+                            method.ljust(method_padding, " "), Colour.bold_cyan
+                        )
                         pretty_print(
                             f"{route.path}".ljust(route_padding, " "),
                             Colour.dim_grey,
