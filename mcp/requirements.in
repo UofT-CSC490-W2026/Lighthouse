@@ -1,0 +1,11 @@
+uvicorn[standard]
+black
+pydantic
+temporalio
+asyncpg
+pymilvus
+fastapi
+fastapi-mcp
+mcp_proxy
+mcp[cli]
+langgraph
