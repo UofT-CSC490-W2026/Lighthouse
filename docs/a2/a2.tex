@@ -37,7 +37,7 @@
 \usepackage{booktabs} 
 \usepackage{enumitem}
 \usepackage{bbm}
-
+\usepackage{tcolorbox}
 
 \usepackage{minted}
 \usepackage{subcaption}
@@ -56,6 +56,17 @@
 \newcommand{\clip}{\mathrm{clip}}
 \newcommand{\Dim}{\mathrm{dim}}
 
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+
+\tcbset{
+  colback=gray!3,
+  colframe=black!20,
+  boxsep=1mm,
+  left=1mm,
+  right=1mm,
+  top=1mm,
+  bottom=1mm,
+}
 
 \usepackage{changepage}
 \newenvironment{restoretext}%
@@ -152,6 +163,364 @@
 
 % Imagine you had a magic wand, what datasets would your team need to be successful in this project? Create an aspirational list of datasets with the data schemas you would like.
 
+Our goal is to improve the efficacy of AI coding agents, which may produce incorrect changes because they lack relevant context that exists outside their immediate working scope. To build and evaluate systems that surface this missing context, the ideal dataset would consist of tuples pairing a coding task with a point-in-time snapshot of the full software environment: the target repository, its transitive dependencies, documentation, and version history along with a gold label identifying the precise, minimal set of non-local information an agent would have needed to produce a correct change. This label is the core artifact: it answers the question \textit{"what did the agent need to know, but didn't, in order to get this right?"} and it spans multiple axes of context, including interface contracts and type signatures across module and library boundaries, downstream callers and invariants that a local change might violate, architectural conventions and design rationale recoverable from project history, and relevant documentation or specifications from external dependencies.\\
+
+\noindent Each entry would additionally include a failed agent attempt (produced without sufficient context), the corresponding corrected code (produced by a human or by an agent given adequate context), and the failure signal linking the two such as a test failure, type error, or behavioural regression. The causal structure of this data is what makes it powerful: the delta between the failed and successful attempts is attributable to the presence or absence of the labelled context. With such a dataset, one could train and evaluate any retrieval or reasoning approach against a ground-truth definition of what "the right context" is for a given task, and measure whether surfacing it actually changes agent outcomes.\\
+
+\subsection*{Aspirational Dataset 1: Context-Attributed Agent Failures}
+
+\noindent Each row captures a coding task where an agent failed, the corrected outcome, and a precise attribution of what non-local context was missing.
+
+\begin{tcolorbox}[title=Task]
+\footnotesize
+\begin{tabularx}{\linewidth}{@{} l l Y @{}}
+\toprule
+\textbf{Field} & \textbf{Type} & \textbf{Notes} \\
+\midrule
+repo & \texttt{str} & Target repository \\
+repo\_snapshot & \texttt{commit\_sha} & Frozen state of repo at task time \\
+dependency\_snapshot & \texttt{[package@version]} & Pinned versions of all transitive dependencies \\
+task & \texttt{str} & Natural language description of the coding task \\
+agent\_attempt & \texttt{AgentAttempt} & Incorrect attempt record \\
+failure\_signal & \texttt{FailureSignal} & Failure manifestation \\
+corrected\_diff & \texttt{Diff} & Correct change \\
+missing\_context & \texttt{[MissingContext]} & Required unseen context \\
+\bottomrule
+\end{tabularx}
+\end{tcolorbox}
+
+% \begin{tcolorbox}[title=AgentAttempt]
+% \footnotesize
+% \begin{tabularx}{\linewidth}{@{} l l Y @{}}
+% \toprule
+% \textbf{Field} & \textbf{Type} & \\
+% \midrule
+% diff & \texttt{Diff} & incorrect patch \\
+% files\_viewed & \texttt{[str]} & files inspected \\
+% searches\_performed & \texttt{[str]} & issued queries \\
+% \bottomrule
+% \end{tabularx}
+% \end{tcolorbox}
+
+% \begin{tcolorbox}[title=FailureSignal]
+% \footnotesize
+% \begin{tabularx}{\linewidth}{@{} l l Y @{}}
+% \toprule
+% \textbf{Field} & \textbf{Type} & \\
+% \midrule
+% type & \texttt{enum} & test\_failure $\mid$ type\_error $\mid$ runtime\_error $\mid$ semantic\_bug $\mid$ convention\_violation \\
+% message & \texttt{str} & diagnostic message \\
+% affected\_locations & \texttt{[\{file,line\}]} & manifestation points \\
+% \bottomrule
+% \end{tabularx}
+% \end{tcolorbox}
+
+% \begin{tcolorbox}[title=MissingContext]
+% \footnotesize
+% \begin{tabularx}{\linewidth}{@{} l l Y @{}}
+% \toprule
+% \textbf{Field} & \textbf{Type} & \\
+% \midrule
+% source & \texttt{enum} & same\_repo $\mid$ dependency $\mid$ documentation $\mid$ history \\
+% file & \texttt{str} & path / URL / commit \\
+% span & \texttt{(start,end)} & line range \\
+% content & \texttt{str} & contextual excerpt \\
+% context\_type & \texttt{enum} & contract $\mid$ caller $\mid$ type\_def $\mid$ invariant $\mid$ convention $\mid$ rationale $\mid$ config $\mid$ doc \\
+% explanation & \texttt{str} & why required \\
+% \bottomrule
+% \end{tabularx}
+% \end{tcolorbox}
+
+% ================================================================================================
+\subsection*{Aspirational Dataset 2: Interface Contracts and Cross-Boundary Specifications}
+
+\noindent Each row describes a function or module boundary, its (possibly implicit) contract, and the set of callers/consumers that depend on that contract across repo and library boundaries.
+
+\begin{tcolorbox}[title=Function]
+\footnotesize
+\begin{tabularx}{\linewidth}{@{} l l Y @{}}
+\toprule
+\textbf{Field} & \textbf{Type} & \textbf{Notes} \\
+\midrule
+repo & \texttt{str} & Repository \\
+repo\_snapshot & \texttt{commit\_sha} & Frozen state \\
+function & \texttt{fully\_qualified\_name} & Canonical name \\
+defined\_in & \texttt{\{file, span\}} & Definition location \\
+contract & \texttt{Contract} & Behavioural specification \\
+consumers & \texttt{[Consumer]} & Call sites \\
+known\_violations & \texttt{[KnownViolation]} & Historical breaks \\
+\bottomrule
+\end{tabularx}
+\end{tcolorbox}
+
+% \begin{tcolorbox}[title=Contract]
+% \footnotesize
+% \begin{tabularx}{\linewidth}{@{} l l Y @{}}
+% \toprule
+% \textbf{Field} & \textbf{Type} & \\
+% \midrule
+% signature & \texttt{str} & type signature / prototype \\
+% preconditions & \texttt{[str]} & required inputs \\
+% postconditions & \texttt{[str]} & guarantees on return \\
+% invariants & \texttt{[str]} & preserved properties \\
+% implicit & \texttt{[str]} & unwritten assumptions \\
+% source\_of\_truth & \texttt{enum} & type\_system $\mid$ docstring $\mid$ test\_assertion $\mid$ usage\_pattern $\mid$ unwritten \\
+% \bottomrule
+% \end{tabularx}
+% \end{tcolorbox}
+
+% \begin{tcolorbox}[title=Consumer]
+% \footnotesize
+% \begin{tabularx}{\linewidth}{@{} l l Y @{}}
+% \toprule
+% \textbf{Field} & \textbf{Type} & \\
+% \midrule
+% location & \texttt{\{repo,file,span\}} & call site \\
+% assumption\_relied\_on & \texttt{str} & contract dependency \\
+% \bottomrule
+% \end{tabularx}
+% \end{tcolorbox}
+
+% \begin{tcolorbox}[title=KnownViolation]
+% \footnotesize
+% \begin{tabularx}{\linewidth}{@{} l l Y @{}}
+% \toprule
+% \textbf{Field} & \textbf{Type} & \\
+% \midrule
+% diff & \texttt{Diff} & violating change \\
+% which\_contract\_broken & \texttt{str} & violated clause \\
+% failure\_mode & \texttt{str} & manifestation type \\
+% \bottomrule
+% \end{tabularx}
+% \end{tcolorbox}
+
+
+% ================================================================================================
+\subsection*{Aspirational Dataset 3: Downstream Impact Chains}
+
+\noindent Each row captures a local change and the full causal chain through which it produces a failure at a distant location.
+
+\begin{tcolorbox}[title=ChangeImpact]
+\footnotesize
+\begin{tabularx}{\linewidth}{@{} l l Y @{}}
+\toprule
+\textbf{Field} & \textbf{Type} & \textbf{Notes} \\
+\midrule
+repo & \texttt{str} & Repository \\
+repo\_snapshot & \texttt{commit\_sha} & Frozen state \\
+local\_change & \texttt{Diff} & Triggering modification \\
+change\_location & \texttt{\{file, function\}} & Origin of change \\
+failure\_location & \texttt{\{file, function, test\}} & Where breakage surfaced \\
+causal\_chain & \texttt{[CausalNode]} & Propagation path \\
+chain\_length & \texttt{int} & Hop count \\
+minimal\_context & \texttt{[\{file, span\}]} & Minimal foresight set \\
+\bottomrule
+\end{tabularx}
+\end{tcolorbox}
+
+% \begin{tcolorbox}[title=CausalNode]
+% \footnotesize
+% \begin{tabularx}{\linewidth}{@{} l l Y @{}}
+% \toprule
+% \textbf{Field} & \textbf{Type} & \\
+% \midrule
+% node & \texttt{\{file,function\}} & intermediate location \\
+% relationship & \texttt{enum} & calls $\mid$ inherits $\mid$ imports $\mid$ configures $\mid$ instantiates $\mid$ overrides \\
+% what\_propagates & \texttt{str} & propagated change (e.g.\ return type, side effect) \\
+% \bottomrule
+% \end{tabularx}
+% \end{tcolorbox}
+
+% ================================================================================================
+\newpage
+\subsection*{Aspirational Dataset 4: Architectural Conventions and Project Norms}
+
+\noindent Each row encodes an implicit or explicit convention in a codebase, examples of code that follow it, and examples of agent-generated code that violates it.
+
+\begin{tcolorbox}[title=ConventionSchema]
+\footnotesize
+\begin{tabularx}{\linewidth}{@{} l l Y @{}}
+\toprule
+\textbf{Field} & \textbf{Type} & \textbf{Notes} \\
+\midrule
+repo & \texttt{str} & Repository \\
+repo\_snapshot & \texttt{commit\_sha} & Frozen state \\
+convention & \texttt{Convention} & Normative pattern \\
+conforming\_examples & \texttt{[\{file, span\}]} & Correct usages \\
+violations & \texttt{[Violation]} & Broken instances \\
+\bottomrule
+\end{tabularx}
+\end{tcolorbox}
+
+% \begin{tcolorbox}[title=Convention]
+% \footnotesize
+% \begin{tabularx}{\linewidth}{@{} l l Y @{}}
+% \toprule
+% \textbf{Field} & \textbf{Type} & \\
+% \midrule
+% description & \texttt{str} & informal rule \\
+% category & \texttt{enum} & structural $\mid$ naming $\mid$ error\_handling $\mid$ concurrency $\mid$ security $\mid$ testing $\mid$ other \\
+% evidence & \texttt{[Evidence]} & pattern-establishing locations \\
+% codified\_in & \texttt{str $\mid$ null} & lint / ADR / style guide \\
+% \bottomrule
+% \end{tabularx}
+% \end{tcolorbox}
+
+% \begin{tcolorbox}[title=Evidence]
+% \footnotesize
+% \begin{tabularx}{\linewidth}{@{} l l Y @{}}
+% \toprule
+% \textbf{Field} & \textbf{Type} & \\
+% \midrule
+% file & \texttt{str} & file path \\
+% span & \texttt{(start,end)} & line range \\
+% \bottomrule
+% \end{tabularx}
+% \end{tcolorbox}
+
+% \begin{tcolorbox}[title=Violation]
+% \footnotesize
+% \begin{tabularx}{\linewidth}{@{} l l Y @{}}
+% \toprule
+% \textbf{Field} & \textbf{Type} & \\
+% \midrule
+% diff & \texttt{Diff} & violating change \\
+% what\_was\_violated & \texttt{str} & broken rule \\
+% corrected\_diff & \texttt{Diff} & fix \\
+% detection\_signal & \texttt{enum} & test\_failure $\mid$ review\_comment $\mid$ lint\_error $\mid$ silent\_bug \\
+% \bottomrule
+% \end{tabularx}
+% \end{tcolorbox}
+
+
+% ================================================================================================
+\subsection*{Aspirational Dataset 5: Design Rationale and Temporal Context}
+
+\noindent Each row links a region of code to the historical decisions that explain \textit{why} it is the way it is: the context an agent needs to avoid "cleaning up" intentional complexity.
+
+\begin{tcolorbox}[title=CodeHistory]
+\footnotesize
+\begin{tabularx}{\linewidth}{@{} l l Y @{}}
+\toprule
+\textbf{Field} & \textbf{Type} & \textbf{Notes} \\
+\midrule
+repo & \texttt{str} & Repository \\
+repo\_snapshot & \texttt{commit\_sha} & Frozen state \\
+code\_region & \texttt{\{file, span\}} & Location \\
+current\_form & \texttt{str} & Present code \\
+history & \texttt{[HistoryEntry]} & Prior commits \\
+rationale & \texttt{Rationale} & Design justification \\
+naive\_refactors & \texttt{[NaiveRefactor]} & Tempting but incorrect changes \\
+\bottomrule
+\end{tabularx}
+\end{tcolorbox}
+
+% \begin{tcolorbox}[title=HistoryEntry]
+% \footnotesize
+% \begin{tabularx}{\linewidth}{@{} l l Y @{}}
+% \toprule
+% \textbf{Field} & \textbf{Type} & \\
+% \midrule
+% commit & \texttt{sha} & commit id \\
+% timestamp & \texttt{datetime} & commit time \\
+% author & \texttt{str} & author \\
+% diff & \texttt{Diff} & change introduced \\
+% message & \texttt{str} & commit message \\
+% linked\_issue & \texttt{str $\mid$ null} & issue reference \\
+% \bottomrule
+% \end{tabularx}
+% \end{tcolorbox}
+
+% \begin{tcolorbox}[title=Rationale]
+% \footnotesize
+% \begin{tabularx}{\linewidth}{@{} l l Y @{}}
+% \toprule
+% \textbf{Field} & \textbf{Type} & \\
+% \midrule
+% summary & \texttt{str} & reason for current design \\
+% constraints & \texttt{[str]} & limiting factors \\
+% still\_relevant & \texttt{bool} & validity flag \\
+% invalidated\_by & \texttt{str $\mid$ null} & superseding event \\
+% \bottomrule
+% \end{tabularx}
+% \end{tcolorbox}
+
+% \begin{tcolorbox}[title=NaiveRefactor]
+% \footnotesize
+% \begin{tabularx}{\linewidth}{@{} l l Y @{}}
+% \toprule
+% \textbf{Field} & \textbf{Type} & \\
+% \midrule
+% diff & \texttt{Diff} & proposed change \\
+% why\_incorrect & \texttt{str} & breaking reason \\
+% failure\_signal & \texttt{str} & manifestation \\
+% \bottomrule
+% \end{tabularx}
+% \end{tcolorbox}
+
+
+% ================================================================================================
+\subsection*{Aspirational Dataset 6: Cross-Repository Dependency Context}
+
+\noindent Each row captures a usage of an external library and the external documentation, source, or changelog context needed to use it correctly.
+
+\begin{tcolorbox}[title=DependencyUsage]
+\footnotesize
+\begin{tabularx}{\linewidth}{@{} l l Y @{}}
+\toprule
+\textbf{Field} & \textbf{Type} & \textbf{Notes} \\
+\midrule
+consumer\_repo & \texttt{str} & Consuming repo \\
+repo\_snapshot & \texttt{commit\_sha} & Frozen state \\
+dependency & \texttt{\{name, version\}} & External package \\
+usage\_location & \texttt{\{file, span\}} & Call site \\
+api\_used & \texttt{fully\_qualified\_name} & Referenced symbol \\
+required\_context & \texttt{[RequiredContext]} & External knowledge \\
+version\_sensitivity & \texttt{VersionSensitivity} & Version constraints \\
+misuse\_examples & \texttt{[MisuseExample]} & Incorrect usages \\
+\bottomrule
+\end{tabularx}
+\end{tcolorbox}
+
+% \begin{tcolorbox}[title=RequiredContext]
+% \footnotesize
+% \begin{tabularx}{\linewidth}{@{} l l Y @{}}
+% \toprule
+% \textbf{Field} & \textbf{Type} & \\
+% \midrule
+% source\_type & \texttt{enum} & source\_code $\mid$ docstring $\mid$ changelog $\mid$ migration\_guide $\mid$ issue\_thread $\mid$ example \\
+% location & \texttt{str} & path / URL \\
+% content & \texttt{str} & relevant excerpt \\
+% relevance & \texttt{str} & why it matters \\
+% \bottomrule
+% \end{tabularx}
+% \end{tcolorbox}
+
+% \begin{tcolorbox}[title=VersionSensitivity]
+% \footnotesize
+% \begin{tabularx}{\linewidth}{@{} l l Y @{}}
+% \toprule
+% \textbf{Field} & \textbf{Type} & \\
+% \midrule
+% valid\_for & \texttt{version\_range} & safe versions \\
+% breaks\_at & \texttt{version $\mid$ null} & breaking version \\
+% breaking\_change & \texttt{str $\mid$ null} & behavioral change \\
+% \bottomrule
+% \end{tabularx}
+% \end{tcolorbox}
+
+% \begin{tcolorbox}[title=MisuseExample]
+% \footnotesize
+% \begin{tabularx}{\linewidth}{@{} l l Y @{}}
+% \toprule
+% \textbf{Field} & \textbf{Type} & \\
+% \midrule
+% diff & \texttt{Diff} & incorrect change \\
+% assumption\_violated & \texttt{str} & broken assumption \\
+% failure\_signal & \texttt{str} & manifestation \\
+% \bottomrule
+% \end{tabularx}
+% \end{tcolorbox}
 
 
 % ================================================================================================
