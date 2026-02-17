@@ -1,3 +1,12 @@
+from .indexing import (
+    IndexJobStatusResponse,
+    IndexStage,
+    IndexStatus,
+    RepoIndexStateResponse,
+    StartIndexJobRequest,
+    StartIndexJobResponse,
+    ToolIndexMetadata,
+)
 from .tools import (
     CallerEntry,
     ContractRecord,
@@ -24,6 +33,13 @@ from .tools import (
 )
 
 __all__ = [
+    "IndexJobStatusResponse",
+    "IndexStage",
+    "IndexStatus",
+    "RepoIndexStateResponse",
+    "StartIndexJobRequest",
+    "StartIndexJobResponse",
+    "ToolIndexMetadata",
     "CallerEntry",
     "ContractRecord",
     "ConventionCategory",

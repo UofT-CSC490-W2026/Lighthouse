@@ -1,0 +1,10 @@
+temporalio
+pydantic
+pydantic-settings
+python-dotenv
+asyncpg
+pymilvus
+gitpython
+boto3
+requests
+
