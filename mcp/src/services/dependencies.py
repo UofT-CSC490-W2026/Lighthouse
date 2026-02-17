@@ -9,4 +9,3 @@ class DependencyService:
     ) -> GetDependencyContextResponse:
         _ = request
         return GetDependencyContextResponse()
-

@@ -9,4 +9,3 @@ class ConventionService:
     ) -> GetConventionsResponse:
         _ = request
         return GetConventionsResponse(conventions=[])
-

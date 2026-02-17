@@ -10,7 +10,9 @@ from ..types import (
 )
 
 
-def _tool_spec(name: str, description: str, input_schema: dict[str, Any]) -> dict[str, Any]:
+def _tool_spec(
+    name: str, description: str, input_schema: dict[str, Any]
+) -> dict[str, Any]:
     return {
         "name": name,
         "description": description,

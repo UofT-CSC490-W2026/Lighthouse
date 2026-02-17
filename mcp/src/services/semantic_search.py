@@ -9,4 +9,3 @@ class SemanticSearchService:
     ) -> list[ToolContextItem]:
         _ = request
         return []
-

@@ -39,4 +39,3 @@ __all__ = [
     "ranking_service",
     "semantic_search_service",
 ]
-

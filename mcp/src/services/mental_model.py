@@ -4,4 +4,3 @@ class MentalModelService:
     async def get_module_signals(self, file_path: str) -> list[str]:
         _ = file_path
         return []
-

@@ -7,4 +7,3 @@ class HistoryService:
     async def get_history(self, request: GetHistoryRequest) -> GetHistoryResponse:
         _ = request
         return GetHistoryResponse(entries=[])
-

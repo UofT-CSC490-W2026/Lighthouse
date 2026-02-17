@@ -144,4 +144,3 @@ class GetDependencyContextResponse(BaseModel):
     changelog_notes: list[str] = Field(default_factory=list)
     known_issues: list[str] = Field(default_factory=list)
     version_sensitivity: str | None = None
-

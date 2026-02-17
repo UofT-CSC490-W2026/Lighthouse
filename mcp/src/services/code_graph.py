@@ -17,4 +17,3 @@ class CodeGraphService:
     async def get_contract(self, request: GetContractRequest) -> GetContractResponse:
         _ = request
         return GetContractResponse(contract=ContractRecord())
-

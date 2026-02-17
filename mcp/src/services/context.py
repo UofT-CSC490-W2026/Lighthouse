@@ -27,4 +27,3 @@ class ContextService:
         ranked = self.ranking_service.rank(candidates, limit=request.top_k)
         _ = await self.mental_model_service.get_module_signals(request.file)
         return GetContextForChangeResponse(items=ranked)
-
