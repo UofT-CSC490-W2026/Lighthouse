@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 
+from ...services import code_graph_service
 from ...types import (
-    ContractRecord,
     GetCallersRequest,
     GetCallersResponse,
     GetContractRequest,
@@ -17,8 +17,7 @@ router = APIRouter()
     summary="Stub tool: get callers for a symbol",
 )
 async def get_callers(request: GetCallersRequest) -> GetCallersResponse:
-    _ = request
-    return GetCallersResponse(callers=[])
+    return await code_graph_service.get_callers(request)
 
 
 @router.post(
@@ -27,6 +26,4 @@ async def get_callers(request: GetCallersRequest) -> GetCallersResponse:
     summary="Stub tool: get contract for a symbol",
 )
 async def get_contract(request: GetContractRequest) -> GetContractResponse:
-    _ = request
-    return GetContractResponse(contract=ContractRecord())
-
+    return await code_graph_service.get_contract(request)

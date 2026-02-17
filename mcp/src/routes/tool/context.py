@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from ...services import context_service
 from ...types import GetContextForChangeRequest, GetContextForChangeResponse
 
 router = APIRouter()
@@ -13,6 +14,4 @@ router = APIRouter()
 async def get_context_for_change(
     request: GetContextForChangeRequest,
 ) -> GetContextForChangeResponse:
-    _ = request
-    return GetContextForChangeResponse(items=[])
-
+    return await context_service.get_context_for_change(request)

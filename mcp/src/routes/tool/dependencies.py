@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from ...services import dependency_service
 from ...types import GetDependencyContextRequest, GetDependencyContextResponse
 
 router = APIRouter()
@@ -13,6 +14,4 @@ router = APIRouter()
 async def get_dependency_context(
     request: GetDependencyContextRequest,
 ) -> GetDependencyContextResponse:
-    _ = request
-    return GetDependencyContextResponse()
-
+    return await dependency_service.get_dependency_context(request)

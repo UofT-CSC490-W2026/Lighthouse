@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from ...services import history_service
 from ...types import GetHistoryRequest, GetHistoryResponse
 
 router = APIRouter()
@@ -11,6 +12,4 @@ router = APIRouter()
     summary="Stub tool: get file history context",
 )
 async def get_history(request: GetHistoryRequest) -> GetHistoryResponse:
-    _ = request
-    return GetHistoryResponse(entries=[])
-
+    return await history_service.get_history(request)

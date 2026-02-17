@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from ...services import convention_service
 from ...types import GetConventionsRequest, GetConventionsResponse
 
 router = APIRouter()
@@ -11,6 +12,4 @@ router = APIRouter()
     summary="Stub tool: get repository conventions",
 )
 async def get_conventions(request: GetConventionsRequest) -> GetConventionsResponse:
-    _ = request
-    return GetConventionsResponse(conventions=[])
-
+    return await convention_service.get_conventions(request)
