@@ -165,7 +165,8 @@
 
 % Imagine you had a magic wand, what datasets would your team need to be successful in this project? Create an aspirational list of datasets with the data schemas you would like.
 
-Our goal is to improve the efficacy of AI coding agents, which may produce incorrect changes because they lack relevant context that exists outside their immediate working scope. To build and evaluate systems that surface this missing context, the ideal dataset would consist of tuples pairing a coding task with a point-in-time snapshot of the full software environment: the target repository, its transitive dependencies, documentation, and version history along with a gold label identifying the precise, minimal set of non-local information an agent would have needed to produce a correct change. This label is the core artifact: it answers the question \textit{"what did the agent need to know, but didn't, in order to get this right?"} and it spans multiple axes of context, including interface contracts and type signatures across module and library boundaries, downstream callers and invariants that a local change might violate, architectural conventions and design rationale recoverable from project history, and relevant documentation or specifications from external dependencies.\\
+Our goal is to improve the efficacy of AI coding agents, which may produce incorrect changes because they lack relevant context that exists outside their immediate working scope. To build and evaluate systems that surface this missing context, the ideal dataset would consist of tuples pairing a coding task with a point-in-time snapshot of the full software environment: the target repository, its transitive dependencies, documentation/internal resources, and version history along with a gold label identifying the precise, minimal set of non-local information an agent would have needed to produce a correct change. This label is the core artifact: it answers the question \textit{"what did the agent need to know, but didn't, in order to get this right?"} and it spans multiple axes of context, including interface contracts and type signatures across module and library boundaries, downstream callers and invariants that a local change might violate, architectural conventions and design rationale recoverable from project history, and relevant documentation or specifications from external dependencies. To evaluate the cost and speed of these interventions, the dataset should also include granular telemetry for each trajectory, tracking cumulative token consumption and the number of environment interactions per task. By benchmarking these metrics against the gold label, we can determine whether an agent is arriving at the correct solution through a direct, "expert" path or via an inefficient, high-latency exploration of the codebase, and whether our provided harness provides a substantially higher signal to noise ratio.\\
+
 
 \noindent Each entry would additionally include a failed agent attempt (produced without sufficient context), the corresponding corrected code (produced by a human or by an agent given adequate context), and the failure signal linking the two such as a test failure, type error, or behavioural regression. The causal structure of this data is what makes it powerful: the delta between the failed and successful attempts is attributable to the presence or absence of the labelled context. With such a dataset, one could train and evaluate any retrieval or reasoning approach against a ground-truth definition of what "the right context" is for a given task, and measure whether surfacing it actually changes agent outcomes.\\
 
@@ -652,6 +653,115 @@ The first iteration established the end-to-end architecture, canonical schemas, 
 % ================================================================================================
 
 \section{IaC Implementation}
+\label{sec:iac}
+
+This section describes the Infrastructure-as-Code (IaC) implementation used to deploy the Lighthouse MVP execution plane on AWS. The implementation is written in Terraform and is organized into small, purpose-built modules to keep deployments straightforward, maintainable, and evolvable. The infrastructure supports (i) the MCP service (online request plane), (ii) the pipeline workers (offline and runtime execution), (iii) workflow orchestration (Temporal), (iv) vector retrieval (Milvus), and (v) durable storage layers (S3 data lake + Postgres operational metadata), matching the pipeline architecture in Parts 1--3.
+
+\subsection{IaC Approach and Repository Organization}
+We chose Terraform for three reasons: (1) the AWS provider ecosystem is mature, (2) a declarative plan/apply workflow makes environments reproducible, and (3) modular composition makes it easy to extend the MVP into production incrementally.
+
+The Terraform project is split into a root module and four child modules:
+
+\begin{itemize}[leftmargin=*]
+    \item \texttt{main.tf}, \texttt{variables.tf}, \texttt{outputs.tf}: root module wiring and environment-level configuration.
+    \item \texttt{modules/networking}: VPC, subnets, routing, NAT, and optional VPC endpoints.
+    \item \texttt{modules/storage}: S3 data lake bucket with encryption, versioning, and public access blocks.
+    \item \texttt{modules/database}: RDS Postgres in private subnets and least-privilege security groups.
+    \item \texttt{modules/compute}: ECS Fargate (MCP + worker), ALB ingress for MCP, IAM roles, logs, and self-hosted Temporal/Milvus on separate EC2 instances.
+\end{itemize}
+
+This module decomposition is intentionally aligned with the conceptual architecture: networking and storage primitives are independent; stateful databases are isolated; stateless services are deployed via ECS; and self-hosted stateful systems (Temporal and Milvus) live behind private subnets.
+
+\subsection{Infrastructure Components and Completeness (MVP)}
+The MVP infrastructure is ``complete'' in the sense that it provides all required services to run end-to-end indexing and offline workflows:
+
+\paragraph{Networking (VPC, Subnets, Routing, NAT)}
+\begin{itemize}[leftmargin=*]
+    \item A single VPC with DNS support enabled (required for service discovery).
+    \item Public subnets for the Application Load Balancer (ALB) and NAT Gateway.
+    \item Private subnets for ECS tasks, RDS, and EC2 stateful services (Temporal and Milvus).
+    \item Separate route tables for public and private subnets to avoid accidental exposure.
+    \item A NAT Gateway to enable outbound internet access for private workloads (e.g., pulling images from ECR, cloning repos, or reaching public documentation sources during ingestion).
+\end{itemize}
+
+\paragraph{Storage (S3 Data Lake)}
+\begin{itemize}[leftmargin=*]
+    \item One S3 bucket acts as the data lake for pipeline artifacts and staged data (bronze/silver/gold).
+    \item Server-side encryption (SSE) and versioning are enabled by default.
+    \item Public access is blocked at the bucket level.
+\end{itemize}
+
+\paragraph{Operational Database (RDS Postgres)}
+\begin{itemize}[leftmargin=*]
+    \item A Postgres instance is deployed in private subnets using an RDS subnet group.
+    \item The RDS security group is configured for least-privilege access: inbound Postgres connections are allowed only from approved security groups (ECS tasks), rather than broad CIDR blocks.
+    \item Production safeguards are enabled conditionally: deletion protection and longer backup retention in \texttt{prod}; lightweight backups in \texttt{dev}.
+\end{itemize}
+
+\paragraph{Compute Plane (ECS Fargate + ALB)}
+\begin{itemize}[leftmargin=*]
+    \item An ECS cluster runs two services on Fargate:
+    \begin{itemize}[leftmargin=*]
+        \item \textbf{MCP service:} deployed as a private ECS service behind a public ALB.
+        \item \textbf{Pipeline worker service:} deployed as private ECS tasks with no inbound exposure.
+    \end{itemize}
+    \item CloudWatch log groups are created for MCP and worker logs.
+    \item IAM roles are split between:
+    \begin{itemize}[leftmargin=*]
+        \item \textbf{Execution role:} required to pull images from ECR and emit logs.
+        \item \textbf{Task role:} application permissions (e.g., scoped access to the S3 data lake).
+    \end{itemize}
+\end{itemize}
+
+\paragraph{Self-Hosted Workflow and Vector Systems (EC2)}
+Temporal and Milvus are self-hosted on separate EC2 instances in private subnets. This choice is driven by cost constraints: we have AWS credits available, but do not have credits for managed Temporal/Milvus offerings. Self-hosting allows us to remain within budget while still meeting the functional requirements of Parts 1--3.
+
+\subsection{Use of Scripts (Justification)}
+For stateful services (Temporal and Milvus), we use \texttt{user\_data} to bootstrap docker and run docker-compose. This is a deliberate MVP tradeoff:
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Why scripts here:} Terraform does not provide a native, first-class abstraction for installing and operating multi-container applications on EC2 beyond provisioning the instance itself. Using \texttt{user\_data} keeps the deployment self-contained and reproducible without introducing additional orchestration layers (e.g., Kubernetes) prematurely.
+    \item \textbf{Why not for everything:} All AWS primitives (VPC, subnets, ALB, ECS, IAM, RDS, S3) are managed declaratively in Terraform modules. Scripts are limited to service bootstrapping where Terraform is not the right tool for day-2 operations.
+    \item \textbf{Upgrade path:} As the project matures, we can replace bootstrap scripts with a more structured approach (e.g., SSM documents, AMIs, or a dedicated configuration management step) while keeping the Terraform interface stable.
+\end{itemize}
+
+\subsection{Security Controls}
+Security is enforced via network segmentation and least-privilege IAM:
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Ingress minimization:} Only the ALB is public. MCP tasks allow inbound only from the ALB security group. Worker tasks have no inbound rules.
+    \item \textbf{Database isolation:} RDS is not publicly accessible and allows inbound only from ECS task security groups.
+    \item \textbf{Stateful isolation:} Temporal (7233) and Milvus (19530) are reachable only from inside the VPC; SSH is restricted to an admin CIDR when a key pair is configured.
+    \item \textbf{S3 hardening:} encryption + versioning + public access blocks are enabled by default.
+\end{itemize}
+
+\subsection{Alignment with Parts 1--3}
+The IaC implementation is intentionally mapped to the architectural requirements:
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Online runtime indexing and MCP tool calls:} The MCP service is deployed as a low-latency, horizontally scalable ECS service behind an ALB, matching the online request-driven pipeline described earlier.
+    \item \textbf{Offline and scheduled pipelines:} Pipeline workers run as ECS services and execute ingestion, transformation, and indexing jobs; Temporal provides workflow orchestration and durable retries consistent with the staged pipeline model.
+    \item \textbf{Two-tier storage design:} S3 holds large raw/curated artifacts (data lake), Postgres stores structured operational metadata and pipeline run state, and Milvus stores retrieval-ready vectors for context search.
+\end{itemize}
+
+\subsection{Multiple Environments}
+The Terraform implementation supports multiple environments (\texttt{dev}, \texttt{staging}, \texttt{prod}) using environment-scoped naming and configuration:
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Namespacing:} resource names include \texttt{<project>-<environment>} to prevent collisions.
+    \item \textbf{Environment-specific safety toggles:}
+    \begin{itemize}[leftmargin=*]
+        \item S3 \texttt{force\_destroy} enabled in \texttt{dev} for rapid iteration; disabled in \texttt{prod}.
+        \item RDS deletion protection and longer backup retention enabled in \texttt{prod}.
+        \item Instance sizes and desired task counts can be varied by environment via \texttt{*.tfvars}.
+    \end{itemize}
+    \item \textbf{Operational workflow:} environments can be deployed independently using separate variable files, for example:
+    \begin{itemize}[leftmargin=*]
+        \item \texttt{terraform apply -var-file=dev.tfvars}
+        \item \texttt{terraform apply -var-file=prod.tfvars}
+    \end{itemize}
+\end{itemize}
+
 
 % Implement your pipeline infrastructure using code. You may choose any IaC framework, but your deployments should be straightforward and maintainable. For infrastructure components without existing modules:
 % • Create your own modules when possible (e.g., creating a Terraform module instead of using scripts)
