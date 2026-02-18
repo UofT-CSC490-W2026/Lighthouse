@@ -18,10 +18,14 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
 class Base(DeclarativeBase):
+    """Declarative SQLAlchemy base for pipeline persistence models."""
+
     pass
 
 
 class IndexJob(Base):
+    """Runtime index job lifecycle table keyed by `job_id`."""
+
     __tablename__ = "index_jobs"
     __table_args__ = (
         CheckConstraint(
@@ -54,6 +58,8 @@ class IndexJob(Base):
 
 
 class IndexState(Base):
+    """Current repo/ref readiness state table keyed by `(repo_id, ref)`."""
+
     __tablename__ = "index_states"
     __table_args__ = (Index("idx_index_states_status", "status"),)
 

@@ -25,6 +25,7 @@ from .workflows import (
 
 
 async def _create_client() -> Client:
+    """Create a Temporal client using pipeline runtime settings."""
     return await Client.connect(
         settings.temporal_target_host,
         namespace=settings.temporal_namespace,
@@ -32,6 +33,7 @@ async def _create_client() -> Client:
 
 
 async def _run_runtime_worker(client: Client) -> None:
+    """Run the worker bound to the runtime indexing task queue."""
     worker = Worker(
         client,
         task_queue=settings.temporal_task_queue_runtime,
@@ -51,6 +53,7 @@ async def _run_runtime_worker(client: Client) -> None:
 
 
 async def _run_offline_worker(client: Client) -> None:
+    """Run the worker bound to the offline dataset task queue."""
     worker = Worker(
         client,
         task_queue=settings.temporal_task_queue_offline,
@@ -66,6 +69,7 @@ async def _run_offline_worker(client: Client) -> None:
 
 
 async def _run_mental_model_worker(client: Client) -> None:
+    """Run the worker bound to the mental-model task queue."""
     worker = Worker(
         client,
         task_queue=settings.temporal_task_queue_mental_model,
@@ -76,6 +80,7 @@ async def _run_mental_model_worker(client: Client) -> None:
 
 
 async def main() -> None:
+    """Start all pipeline workers concurrently in a single process."""
     client = await _create_client()
     await asyncio.gather(
         _run_runtime_worker(client),

@@ -1,3 +1,5 @@
+"""Pipeline-facing exports of canonical shared indexing contracts."""
+
 from .indexing import (
     IndexJobStatusResponse,
     IndexStage,

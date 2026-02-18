@@ -1,3 +1,5 @@
+"""Alembic environment configuration for pipeline persistence migrations."""
+
 from __future__ import annotations
 
 import asyncio
@@ -19,6 +21,7 @@ target_metadata = Base.metadata
 
 
 def _db_url() -> str:
+    """Resolve database URL from environment override or Alembic config."""
     env_url = os.getenv("POSTGRES_DSN", "").strip()
     if env_url:
         return env_url
@@ -26,6 +29,7 @@ def _db_url() -> str:
 
 
 def run_migrations_offline() -> None:
+    """Run migrations in offline mode without a live DB connection."""
     url = _db_url()
     context.configure(
         url=url,
@@ -39,6 +43,7 @@ def run_migrations_offline() -> None:
 
 
 def _run_migrations(connection) -> None:
+    """Run migrations using an established SQLAlchemy connection."""
     context.configure(
         connection=connection,
         target_metadata=target_metadata,
@@ -50,6 +55,7 @@ def _run_migrations(connection) -> None:
 
 
 async def run_migrations_online() -> None:
+    """Run migrations in online mode using an async SQLAlchemy engine."""
     configuration = config.get_section(config.config_ini_section, {})
     configuration["sqlalchemy.url"] = _db_url()
 

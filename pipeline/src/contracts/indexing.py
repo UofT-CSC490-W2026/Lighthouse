@@ -1,3 +1,5 @@
+"""Pipeline-local bridge to shared indexing contract models and helpers."""
+
 from __future__ import annotations
 
 from indexing import (

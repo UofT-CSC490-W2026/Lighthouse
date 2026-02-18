@@ -10,6 +10,8 @@ bootstrap_runtime_config(service="pipeline")
 
 
 class Settings(BaseSettings):
+    """Runtime configuration contract for all pipeline worker processes."""
+
     model_config = SettingsConfigDict(
         extra="ignore",
         case_sensitive=False,
@@ -55,6 +57,7 @@ class Settings(BaseSettings):
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
+    """Return a cached `Settings` instance for process-wide reuse."""
     return Settings()
 
 

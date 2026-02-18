@@ -26,6 +26,8 @@ _ENGINE_LOCK = asyncio.Lock()
 
 @dataclass(frozen=True, slots=True)
 class IndexJobWrite:
+    """Typed upsert payload for `index_jobs` records."""
+
     job_id: str
     workflow_id: str
     repo_id: str
@@ -39,6 +41,8 @@ class IndexJobWrite:
 
 @dataclass(frozen=True, slots=True)
 class IndexStateWrite:
+    """Typed upsert payload for `index_states` records."""
+
     repo_id: str
     ref: str
     status: IndexStatus
@@ -55,6 +59,7 @@ async def record_runtime_index_started(
     repo_id: str,
     ref: str,
 ) -> None:
+    """Persist initial `PENDING` job/state when runtime indexing begins."""
     await upsert_index_job(
         IndexJobWrite(
             job_id=job_id,
@@ -84,6 +89,7 @@ async def record_runtime_index_ready(
     ref: str,
     snapshot_sha: str | None,
 ) -> None:
+    """Persist terminal `READY` job/state when runtime indexing succeeds."""
     now = datetime.now(timezone.utc)
     await upsert_index_job(
         IndexJobWrite(
@@ -117,6 +123,7 @@ async def record_runtime_index_progress(
     stage: IndexStage,
     progress_pct: int,
 ) -> None:
+    """Persist intermediate runtime stage and percentage progress updates."""
     progress = _validate_progress(progress_pct)
     await upsert_index_job(
         IndexJobWrite(
@@ -152,6 +159,7 @@ async def record_runtime_index_failed(
     error_message: str,
     progress_pct: int = 0,
 ) -> None:
+    """Persist terminal `FAILED` job/state and attached error metadata."""
     progress = _validate_progress(progress_pct)
     await upsert_index_job(
         IndexJobWrite(
@@ -177,6 +185,7 @@ async def record_runtime_index_failed(
 
 
 async def upsert_index_job(write: IndexJobWrite) -> None:
+    """Insert or update one `index_jobs` record."""
     session_factory = await _get_session_factory()
     values = {
         "job_id": write.job_id,
@@ -208,6 +217,7 @@ async def upsert_index_job(write: IndexJobWrite) -> None:
 
 
 async def upsert_index_state(write: IndexStateWrite) -> None:
+    """Insert or update one `index_states` record."""
     session_factory = await _get_session_factory()
     values = {
         "repo_id": write.repo_id,
@@ -240,12 +250,14 @@ async def _execute_and_commit(
     session_factory: async_sessionmaker[AsyncSession],
     statement,
 ) -> None:
+    """Execute a write statement and commit it in a short-lived session."""
     async with session_factory() as session:
         await session.execute(statement)
         await session.commit()
 
 
 async def _get_session_factory() -> async_sessionmaker[AsyncSession]:
+    """Lazily initialize and cache the async SQLAlchemy session factory."""
     dsn = settings.postgres_dsn
     if not dsn:
         raise RuntimeError("POSTGRES_DSN is required for pipeline index persistence")
@@ -267,6 +279,7 @@ async def _get_session_factory() -> async_sessionmaker[AsyncSession]:
 
 
 async def dispose_persistence_engine() -> None:
+    """Dispose cached engine/session objects, primarily for shutdown/tests."""
     global _ENGINE, _SESSION_FACTORY
     if _ENGINE is not None:
         await _ENGINE.dispose()
@@ -275,6 +288,7 @@ async def dispose_persistence_engine() -> None:
 
 
 def _validate_progress(progress_pct: int) -> int:
+    """Validate progress percentages are bounded within `[0, 100]`."""
     if progress_pct < 0 or progress_pct > 100:
         raise ValueError("progress_pct must be between 0 and 100")
     return progress_pct

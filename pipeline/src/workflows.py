@@ -22,6 +22,8 @@ from .state import IndexStage, IndexStatus
 
 @dataclass
 class RuntimeIndexParams:
+    """Input contract for runtime repository indexing workflow runs."""
+
     repo_id: str
     repo_url: str
     ref: str = "main"
@@ -30,12 +32,16 @@ class RuntimeIndexParams:
 
 @dataclass
 class OfflineDatasetParams:
+    """Input contract for offline dataset processing workflow runs."""
+
     dataset_name: str
     dataset_version: str | None = None
 
 
 @dataclass
 class MentalModelParams:
+    """Input contract for repository mental-model refresh workflow runs."""
+
     repo_id: str
     from_sha: str | None = None
     to_sha: str | None = None
@@ -43,8 +49,11 @@ class MentalModelParams:
 
 @workflow.defn
 class RuntimeIndexWorkflow:
+    """Workflow orchestrating runtime ingest/clean/transform/store stages."""
+
     @workflow.run
     async def run(self, params: RuntimeIndexParams) -> dict[str, str]:
+        """Execute runtime indexing and persist lifecycle state transitions."""
         workflow_info = workflow.info()
         current_workflow_id = workflow_info.workflow_id
         current_run_id = workflow_info.run_id
@@ -139,8 +148,11 @@ class RuntimeIndexWorkflow:
 
 @workflow.defn
 class OfflineDatasetWorkflow:
+    """Workflow orchestrating offline dataset processing stages."""
+
     @workflow.run
     async def run(self, params: OfflineDatasetParams) -> dict[str, str]:
+        """Run ingest/clean/transform/store over an offline dataset payload."""
         payload = {
             "dataset_name": params.dataset_name,
             "dataset_version": params.dataset_version,
@@ -170,8 +182,11 @@ class OfflineDatasetWorkflow:
 
 @workflow.defn
 class MentalModelWorkflow:
+    """Workflow for computing repository mental-model artifacts."""
+
     @workflow.run
     async def run(self, params: MentalModelParams) -> dict[str, str]:
+        """Execute mental-model activity for a repository commit range."""
         payload = {
             "repo_id": params.repo_id,
             "from_sha": params.from_sha,

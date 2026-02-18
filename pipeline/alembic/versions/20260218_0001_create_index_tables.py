@@ -18,6 +18,7 @@ depends_on = None
 
 
 def upgrade() -> None:
+    """Create index lifecycle/state tables and supporting indexes."""
     op.create_table(
         "index_jobs",
         sa.Column("job_id", sa.String(), nullable=False),
@@ -77,6 +78,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """Drop index lifecycle/state tables and their secondary indexes."""
     op.drop_index("idx_index_states_status", table_name="index_states")
     op.drop_table("index_states")
     op.drop_index("idx_index_jobs_workflow_id", table_name="index_jobs")
