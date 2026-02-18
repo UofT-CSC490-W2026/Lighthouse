@@ -10,6 +10,7 @@ from .activities import (
     ingest_activity,
     mental_model_activity,
     persist_runtime_index_failure_activity,
+    persist_runtime_index_progress_activity,
     persist_runtime_index_start_activity,
     persist_runtime_index_success_activity,
     store_activity,
@@ -80,36 +81,39 @@ class RuntimeIndexWorkflow:
         )
 
         current_stage = IndexStage.INGEST
+        current_progress = 0
         try:
-            await workflow.execute_activity(
-                ingest_activity,
-                payload,
-                start_to_close_timeout=timedelta(minutes=10),
-            )
-            current_stage = IndexStage.CLEAN
-            await workflow.execute_activity(
-                clean_activity,
-                payload,
-                start_to_close_timeout=timedelta(minutes=10),
-            )
-            current_stage = IndexStage.TRANSFORM
-            await workflow.execute_activity(
-                transform_activity,
-                payload,
-                start_to_close_timeout=timedelta(minutes=20),
-            )
-            current_stage = IndexStage.STORE
-            await workflow.execute_activity(
-                store_activity,
-                payload,
-                start_to_close_timeout=timedelta(minutes=10),
-            )
+            stage_plan = [
+                (IndexStage.INGEST, 10, ingest_activity, timedelta(minutes=10)),
+                (IndexStage.CLEAN, 35, clean_activity, timedelta(minutes=10)),
+                (IndexStage.TRANSFORM, 70, transform_activity, timedelta(minutes=20)),
+                (IndexStage.STORE, 90, store_activity, timedelta(minutes=10)),
+            ]
+
+            for stage, progress_pct, stage_activity, timeout in stage_plan:
+                current_stage = stage
+                current_progress = progress_pct
+                await workflow.execute_activity(
+                    persist_runtime_index_progress_activity,
+                    {
+                        **payload,
+                        "stage": stage.value,
+                        "progress_pct": progress_pct,
+                    },
+                    start_to_close_timeout=timedelta(seconds=30),
+                )
+                await workflow.execute_activity(
+                    stage_activity,
+                    payload,
+                    start_to_close_timeout=timeout,
+                )
         except Exception as exc:
             await workflow.execute_activity(
                 persist_runtime_index_failure_activity,
                 {
                     **payload,
                     "stage": current_stage.value,
+                    "progress_pct": current_progress,
                     "error_code": "RUNTIME_INDEX_FAILED",
                     "error_message": str(exc)[:2000],
                 },

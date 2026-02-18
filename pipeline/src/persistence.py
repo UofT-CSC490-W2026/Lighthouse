@@ -108,6 +108,39 @@ async def record_runtime_index_ready(
     )
 
 
+async def record_runtime_index_progress(
+    *,
+    job_id: str,
+    workflow_id: str,
+    repo_id: str,
+    ref: str,
+    stage: IndexStage,
+    progress_pct: int,
+) -> None:
+    progress = _validate_progress(progress_pct)
+    await upsert_index_job(
+        IndexJobWrite(
+            job_id=job_id,
+            workflow_id=workflow_id,
+            repo_id=repo_id,
+            ref=ref,
+            status=IndexStatus.PENDING,
+            stage=stage,
+            progress_pct=progress,
+            error_code=None,
+            error_message=None,
+        )
+    )
+    await upsert_index_state(
+        IndexStateWrite(
+            repo_id=repo_id,
+            ref=ref,
+            status=IndexStatus.PENDING,
+            active_job_id=job_id,
+        )
+    )
+
+
 async def record_runtime_index_failed(
     *,
     job_id: str,
@@ -117,7 +150,9 @@ async def record_runtime_index_failed(
     stage: IndexStage | None,
     error_code: str,
     error_message: str,
+    progress_pct: int = 0,
 ) -> None:
+    progress = _validate_progress(progress_pct)
     await upsert_index_job(
         IndexJobWrite(
             job_id=job_id,
@@ -126,7 +161,7 @@ async def record_runtime_index_failed(
             ref=ref,
             status=IndexStatus.FAILED,
             stage=stage,
-            progress_pct=0,
+            progress_pct=progress,
             error_code=error_code,
             error_message=error_message,
         )
@@ -237,3 +272,9 @@ async def dispose_persistence_engine() -> None:
         await _ENGINE.dispose()
     _ENGINE = None
     _SESSION_FACTORY = None
+
+
+def _validate_progress(progress_pct: int) -> int:
+    if progress_pct < 0 or progress_pct > 100:
+        raise ValueError("progress_pct must be between 0 and 100")
+    return progress_pct
