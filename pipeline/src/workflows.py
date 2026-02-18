@@ -73,7 +73,7 @@ class RuntimeIndexWorkflow:
                 current_workflow_id,
             )
 
-        payload = {
+        payload: dict[str, str | bool | None] = {
             "job_id": current_run_id,
             "repo_id": params.repo_id,
             "repo_url": params.repo_url,
@@ -91,6 +91,7 @@ class RuntimeIndexWorkflow:
 
         current_stage = IndexStage.INGEST
         current_progress = 0
+        stage_payload: dict[str, object] = dict(payload)
         try:
             stage_plan = [
                 (IndexStage.INGEST, 10, ingest_activity, timedelta(minutes=10)),
@@ -105,22 +106,22 @@ class RuntimeIndexWorkflow:
                 await workflow.execute_activity(
                     persist_runtime_index_progress_activity,
                     {
-                        **payload,
+                        **stage_payload,
                         "stage": stage.value,
                         "progress_pct": progress_pct,
                     },
                     start_to_close_timeout=timedelta(seconds=30),
                 )
-                await workflow.execute_activity(
+                stage_payload = await workflow.execute_activity(
                     stage_activity,
-                    payload,
+                    stage_payload,
                     start_to_close_timeout=timeout,
                 )
         except Exception as exc:
             await workflow.execute_activity(
                 persist_runtime_index_failure_activity,
                 {
-                    **payload,
+                    **stage_payload,
                     "stage": current_stage.value,
                     "progress_pct": current_progress,
                     "error_code": "RUNTIME_INDEX_FAILED",
@@ -133,8 +134,8 @@ class RuntimeIndexWorkflow:
         await workflow.execute_activity(
             persist_runtime_index_success_activity,
             {
-                **payload,
-                "snapshot_sha": None,
+                **stage_payload,
+                "snapshot_sha": stage_payload.get("snapshot_sha"),
             },
             start_to_close_timeout=timedelta(seconds=30),
         )

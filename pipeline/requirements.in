@@ -8,4 +8,4 @@ alembic
 pymilvus
 gitpython
 boto3
-requests
+PyGithub
