@@ -37,6 +37,13 @@ class BackendUnavailableError(MCPServiceError):
     code = "BACKEND_UNAVAILABLE"
 
 
+class AuthenticationRequiredError(MCPServiceError):
+    """Raised when a request is missing required authentication credentials."""
+
+    status_code = 401
+    code = "AUTHENTICATION_REQUIRED"
+
+
 class WorkflowExecutionError(MCPServiceError):
     """Raised when workflow orchestration operations fail."""
 

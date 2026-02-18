@@ -19,12 +19,12 @@ router = APIRouter()
     summary="Stub tool: get context for a planned change",
 )
 async def get_context_for_change(
-    request: GetContextForChangeRequest,
+    tool_request: GetContextForChangeRequest,
 ) -> ToolResponseEnvelope[GetContextForChangeResponse]:
     """Return ranked context items for a proposed code change."""
     gate = await gate_tool_request(
-        repo_id=request.repo_id,
-        ref=request.ref,
+        repo_id=tool_request.repo_id,
+        ref=tool_request.ref,
         tool_name="get_context_for_change",
     )
     if not gate.allow_execute:
@@ -34,7 +34,7 @@ async def get_context_for_change(
             retry=gate.retry,
         )
 
-    result = await context_service.get_context_for_change(request)
+    result = await context_service.get_context_for_change(tool_request)
     return build_tool_envelope(
         index=gate.index,
         result=result,

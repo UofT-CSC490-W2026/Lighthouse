@@ -15,12 +15,12 @@ router = APIRouter()
     summary="Stub tool: get file history context",
 )
 async def get_history(
-    request: GetHistoryRequest,
+    tool_request: GetHistoryRequest,
 ) -> ToolResponseEnvelope[GetHistoryResponse]:
     """Return history entries matching the request scope."""
     gate = await gate_tool_request(
-        repo_id=request.repo_id,
-        ref=request.ref,
+        repo_id=tool_request.repo_id,
+        ref=tool_request.ref,
         tool_name="get_history",
     )
     if not gate.allow_execute:
@@ -30,7 +30,7 @@ async def get_history(
             retry=gate.retry,
         )
 
-    result = await history_service.get_history(request)
+    result = await history_service.get_history(tool_request)
     return build_tool_envelope(
         index=gate.index,
         result=result,

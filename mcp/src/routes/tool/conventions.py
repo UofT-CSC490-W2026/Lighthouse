@@ -19,12 +19,12 @@ router = APIRouter()
     summary="Stub tool: get repository conventions",
 )
 async def get_conventions(
-    request: GetConventionsRequest,
+    tool_request: GetConventionsRequest,
 ) -> ToolResponseEnvelope[GetConventionsResponse]:
     """Return convention entries for the requested category/scope."""
     gate = await gate_tool_request(
-        repo_id=request.repo_id,
-        ref=request.ref,
+        repo_id=tool_request.repo_id,
+        ref=tool_request.ref,
         tool_name="get_conventions",
     )
     if not gate.allow_execute:
@@ -34,7 +34,7 @@ async def get_conventions(
             retry=gate.retry,
         )
 
-    result = await convention_service.get_conventions(request)
+    result = await convention_service.get_conventions(tool_request)
     return build_tool_envelope(
         index=gate.index,
         result=result,

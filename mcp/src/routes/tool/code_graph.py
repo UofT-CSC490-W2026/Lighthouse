@@ -21,12 +21,12 @@ router = APIRouter()
     summary="Stub tool: get callers for a symbol",
 )
 async def get_callers(
-    request: GetCallersRequest,
+    tool_request: GetCallersRequest,
 ) -> ToolResponseEnvelope[GetCallersResponse]:
     """Return caller records for a requested symbol."""
     gate = await gate_tool_request(
-        repo_id=request.repo_id,
-        ref=request.ref,
+        repo_id=tool_request.repo_id,
+        ref=tool_request.ref,
         tool_name="get_callers",
     )
     if not gate.allow_execute:
@@ -36,7 +36,7 @@ async def get_callers(
             retry=gate.retry,
         )
 
-    result = await code_graph_service.get_callers(request)
+    result = await code_graph_service.get_callers(tool_request)
     return build_tool_envelope(
         index=gate.index,
         result=result,
@@ -50,12 +50,12 @@ async def get_callers(
     summary="Stub tool: get contract for a symbol",
 )
 async def get_contract(
-    request: GetContractRequest,
+    tool_request: GetContractRequest,
 ) -> ToolResponseEnvelope[GetContractResponse]:
     """Return contract metadata for a requested symbol."""
     gate = await gate_tool_request(
-        repo_id=request.repo_id,
-        ref=request.ref,
+        repo_id=tool_request.repo_id,
+        ref=tool_request.ref,
         tool_name="get_contract",
     )
     if not gate.allow_execute:
@@ -65,7 +65,7 @@ async def get_contract(
             retry=gate.retry,
         )
 
-    result = await code_graph_service.get_contract(request)
+    result = await code_graph_service.get_contract(tool_request)
     return build_tool_envelope(
         index=gate.index,
         result=result,

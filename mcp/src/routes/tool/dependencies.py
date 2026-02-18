@@ -19,12 +19,12 @@ router = APIRouter()
     summary="Stub tool: get dependency-specific context",
 )
 async def get_dependency_context(
-    request: GetDependencyContextRequest,
+    tool_request: GetDependencyContextRequest,
 ) -> ToolResponseEnvelope[GetDependencyContextResponse]:
     """Return dependency context records for a package or API."""
     gate = await gate_tool_request(
-        repo_id=request.repo_id,
-        ref=request.ref,
+        repo_id=tool_request.repo_id,
+        ref=tool_request.ref,
         tool_name="get_dependency_context",
     )
     if not gate.allow_execute:
@@ -34,7 +34,7 @@ async def get_dependency_context(
             retry=gate.retry,
         )
 
-    result = await dependency_service.get_dependency_context(request)
+    result = await dependency_service.get_dependency_context(tool_request)
     return build_tool_envelope(
         index=gate.index,
         result=result,

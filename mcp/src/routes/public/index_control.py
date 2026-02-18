@@ -27,7 +27,9 @@ router = APIRouter(prefix="/v1/index", tags=["index-control"])
     status_code=status.HTTP_202_ACCEPTED,
     summary="Start runtime index job",
 )
-async def start_index_job(request: StartIndexJobRequest) -> StartIndexJobResponse:
+async def start_index_job(
+    request: StartIndexJobRequest,
+) -> StartIndexJobResponse:
     """Start a runtime index workflow for a repository/ref target."""
     try:
         return await index_control_service.start_job(request)
