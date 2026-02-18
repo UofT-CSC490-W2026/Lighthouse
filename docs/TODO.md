@@ -5,9 +5,9 @@
 - [x] Document canonical indexing contract in `docs/indexing-contract.md`.
 - [x] Implement shared contract models in code for: `repo_id`, `ref`, `snapshot_sha`, `status`, `stage`, `progress_pct`, `job_id`, `workflow_id`, `error_code`, `error_message`.
 - [x] Implement canonical enums in code for `IndexStatus` (`NOT_FOUND`, `PENDING`, `READY`, `FAILED`, `STALE`) and stage names.
-- [ ] Implement workflow ID/idempotency convention in code (for example: `runtime-index:{repo_id}:{ref}`).
+- [x] Implement workflow ID/idempotency convention in code (for example: `runtime-index:{repo_id}:{ref}`).
 - [x] Implement API payload models for `start job`, `get job`, `get repo state`, and `retry job`.
-- [ ] Decide shared-model location (single shared module vs duplicated models with parity tests).
+- [x] Decide shared-model location and refactor to single shared module: `shared/indexing.py`.
 - [ ] Add a configuration provider abstraction and pull runtime settings/secrets (endpoints, tokens, DSNs, queue names) from AWS Parameter Store, with local `.env` fallback for development.
 
 ## Pipeline Service
