@@ -8,14 +8,14 @@
 - [x] Implement workflow ID/idempotency convention in code (for example: `runtime-index:{repo_id}:{ref}`).
 - [x] Implement API payload models for `start job`, `get job`, `get repo state`, and `retry job`.
 - [x] Decide shared-model location and refactor to single shared module: `shared/src/indexing.py`.
-- [x] Add a configuration provider abstraction and pull runtime settings/secrets (endpoints, tokens, DSNs, queue names) from AWS Parameter Store, with local `.env` fallback for development.
+- [x] Add a configuration provider abstraction and pull runtime settings/secrets (endpoints, tokens, DSNs, queue names) from AWS Parameter Store, with local development config passed via process environment (for example, `--env-file`).
 
 ## Pipeline Service
 
 - [ ] Implement real activities in `pipeline/src/activities.py` (replace stubs with ingest/clean/transform/store logic for runtime + benchmark workflows; keep `mental_model_activity` deferred).
 - [ ] Add data connectors (Postgres, Milvus, S3, GitHub) under `pipeline/src`.
-- [ ] Add persistence layer for `index_jobs` and `index_states` writes/updates.
-- [ ] Update `pipeline/src/workflows.py` to write stage transitions and progress at each step.
+- [x] Add persistence layer for `index_jobs` and `index_states` writes/updates.
+- [x] Update `pipeline/src/workflows.py` to write stage transitions and progress at each step.
 - [ ] Add Temporal retries/timeouts/backoff policies per activity.
 - [ ] Add cancellation handling and failure classification (`retryable` vs `terminal`).
 - [ ] Add worker startup validation in `pipeline/src/worker.py` (config and backend connectivity checks).
@@ -48,15 +48,16 @@
 
 ## MCP Service
 
-- [ ] Add Temporal client wrapper under `mcp/src` (connect/start/query workflow).
-- [ ] Add index-control service (start job, poll status, fetch repo readiness).
-- [ ] Add MCP-facing endpoints for index control (`POST start`, `GET job`, `GET repo state`, `POST retry`).
-- [ ] Update tool route handlers in `mcp/src/routes/tool` to gate by index state before serving data.
-- [ ] Implement tool behavior by state: `READY` serve data, `PENDING` return pending payload, `NOT_FOUND` optionally auto-trigger, `FAILED` return retry guidance, `STALE` serve with stale flag.
-- [ ] Add common response envelope for tools including index metadata.
-- [ ] Wire private-repo token resolution from MCP config/env (read-only token only, never logged).
-- [ ] Add centralized error mapping/handlers (validation, backend unavailable, workflow errors).
-- [ ] Add smoke/integration tests in `mcp/tests` for index-state gating and one tool call per state.
+- [x] Add Temporal client wrapper under `mcp/src` (connect/start/query workflow).
+- [x] Add index-control service (start job, poll status, fetch repo readiness).
+- [x] Add MCP-facing endpoints for index control (`POST start`, `GET job`, `GET repo state`, `POST retry`).
+- [x] Update tool route handlers in `mcp/src/routes/tool` to gate by index state before serving data.
+- [x] Implement tool behavior by state: `READY` serve data, `PENDING` return pending payload, `NOT_FOUND` optionally auto-trigger, `FAILED` return retry guidance, `STALE` serve with stale flag.
+- [x] Add common response envelope for tools including index metadata.
+- [x] Accept optional request-scoped GitHub token headers from MCP clients (`Authorization`/`X-GitHub-Token`) without requiring tokens for public-repo indexing flows.
+- [ ] Add per-repository multi-token routing support for private repos (deferred).
+- [x] Add centralized error mapping/handlers (validation, backend unavailable, workflow errors).
+- [x] Add smoke/integration tests in `mcp/tests` for index-state gating and one tool call per state.
 
 ## Suggested Build Order
 

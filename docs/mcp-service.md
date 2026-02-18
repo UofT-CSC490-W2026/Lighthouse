@@ -60,15 +60,14 @@ These route signatures are the source of truth for MCP exposure.
 ## Current status
 
 - Tool routes exist and are wired through FastAPI-MCP.
-- Service-layer modules exist but are placeholders.
+- Service-layer modules exist; index-control and gating behavior are implemented while retrieval backends remain placeholder.
 - Health endpoint exists (`GET /health`).
-- Temporal control endpoints are not implemented yet.
-- Index-state gating (`NOT_FOUND`, `PENDING`, `READY`, `FAILED`, `STALE`) is not implemented yet.
+- Temporal control endpoints are implemented (`POST /v1/index/jobs`, `GET /v1/index/jobs/{job_id}`, `GET /v1/index/repos/{repo_id}/state`, `POST /v1/index/repos/{repo_id}/retry`).
+- Tool routes now enforce index-state gating (`NOT_FOUND`, `PENDING`, `READY`, `FAILED`, `STALE`) with a shared envelope.
+- MCP can accept optional request-scoped GitHub token headers from MCP clients (`Authorization: Bearer ...`, fallback `X-GitHub-Token`) for private-repo-capable flows.
 
 ## Next implementation items (MCP side)
 
-- Add Temporal client wrapper under `mcp/src`.
-- Add index control endpoints (start job, get job, get repo state, retry).
-- Add state-aware tool response behavior.
-- Add shared response envelope with index metadata.
-- Align config loading with Parameter Store + `.env` fallback.
+- Add smoke/integration tests for index-state gating and one tool call per state.
+- Add per-repository multi-token routing strategy for private repositories.
+- Replace placeholder retrieval implementations with real backends (code graph, history, dependency context, semantic ranking).

@@ -47,12 +47,20 @@ Session endpoints are also exposed as MCP tools at **`./tools`** via [fastapi-mc
 {
   "mcpServers": {
     "lighthouse": {
-      "url": "http://localhost:8000/mcp"
+      "url": "http://localhost:8000/mcp",
+      "headers": {
+        "Authorization": "Bearer ${GITHUB_READ_TOKEN}"
+      }
     }
   }
 }
 ```
 If your client expects a transport type explicitly: use `"type": "streamable-http"` or `"type": "sse"` with the same `url` when the client supports it.
+
+The GitHub token header is optional and primarily relevant for private-repo-capable flows.
+For clients that do not support `Authorization` header templates, you can use `X-GitHub-Token` instead.
+The MCP server never logs token values.
+Current first-iteration behavior supports one token value per request; per-repo multi-token routing is a planned follow-up.
 
 **Test the MCP server** with the [MCP Inspector](https://github.com/modelcontextprotocol/inspector). You need [Node.js](https://nodejs.org/) and `npx` (included with npm) to run the inspector.
 
