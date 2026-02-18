@@ -27,15 +27,14 @@ python -m src.worker
 
 ## Docker
 
-Build:
+Build (from repository root so the shared package is included):
 
 ```bash
-docker build -t lighthouse-pipeline:dev .
+docker build -f pipeline/Dockerfile -t lighthouse-pipeline:dev .
 ```
 
 Run:
 
 ```bash
-docker run --rm --env-file .env lighthouse-pipeline:dev
+docker run --rm --env-file pipeline/.env lighthouse-pipeline:dev
 ```
-

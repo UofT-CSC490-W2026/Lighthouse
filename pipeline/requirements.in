@@ -1,3 +1,4 @@
+-e ../shared
 temporalio
 pydantic
 pydantic-settings
@@ -7,4 +8,3 @@ pymilvus
 gitpython
 boto3
 requests
-

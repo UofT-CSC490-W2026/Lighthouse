@@ -1,9 +1,13 @@
+-e ../shared
 uvicorn[standard]
 black
 pydantic
+pydantic-settings
+python-dotenv
 temporalio
 asyncpg
 pymilvus
+boto3
 fastapi
 fastapi-mcp
 mcp_proxy

@@ -79,3 +79,16 @@ class RepoIndexStateResponse(BaseModel):
     status: IndexStatus
     snapshot_sha: str | None = None
     active_job_id: str | None = None
+
+
+__all__ = [
+    "IndexJobStatusResponse",
+    "IndexStage",
+    "IndexStatus",
+    "RUNTIME_INDEX_WORKFLOW_PREFIX",
+    "RepoIndexStateResponse",
+    "StartIndexJobRequest",
+    "StartIndexJobResponse",
+    "runtime_index_workflow_id",
+    "should_reuse_runtime_workflow",
+]

@@ -7,7 +7,7 @@ FROM python:3.12-slim
 #     HF_HUB_ENABLE_HF_TRANSFER=0 \
 #     PIP_NO_CACHE_DIR=1
 
-WORKDIR /app
+WORKDIR /app/mcp
 
 # System dependencies
 RUN apt-get update \
@@ -18,7 +18,8 @@ RUN apt-get update \
        zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt /app/requirements.txt
+COPY mcp/requirements.txt /app/mcp/requirements.txt
+COPY shared /app/shared
 
 # # Force CPU-only torch to avoid huge CUDA wheels
 # RUN pip install --no-cache-dir \
@@ -51,11 +52,9 @@ COPY requirements.txt /app/requirements.txt
 #     HF_HUB_OFFLINE=1 \
 #     MODEL_DIR=/models/bge-m3
 
-WORKDIR /app
+RUN pip install --no-cache-dir -r requirements.txt
 
-COPY requirements.txt /app/requirements.txt
-
-COPY src/ /app/src/
+COPY mcp/src/ /app/mcp/src/
 
 EXPOSE 8000
 

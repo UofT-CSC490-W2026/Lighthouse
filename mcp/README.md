@@ -26,6 +26,20 @@ Run the server with `uvicorn`:
 uvicorn src.server:app --reload --host 0.0.0.0 --port 8000 --env-file .env
 ```
 
+## Docker
+
+Build (from repository root so the shared package is included):
+
+```shell
+docker build -f mcp/Dockerfile -t lighthouse-mcp:dev .
+```
+
+Run:
+
+```shell
+docker run --rm -p 8000:8000 --env-file mcp/.env lighthouse-mcp:dev
+```
+
 Session endpoints are also exposed as MCP tools at **`./tools`** via [fastapi-mcp](https://fastapi-mcp.tadata.com/) (tools/list, tools/call over SSE/streamable-http).
 
 **MCP client config** (e.g. Cursor, Codex, Claude Desktop). Add to your MCP config (e.g. `mcp.json` or Cursor MCP settings):
