@@ -3,16 +3,36 @@
 from fastapi import APIRouter
 
 from ...services import history_service
-from ...types import GetHistoryRequest, GetHistoryResponse
+from ...types import GetHistoryRequest, GetHistoryResponse, ToolResponseEnvelope
+from .common import build_tool_envelope, gate_tool_request
 
 router = APIRouter()
 
 
 @router.post(
     "/get_history",
-    response_model=GetHistoryResponse,
+    response_model=ToolResponseEnvelope[GetHistoryResponse],
     summary="Stub tool: get file history context",
 )
-async def get_history(request: GetHistoryRequest) -> GetHistoryResponse:
+async def get_history(
+    request: GetHistoryRequest,
+) -> ToolResponseEnvelope[GetHistoryResponse]:
     """Return history entries matching the request scope."""
-    return await history_service.get_history(request)
+    gate = await gate_tool_request(
+        repo_id=request.repo_id,
+        ref=request.ref,
+        tool_name="get_history",
+    )
+    if not gate.allow_execute:
+        return build_tool_envelope(
+            index=gate.index,
+            message=gate.message,
+            retry=gate.retry,
+        )
+
+    result = await history_service.get_history(request)
+    return build_tool_envelope(
+        index=gate.index,
+        result=result,
+        message=gate.message,
+    )

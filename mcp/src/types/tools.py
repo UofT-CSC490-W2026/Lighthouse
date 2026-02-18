@@ -1,8 +1,12 @@
 """Tool request/response schemas and enums for MCP endpoints."""
 
 from enum import StrEnum
+from typing import Generic, TypeVar
 
 from pydantic import BaseModel, Field
+from .indexing import ToolIndexMetadata
+
+TResult = TypeVar("TResult")
 
 
 class MissingContextType(StrEnum):
@@ -110,7 +114,30 @@ class DependencyContextRecord(BaseModel):
     relevance: str
 
 
-class GetContextForChangeRequest(BaseModel):
+class RepoScopedRequest(BaseModel):
+    """Common repository context required for tool route gating."""
+
+    repo_id: str
+    ref: str = "main"
+
+
+class ToolRetryHint(BaseModel):
+    """Action hint returned when index state requires a retry operation."""
+
+    endpoint: str
+    method: str = "POST"
+
+
+class ToolResponseEnvelope(BaseModel, Generic[TResult]):
+    """Canonical tool response shape with index metadata and optional result."""
+
+    index: ToolIndexMetadata
+    result: TResult | None = None
+    message: str | None = None
+    retry: ToolRetryHint | None = None
+
+
+class GetContextForChangeRequest(RepoScopedRequest):
     """Input payload for top-level context retrieval."""
 
     file: str
@@ -125,7 +152,7 @@ class GetContextForChangeResponse(BaseModel):
     items: list[ToolContextItem] = Field(default_factory=list)
 
 
-class GetCallersRequest(BaseModel):
+class GetCallersRequest(RepoScopedRequest):
     """Input payload for caller graph traversal."""
 
     symbol: str
@@ -138,7 +165,7 @@ class GetCallersResponse(BaseModel):
     callers: list[CallerEntry] = Field(default_factory=list)
 
 
-class GetContractRequest(BaseModel):
+class GetContractRequest(RepoScopedRequest):
     """Input payload for contract lookup by symbol."""
 
     symbol: str
@@ -150,7 +177,7 @@ class GetContractResponse(BaseModel):
     contract: ContractRecord
 
 
-class GetHistoryRequest(BaseModel):
+class GetHistoryRequest(RepoScopedRequest):
     """Input payload for repository history lookup."""
 
     file: str
@@ -163,7 +190,7 @@ class GetHistoryResponse(BaseModel):
     entries: list[HistoryEntry] = Field(default_factory=list)
 
 
-class GetConventionsRequest(BaseModel):
+class GetConventionsRequest(RepoScopedRequest):
     """Input payload for repository conventions lookup."""
 
     category: ConventionCategory | None = None
@@ -175,7 +202,7 @@ class GetConventionsResponse(BaseModel):
     conventions: list[ConventionEntry] = Field(default_factory=list)
 
 
-class GetDependencyContextRequest(BaseModel):
+class GetDependencyContextRequest(RepoScopedRequest):
     """Input payload for dependency context lookup."""
 
     package: str

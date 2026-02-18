@@ -1,7 +1,13 @@
 """Public index-control endpoints used by MCP callers and operators."""
 
-from fastapi import APIRouter, Body, HTTPException, Query, status
+from fastapi import APIRouter, Body, Query, status
 
+from ...errors import (
+    BackendUnavailableError,
+    RequestValidationAppError,
+    ResourceNotFoundError,
+    WorkflowExecutionError,
+)
 from ...services import index_control_service
 from ...services.index_control import IndexJobNotFoundError
 from ...types import (
@@ -26,12 +32,11 @@ async def start_index_job(request: StartIndexJobRequest) -> StartIndexJobRespons
     try:
         return await index_control_service.start_job(request)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise RequestValidationAppError(str(exc)) from exc
     except RuntimeError as exc:
-        raise HTTPException(
-            status_code=503,
-            detail="Index control backend unavailable",
-        ) from exc
+        raise BackendUnavailableError("Index control backend unavailable") from exc
+    except Exception as exc:
+        raise WorkflowExecutionError("Failed to start runtime indexing workflow") from exc
 
 
 @router.get(
@@ -44,12 +49,9 @@ async def get_index_job(job_id: str) -> IndexJobStatusResponse:
     try:
         return await index_control_service.get_job(job_id)
     except IndexJobNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=f"Index job not found: {job_id}") from exc
+        raise ResourceNotFoundError(f"Index job not found: {job_id}") from exc
     except RuntimeError as exc:
-        raise HTTPException(
-            status_code=503,
-            detail="Index control backend unavailable",
-        ) from exc
+        raise BackendUnavailableError("Index control backend unavailable") from exc
 
 
 @router.get(
@@ -65,12 +67,9 @@ async def get_repo_index_state(
     try:
         return await index_control_service.get_repo_state(repo_id=repo_id, ref=ref)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise RequestValidationAppError(str(exc)) from exc
     except RuntimeError as exc:
-        raise HTTPException(
-            status_code=503,
-            detail="Index control backend unavailable",
-        ) from exc
+        raise BackendUnavailableError("Index control backend unavailable") from exc
 
 
 @router.post(
@@ -92,9 +91,8 @@ async def retry_repo_index(
             request=request,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise RequestValidationAppError(str(exc)) from exc
     except RuntimeError as exc:
-        raise HTTPException(
-            status_code=503,
-            detail="Index control backend unavailable",
-        ) from exc
+        raise BackendUnavailableError("Index control backend unavailable") from exc
+    except Exception as exc:
+        raise WorkflowExecutionError("Failed to retry runtime indexing workflow") from exc

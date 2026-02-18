@@ -8,26 +8,66 @@ from ...types import (
     GetCallersResponse,
     GetContractRequest,
     GetContractResponse,
+    ToolResponseEnvelope,
 )
+from .common import build_tool_envelope, gate_tool_request
 
 router = APIRouter()
 
 
 @router.post(
     "/get_callers",
-    response_model=GetCallersResponse,
+    response_model=ToolResponseEnvelope[GetCallersResponse],
     summary="Stub tool: get callers for a symbol",
 )
-async def get_callers(request: GetCallersRequest) -> GetCallersResponse:
+async def get_callers(
+    request: GetCallersRequest,
+) -> ToolResponseEnvelope[GetCallersResponse]:
     """Return caller records for a requested symbol."""
-    return await code_graph_service.get_callers(request)
+    gate = await gate_tool_request(
+        repo_id=request.repo_id,
+        ref=request.ref,
+        tool_name="get_callers",
+    )
+    if not gate.allow_execute:
+        return build_tool_envelope(
+            index=gate.index,
+            message=gate.message,
+            retry=gate.retry,
+        )
+
+    result = await code_graph_service.get_callers(request)
+    return build_tool_envelope(
+        index=gate.index,
+        result=result,
+        message=gate.message,
+    )
 
 
 @router.post(
     "/get_contract",
-    response_model=GetContractResponse,
+    response_model=ToolResponseEnvelope[GetContractResponse],
     summary="Stub tool: get contract for a symbol",
 )
-async def get_contract(request: GetContractRequest) -> GetContractResponse:
+async def get_contract(
+    request: GetContractRequest,
+) -> ToolResponseEnvelope[GetContractResponse]:
     """Return contract metadata for a requested symbol."""
-    return await code_graph_service.get_contract(request)
+    gate = await gate_tool_request(
+        repo_id=request.repo_id,
+        ref=request.ref,
+        tool_name="get_contract",
+    )
+    if not gate.allow_execute:
+        return build_tool_envelope(
+            index=gate.index,
+            message=gate.message,
+            retry=gate.retry,
+        )
+
+    result = await code_graph_service.get_contract(request)
+    return build_tool_envelope(
+        index=gate.index,
+        result=result,
+        message=gate.message,
+    )

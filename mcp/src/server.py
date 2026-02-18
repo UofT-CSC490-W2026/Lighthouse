@@ -1,10 +1,14 @@
 """FastAPI application entrypoint for the MCP service."""
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi_mcp import FastApiMCP
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from .errors import MCPServiceError
 from .utils import settings, get_logger
 from .routes import Router
 
@@ -32,6 +36,70 @@ app = FastAPI(
     debug=settings.debug,
     lifespan=lifespan,
 )
+
+
+def _error_payload(*, code: str, message: str, details: object | None = None) -> dict:
+    """Build the canonical JSON error envelope for MCP API responses."""
+    payload = {
+        "error": {
+            "code": code,
+            "message": message,
+        }
+    }
+    if details is not None:
+        payload["error"]["details"] = details
+    return payload
+
+
+@app.exception_handler(MCPServiceError)
+async def _handle_mcp_service_error(
+    _request: Request,
+    exc: MCPServiceError,
+) -> JSONResponse:
+    """Map application-domain errors to canonical JSON error responses."""
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=_error_payload(
+            code=exc.code,
+            message=exc.message,
+            details=exc.details,
+        ),
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def _handle_request_validation_error(
+    _request: Request,
+    exc: RequestValidationError,
+) -> JSONResponse:
+    """Normalize FastAPI request validation failures into MCP error shape."""
+    return JSONResponse(
+        status_code=422,
+        content=_error_payload(
+            code="REQUEST_VALIDATION_ERROR",
+            message="Invalid request payload",
+            details=exc.errors(),
+        ),
+    )
+
+
+@app.exception_handler(StarletteHTTPException)
+async def _handle_http_exception(
+    _request: Request,
+    exc: StarletteHTTPException,
+) -> JSONResponse:
+    """Normalize fallback HTTP exceptions into MCP error shape."""
+    detail = exc.detail
+    message = detail if isinstance(detail, str) else "HTTP error"
+    details = detail if not isinstance(detail, str) else None
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=_error_payload(
+            code=f"HTTP_{exc.status_code}",
+            message=message,
+            details=details,
+        ),
+    )
 
 if settings.debug:
     app.add_middleware(

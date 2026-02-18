@@ -35,7 +35,10 @@ from .tools import (
     HistoryEntry,
     HistorySpan,
     MissingContextType,
+    RepoScopedRequest,
+    ToolResponseEnvelope,
     ToolContextItem,
+    ToolRetryHint,
 )
 
 __all__ = [
@@ -71,5 +74,8 @@ __all__ = [
     "HistoryEntry",
     "HistorySpan",
     "MissingContextType",
+    "RepoScopedRequest",
+    "ToolResponseEnvelope",
     "ToolContextItem",
+    "ToolRetryHint",
 ]
