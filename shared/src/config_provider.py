@@ -4,9 +4,6 @@ import logging
 import os
 import re
 from dataclasses import dataclass
-from pathlib import Path
-
-from dotenv import load_dotenv
 
 LOGGER = logging.getLogger(__name__)
 
@@ -20,17 +17,11 @@ class ConfigBootstrapResult:
     service: str
     app_env: str
     provider: str
-    env_file_loaded: bool
     parameter_prefix: str | None
     parameters_loaded: int
 
 
-def bootstrap_runtime_config(
-    service: str,
-    *,
-    env_file: str | Path | None = None,
-) -> ConfigBootstrapResult:
-    env_file_loaded = _load_env_file(env_file)
+def bootstrap_runtime_config(service: str) -> ConfigBootstrapResult:
     app_env = _resolve_app_env()
     provider = _resolve_config_provider()
 
@@ -39,7 +30,6 @@ def bootstrap_runtime_config(
             service=service,
             app_env=app_env,
             provider=provider,
-            env_file_loaded=env_file_loaded,
             parameter_prefix=None,
             parameters_loaded=0,
         )
@@ -51,19 +41,9 @@ def bootstrap_runtime_config(
         service=service,
         app_env=app_env,
         provider=provider,
-        env_file_loaded=env_file_loaded,
         parameter_prefix=parameter_prefix,
         parameters_loaded=parameters_loaded,
     )
-
-
-def _load_env_file(env_file: str | Path | None) -> bool:
-    if env_file is None:
-        return False
-    env_path = Path(env_file)
-    if not env_path.exists():
-        return False
-    return bool(load_dotenv(dotenv_path=env_path, override=False))
 
 
 def _resolve_app_env() -> str:

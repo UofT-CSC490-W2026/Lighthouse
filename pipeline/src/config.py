@@ -1,20 +1,16 @@
 """Runtime settings for the pipeline worker service."""
 
 from functools import lru_cache
-from pathlib import Path
 
 from config_provider import bootstrap_runtime_config
 from pydantic import AliasChoices, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-_SERVICE_ROOT = Path(__file__).resolve().parents[1]
-bootstrap_runtime_config(service="pipeline", env_file=_SERVICE_ROOT / ".env")
+bootstrap_runtime_config(service="pipeline")
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=str(_SERVICE_ROOT / ".env"),
-        env_file_encoding="utf-8",
         extra="ignore",
         case_sensitive=False,
     )

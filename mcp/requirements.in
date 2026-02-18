@@ -1,9 +1,8 @@
--e ../shared
+../shared
 uvicorn[standard]
 black
 pydantic
 pydantic-settings
-python-dotenv
 temporalio
 asyncpg
 pymilvus

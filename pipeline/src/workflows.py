@@ -9,11 +9,14 @@ from .activities import (
     clean_activity,
     ingest_activity,
     mental_model_activity,
+    persist_runtime_index_failure_activity,
+    persist_runtime_index_start_activity,
+    persist_runtime_index_success_activity,
     store_activity,
     transform_activity,
 )
 from .contracts import runtime_index_workflow_id, should_reuse_runtime_workflow
-from .state import IndexStatus
+from .state import IndexStage, IndexStatus
 
 
 @dataclass
@@ -41,7 +44,9 @@ class MentalModelParams:
 class RuntimeIndexWorkflow:
     @workflow.run
     async def run(self, params: RuntimeIndexParams) -> dict[str, str]:
-        current_workflow_id = workflow.info().workflow_id
+        workflow_info = workflow.info()
+        current_workflow_id = workflow_info.workflow_id
+        current_run_id = workflow_info.run_id
         canonical_workflow_id = runtime_index_workflow_id(
             params.repo_id,
             params.ref,
@@ -59,6 +64,7 @@ class RuntimeIndexWorkflow:
             )
 
         payload = {
+            "job_id": current_run_id,
             "repo_id": params.repo_id,
             "repo_url": params.repo_url,
             "ref": params.ref,
@@ -68,28 +74,62 @@ class RuntimeIndexWorkflow:
         }
 
         await workflow.execute_activity(
-            ingest_activity,
+            persist_runtime_index_start_activity,
             payload,
-            start_to_close_timeout=timedelta(minutes=10),
+            start_to_close_timeout=timedelta(seconds=30),
         )
+
+        current_stage = IndexStage.INGEST
+        try:
+            await workflow.execute_activity(
+                ingest_activity,
+                payload,
+                start_to_close_timeout=timedelta(minutes=10),
+            )
+            current_stage = IndexStage.CLEAN
+            await workflow.execute_activity(
+                clean_activity,
+                payload,
+                start_to_close_timeout=timedelta(minutes=10),
+            )
+            current_stage = IndexStage.TRANSFORM
+            await workflow.execute_activity(
+                transform_activity,
+                payload,
+                start_to_close_timeout=timedelta(minutes=20),
+            )
+            current_stage = IndexStage.STORE
+            await workflow.execute_activity(
+                store_activity,
+                payload,
+                start_to_close_timeout=timedelta(minutes=10),
+            )
+        except Exception as exc:
+            await workflow.execute_activity(
+                persist_runtime_index_failure_activity,
+                {
+                    **payload,
+                    "stage": current_stage.value,
+                    "error_code": "RUNTIME_INDEX_FAILED",
+                    "error_message": str(exc)[:2000],
+                },
+                start_to_close_timeout=timedelta(seconds=30),
+            )
+            raise
+
         await workflow.execute_activity(
-            clean_activity,
-            payload,
-            start_to_close_timeout=timedelta(minutes=10),
+            persist_runtime_index_success_activity,
+            {
+                **payload,
+                "snapshot_sha": None,
+            },
+            start_to_close_timeout=timedelta(seconds=30),
         )
-        await workflow.execute_activity(
-            transform_activity,
-            payload,
-            start_to_close_timeout=timedelta(minutes=20),
-        )
-        await workflow.execute_activity(
-            store_activity,
-            payload,
-            start_to_close_timeout=timedelta(minutes=10),
-        )
+
         return {
             "status": IndexStatus.READY.value,
             "workflow_id": current_workflow_id,
+            "job_id": current_run_id,
         }
 
 

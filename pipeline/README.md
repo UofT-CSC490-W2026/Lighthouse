@@ -22,6 +22,11 @@ cp .env.example .env
 ## Run worker
 
 ```bash
+set -a
+source .env
+set +a
+# ensure persistence tables are present
+alembic -c alembic.ini upgrade head
 python -m src.worker
 ```
 

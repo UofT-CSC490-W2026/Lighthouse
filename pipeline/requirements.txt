@@ -2,8 +2,9 @@
 temporalio
 pydantic
 pydantic-settings
-python-dotenv
 asyncpg
+sqlalchemy
+alembic
 pymilvus
 gitpython
 boto3

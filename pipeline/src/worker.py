@@ -9,6 +9,9 @@ from .activities import (
     clean_activity,
     ingest_activity,
     mental_model_activity,
+    persist_runtime_index_failure_activity,
+    persist_runtime_index_start_activity,
+    persist_runtime_index_success_activity,
     store_activity,
     transform_activity,
 )
@@ -37,6 +40,9 @@ async def _run_runtime_worker(client: Client) -> None:
             clean_activity,
             transform_activity,
             store_activity,
+            persist_runtime_index_start_activity,
+            persist_runtime_index_success_activity,
+            persist_runtime_index_failure_activity,
         ],
     )
     await worker.run()

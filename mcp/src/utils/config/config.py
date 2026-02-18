@@ -1,20 +1,16 @@
 from functools import lru_cache
-from pathlib import Path
 
 from config_provider import bootstrap_runtime_config
 from pydantic import AliasChoices, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-_SERVICE_ROOT = Path(__file__).resolve().parents[3]
-bootstrap_runtime_config(service="mcp", env_file=_SERVICE_ROOT / ".env")
+bootstrap_runtime_config(service="mcp")
 
 
 class Settings(BaseSettings):
     """Runtime configuration for the MCP service."""
 
     model_config = SettingsConfigDict(
-        env_file=str(_SERVICE_ROOT / ".env"),
-        env_file_encoding="utf-8",
         extra="ignore",
         case_sensitive=False,
     )
