@@ -71,7 +71,11 @@ def _resolve_app_env() -> str:
 
 
 def _resolve_config_provider() -> str:
-    provider = os.getenv("LIGHTHOUSE_CONFIG_PROVIDER", _DEFAULT_CONFIG_PROVIDER).strip().lower()
+    provider = (
+        os.getenv("LIGHTHOUSE_CONFIG_PROVIDER", _DEFAULT_CONFIG_PROVIDER)
+        .strip()
+        .lower()
+    )
     if provider in {"auto", "env", "ssm"}:
         return provider
     LOGGER.warning(
@@ -161,7 +165,9 @@ def _load_parameters_from_ssm(*, parameter_prefix: str) -> int:
         return 0
 
 
-def _parameter_name_to_env_name(*, parameter_name: str, parameter_prefix: str) -> str | None:
+def _parameter_name_to_env_name(
+    *, parameter_name: str, parameter_prefix: str
+) -> str | None:
     name = (parameter_name or "").strip()
     prefix = parameter_prefix.rstrip("/")
     if not name:
