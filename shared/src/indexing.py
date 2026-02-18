@@ -1,3 +1,5 @@
+"""Canonical indexing contracts shared between MCP and pipeline services."""
+
 from __future__ import annotations
 
 from enum import StrEnum
@@ -6,6 +8,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class IndexStatus(StrEnum):
+    """Repo/ref runtime indexing readiness states."""
+
     NOT_FOUND = "NOT_FOUND"
     PENDING = "PENDING"
     READY = "READY"
@@ -14,6 +18,8 @@ class IndexStatus(StrEnum):
 
 
 class IndexStage(StrEnum):
+    """Runtime indexing lifecycle stage names."""
+
     INGEST = "INGEST"
     CLEAN = "CLEAN"
     TRANSFORM = "TRANSFORM"
@@ -25,6 +31,7 @@ RUNTIME_INDEX_WORKFLOW_PREFIX = "runtime-index"
 
 
 def runtime_index_workflow_id(repo_id: str, ref: str = "main") -> str:
+    """Build canonical idempotent workflow id for a repo/ref tuple."""
     normalized_repo_id = repo_id.strip()
     normalized_ref = (ref or "main").strip()
     if not normalized_repo_id:
@@ -35,10 +42,13 @@ def runtime_index_workflow_id(repo_id: str, ref: str = "main") -> str:
 
 
 def should_reuse_runtime_workflow(force_reindex: bool) -> bool:
+    """Return whether canonical workflow id should be reused for a request."""
     return not force_reindex
 
 
 class StartIndexJobRequest(BaseModel):
+    """Request payload for starting runtime indexing."""
+
     model_config = ConfigDict(extra="forbid")
 
     repo_id: str
@@ -50,6 +60,8 @@ class StartIndexJobRequest(BaseModel):
 
 
 class StartIndexJobResponse(BaseModel):
+    """Response payload returned when runtime indexing is accepted."""
+
     model_config = ConfigDict(extra="forbid")
 
     job_id: str
@@ -58,6 +70,8 @@ class StartIndexJobResponse(BaseModel):
 
 
 class IndexJobStatusResponse(BaseModel):
+    """Job-level status payload for runtime indexing."""
+
     model_config = ConfigDict(extra="forbid")
 
     job_id: str
@@ -72,6 +86,8 @@ class IndexJobStatusResponse(BaseModel):
 
 
 class RepoIndexStateResponse(BaseModel):
+    """Repo/ref readiness state payload for runtime indexing."""
+
     model_config = ConfigDict(extra="forbid")
 
     repo_id: str

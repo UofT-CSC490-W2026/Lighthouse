@@ -1,3 +1,5 @@
+"""Runtime configuration bootstrap with optional AWS Parameter Store loading."""
+
 from __future__ import annotations
 
 import logging
@@ -14,6 +16,8 @@ _DEFAULT_PARAMETER_PREFIX = "/lighthouse/{app_env}/{service}"
 
 @dataclass(frozen=True, slots=True)
 class ConfigBootstrapResult:
+    """Summary of runtime config bootstrap behavior for a service process."""
+
     service: str
     app_env: str
     provider: str
@@ -22,6 +26,7 @@ class ConfigBootstrapResult:
 
 
 def bootstrap_runtime_config(service: str) -> ConfigBootstrapResult:
+    """Bootstrap environment variables from configured runtime provider policy."""
     app_env = _resolve_app_env()
     provider = _resolve_config_provider()
 
@@ -47,10 +52,12 @@ def bootstrap_runtime_config(service: str) -> ConfigBootstrapResult:
 
 
 def _resolve_app_env() -> str:
+    """Resolve normalized application environment name from process env."""
     return (os.getenv("APP_ENV", "local").strip().lower()) or "local"
 
 
 def _resolve_config_provider() -> str:
+    """Resolve config provider mode (`auto`, `env`, or `ssm`)."""
     provider = (
         os.getenv("LIGHTHOUSE_CONFIG_PROVIDER", _DEFAULT_CONFIG_PROVIDER)
         .strip()
@@ -67,6 +74,7 @@ def _resolve_config_provider() -> str:
 
 
 def _should_load_parameter_store(*, provider: str, app_env: str) -> bool:
+    """Determine if Parameter Store should be queried for this runtime."""
     if provider == "ssm":
         return True
     if provider == "env":
@@ -75,6 +83,7 @@ def _should_load_parameter_store(*, provider: str, app_env: str) -> bool:
 
 
 def _resolve_parameter_prefix(*, service: str, app_env: str) -> str:
+    """Resolve the SSM path prefix used for parameter lookup."""
     service_key = re.sub(r"[^A-Za-z0-9]+", "_", service).upper()
     service_override = os.getenv(f"LIGHTHOUSE_PARAMETER_PREFIX_{service_key}")
     template = (
@@ -93,6 +102,7 @@ def _resolve_parameter_prefix(*, service: str, app_env: str) -> str:
 
 
 def _load_parameters_from_ssm(*, parameter_prefix: str) -> int:
+    """Load parameters from AWS SSM and populate missing environment variables."""
     try:
         import boto3
     except ModuleNotFoundError:
@@ -148,6 +158,7 @@ def _load_parameters_from_ssm(*, parameter_prefix: str) -> int:
 def _parameter_name_to_env_name(
     *, parameter_name: str, parameter_prefix: str
 ) -> str | None:
+    """Convert a full SSM parameter path into an uppercase env-var key."""
     name = (parameter_name or "").strip()
     prefix = parameter_prefix.rstrip("/")
     if not name:
