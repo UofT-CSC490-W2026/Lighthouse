@@ -1,5 +1,6 @@
 """Mental-model signal retrieval interface used during context assembly."""
 
+
 class MentalModelService:
     """Fetch repository-level heuristics and module-specific behavior signals."""
 

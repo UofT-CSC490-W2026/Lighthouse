@@ -12,7 +12,6 @@ from .errors import MCPServiceError
 from .utils import settings, get_logger
 from .routes import Router
 
-
 log = get_logger(__name__)
 
 
@@ -100,6 +99,7 @@ async def _handle_http_exception(
             details=details,
         ),
     )
+
 
 if settings.debug:
     app.add_middleware(

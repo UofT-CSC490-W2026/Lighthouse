@@ -74,7 +74,9 @@ class IndexControlService:
                 status=IndexStatus.PENDING,
             )
         except WorkflowAlreadyExistsError as exc:
-            active_job_id = await self.repository.find_active_job_id(request.repo_id, request.ref)
+            active_job_id = await self.repository.find_active_job_id(
+                request.repo_id, request.ref
+            )
             fallback_job_id = active_job_id or exc.run_id or canonical_workflow_id
             return StartIndexJobResponse(
                 job_id=fallback_job_id,

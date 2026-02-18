@@ -44,7 +44,9 @@ async def mental_model_activity(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 @activity.defn(name="persist_runtime_index_start_activity")
-async def persist_runtime_index_start_activity(payload: dict[str, Any]) -> dict[str, Any]:
+async def persist_runtime_index_start_activity(
+    payload: dict[str, Any],
+) -> dict[str, Any]:
     """Persist initial runtime index job/state records at workflow start."""
     await record_runtime_index_started(
         job_id=_require_str(payload, "job_id"),
@@ -56,7 +58,9 @@ async def persist_runtime_index_start_activity(payload: dict[str, Any]) -> dict[
 
 
 @activity.defn(name="persist_runtime_index_success_activity")
-async def persist_runtime_index_success_activity(payload: dict[str, Any]) -> dict[str, Any]:
+async def persist_runtime_index_success_activity(
+    payload: dict[str, Any],
+) -> dict[str, Any]:
     """Persist terminal READY state for a completed runtime index run."""
     await record_runtime_index_ready(
         job_id=_require_str(payload, "job_id"),
@@ -69,7 +73,9 @@ async def persist_runtime_index_success_activity(payload: dict[str, Any]) -> dic
 
 
 @activity.defn(name="persist_runtime_index_failure_activity")
-async def persist_runtime_index_failure_activity(payload: dict[str, Any]) -> dict[str, Any]:
+async def persist_runtime_index_failure_activity(
+    payload: dict[str, Any],
+) -> dict[str, Any]:
     """Persist terminal FAILED state and error metadata for runtime indexing."""
     stage_raw = payload.get("stage")
     stage = IndexStage(stage_raw) if stage_raw else None
@@ -87,7 +93,9 @@ async def persist_runtime_index_failure_activity(payload: dict[str, Any]) -> dic
 
 
 @activity.defn(name="persist_runtime_index_progress_activity")
-async def persist_runtime_index_progress_activity(payload: dict[str, Any]) -> dict[str, Any]:
+async def persist_runtime_index_progress_activity(
+    payload: dict[str, Any],
+) -> dict[str, Any]:
     """Persist in-flight stage and progress updates for runtime indexing."""
     stage = IndexStage(_require_str(payload, "stage"))
     progress = _require_progress(payload, "progress_pct")

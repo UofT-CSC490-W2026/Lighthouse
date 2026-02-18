@@ -232,10 +232,14 @@ async def upsert_index_state(write: IndexStateWrite) -> None:
     stmt = stmt.on_conflict_do_update(
         index_elements=[IndexState.repo_id, IndexState.ref],
         set_={
-            "snapshot_sha": func.coalesce(stmt.excluded.snapshot_sha, IndexState.snapshot_sha),
+            "snapshot_sha": func.coalesce(
+                stmt.excluded.snapshot_sha, IndexState.snapshot_sha
+            ),
             "status": stmt.excluded.status,
             "active_job_id": stmt.excluded.active_job_id,
-            "stale_after": func.coalesce(stmt.excluded.stale_after, IndexState.stale_after),
+            "stale_after": func.coalesce(
+                stmt.excluded.stale_after, IndexState.stale_after
+            ),
             "last_indexed_at": func.coalesce(
                 stmt.excluded.last_indexed_at,
                 IndexState.last_indexed_at,

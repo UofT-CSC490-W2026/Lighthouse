@@ -38,7 +38,9 @@ async def start_index_job(
     except RuntimeError as exc:
         raise BackendUnavailableError("Index control backend unavailable") from exc
     except Exception as exc:
-        raise WorkflowExecutionError("Failed to start runtime indexing workflow") from exc
+        raise WorkflowExecutionError(
+            "Failed to start runtime indexing workflow"
+        ) from exc
 
 
 @router.get(
@@ -97,4 +99,6 @@ async def retry_repo_index(
     except RuntimeError as exc:
         raise BackendUnavailableError("Index control backend unavailable") from exc
     except Exception as exc:
-        raise WorkflowExecutionError("Failed to retry runtime indexing workflow") from exc
+        raise WorkflowExecutionError(
+            "Failed to retry runtime indexing workflow"
+        ) from exc

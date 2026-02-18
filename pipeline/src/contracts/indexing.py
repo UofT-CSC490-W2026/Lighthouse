@@ -14,7 +14,6 @@ from indexing import (
     should_reuse_runtime_workflow,
 )
 
-
 __all__ = [
     "IndexJobStatusResponse",
     "IndexStage",
