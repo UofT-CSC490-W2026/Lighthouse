@@ -17,10 +17,20 @@ from .index_repository import IndexRepository
 
 
 class IndexJobNotFoundError(LookupError):
+    """Raised when an index job lookup does not find a persisted record."""
+
     pass
 
 
 class IndexControlService:
+    """Coordinate Temporal runtime indexing control and persisted state reads.
+
+    This service is the canonical MCP-side interface for:
+    - starting or retrying runtime index workflows
+    - polling job-level status
+    - reading repo-level readiness state
+    """
+
     def __init__(
         self,
         *,
@@ -31,6 +41,11 @@ class IndexControlService:
         self.repository = repository
 
     async def start_job(self, request: StartIndexJobRequest) -> StartIndexJobResponse:
+        """Start a runtime index workflow (or reuse active canonical workflow).
+
+        For non-forced requests, this enforces idempotency via canonical workflow id.
+        For forced requests, this starts a unique workflow execution.
+        """
         canonical_workflow_id = runtime_index_workflow_id(request.repo_id, request.ref)
         if request.force_reindex:
             started = await self.temporal_client.start_forced_runtime_index_workflow(
@@ -74,6 +89,7 @@ class IndexControlService:
         ref: str,
         request: RetryIndexJobRequest,
     ) -> StartIndexJobResponse:
+        """Force a new runtime index execution for an existing repo/ref target."""
         repo_url = request.repo_url or f"https://github.com/{repo_id}"
         return await self.start_job(
             StartIndexJobRequest(
@@ -87,6 +103,7 @@ class IndexControlService:
         )
 
     async def get_job(self, job_id: str) -> IndexJobStatusResponse:
+        """Return persisted status for a single index job id."""
         record = await self.repository.get_job(job_id)
         if record is None:
             raise IndexJobNotFoundError(job_id)
@@ -106,6 +123,7 @@ class IndexControlService:
         )
 
     async def get_repo_state(self, *, repo_id: str, ref: str) -> RepoIndexStateResponse:
+        """Return readiness state for repo/ref, defaulting to NOT_FOUND when absent."""
         record = await self.repository.get_repo_state(repo_id, ref)
         if record is None:
             return RepoIndexStateResponse(

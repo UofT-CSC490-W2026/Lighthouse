@@ -1,3 +1,5 @@
+"""FastAPI application entrypoint for the MCP service."""
+
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi_mcp import FastApiMCP
@@ -12,6 +14,7 @@ log = get_logger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """Initialize application state and handle startup/shutdown logging."""
     try:
         log.info("Server startup: initializing state")
         app.state.settings = settings

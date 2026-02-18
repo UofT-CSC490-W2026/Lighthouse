@@ -1,3 +1,5 @@
+"""Public index-control endpoints used by MCP callers and operators."""
+
 from fastapi import APIRouter, Body, HTTPException, Query, status
 
 from ...services import index_control_service
@@ -20,6 +22,7 @@ router = APIRouter(prefix="/v1/index", tags=["index-control"])
     summary="Start runtime index job",
 )
 async def start_index_job(request: StartIndexJobRequest) -> StartIndexJobResponse:
+    """Start a runtime index workflow for a repository/ref target."""
     try:
         return await index_control_service.start_job(request)
     except ValueError as exc:
@@ -37,6 +40,7 @@ async def start_index_job(request: StartIndexJobRequest) -> StartIndexJobRespons
     summary="Get runtime index job status",
 )
 async def get_index_job(job_id: str) -> IndexJobStatusResponse:
+    """Fetch status for a single index job id."""
     try:
         return await index_control_service.get_job(job_id)
     except IndexJobNotFoundError as exc:
@@ -57,6 +61,7 @@ async def get_repo_index_state(
     repo_id: str,
     ref: str = Query(default="main"),
 ) -> RepoIndexStateResponse:
+    """Fetch repo-level index readiness state for a specific ref."""
     try:
         return await index_control_service.get_repo_state(repo_id=repo_id, ref=ref)
     except ValueError as exc:
@@ -79,6 +84,7 @@ async def retry_repo_index(
     ref: str = Query(default="main"),
     request: RetryIndexJobRequest = Body(default_factory=RetryIndexJobRequest),
 ) -> StartIndexJobResponse:
+    """Force-start a retry run for runtime indexing."""
     try:
         return await index_control_service.retry_job(
             repo_id=repo_id,

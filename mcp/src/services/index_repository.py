@@ -13,6 +13,8 @@ from ..utils import settings
 
 @dataclass(frozen=True, slots=True)
 class IndexJobRecord:
+    """Immutable projection of one row from `index_jobs`."""
+
     job_id: str
     workflow_id: str
     repo_id: str
@@ -28,6 +30,8 @@ class IndexJobRecord:
 
 @dataclass(frozen=True, slots=True)
 class IndexStateRecord:
+    """Immutable projection of one row from `index_states`."""
+
     repo_id: str
     ref: str
     status: str
@@ -39,11 +43,18 @@ class IndexStateRecord:
 
 
 class IndexRepository:
+    """Read-only data access for MCP index-control state.
+
+    This repository intentionally limits scope to query-side operations used by
+    MCP endpoints and tool-state gating.
+    """
+
     def __init__(self) -> None:
         self._pool: asyncpg.Pool | None = None
         self._lock = asyncio.Lock()
 
     async def get_job(self, job_id: str) -> IndexJobRecord | None:
+        """Fetch one job record by `job_id` or return `None`."""
         pool = await self._get_pool()
         row = await pool.fetchrow(
             """
@@ -69,6 +80,7 @@ class IndexRepository:
         return IndexJobRecord(**dict(row))
 
     async def get_repo_state(self, repo_id: str, ref: str) -> IndexStateRecord | None:
+        """Fetch repo readiness state for `(repo_id, ref)` or return `None`."""
         pool = await self._get_pool()
         row = await pool.fetchrow(
             """
@@ -92,6 +104,7 @@ class IndexRepository:
         return IndexStateRecord(**dict(row))
 
     async def find_active_job_id(self, repo_id: str, ref: str) -> str | None:
+        """Return active job id from `index_states`, if present."""
         pool = await self._get_pool()
         row = await pool.fetchrow(
             """
@@ -107,6 +120,7 @@ class IndexRepository:
         return row["active_job_id"]
 
     async def _get_pool(self) -> asyncpg.Pool:
+        """Initialize and cache the asyncpg pool using configured Postgres DSN."""
         dsn = settings.postgres_dsn
         if not dsn:
             raise RuntimeError("POSTGRES_DSN is required for MCP index-control reads")

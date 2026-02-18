@@ -1,3 +1,5 @@
+"""Logging and console formatting helpers for MCP services."""
+
 from logging import (
     getLogger,
     DEBUG,
@@ -15,6 +17,8 @@ import time
 
 
 class Colour(Enum):
+    """ANSI color/style values used for terminal output."""
+
     grey = "\x1b[38;20m"
     green = "\x1b[32m"
     bold_green = "\x1b[1;32m"
@@ -32,7 +36,10 @@ class Colour(Enum):
 
 
 class Loggable:
+    """Mixin-style helper to attach a configured logger to an object."""
+
     def __init__(self, name: str):
+        """Initialize a named logger with stream handler and color formatter."""
         log = getLogger(name)
         log.setLevel(DEBUG)
 
@@ -47,6 +54,8 @@ class Loggable:
 
 
 class LogFormatter(Formatter):
+    """Color-aware formatter keyed by logging level."""
+
     grey = Colour.grey
     green = Colour.green
     bold_green = Colour.bold_green
@@ -70,6 +79,7 @@ class LogFormatter(Formatter):
     }
 
     def format(self, record):
+        """Format one log record using the configured level color mapping."""
         id = self.FORMATS.get(record.levelno)
         formatter = Formatter(
             f"{id.value if id is not None else Colour.bold_white.value}{self.identifier}{self.reset.value}{self.message}"
@@ -78,6 +88,8 @@ class LogFormatter(Formatter):
 
 
 def timed(f):
+    """Decorator for async methods that logs execution duration on `self.log`."""
+
     async def timing(*args, **kw):
         ts = time.time()
         result = await f(*args, **kw)
@@ -89,6 +101,7 @@ def timed(f):
 
 
 def get_logger(name: str):
+    """Return a configured logger for the provided module or component name."""
     log = getLogger(name)
     log.setLevel(DEBUG)
     if not log.handlers:
@@ -100,6 +113,7 @@ def get_logger(name: str):
 
 
 def pretty_print(text: str, colour: Colour = Colour.reset, end: Optional[str] = None):
+    """Write colored text directly to stdout with optional explicit terminator."""
     sys.stdout.write(colour.value)
     sys.stdout.write(text)
     sys.stdout.write(Colour.reset.value)

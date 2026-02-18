@@ -1,3 +1,5 @@
+"""Tool endpoint for repository history queries."""
+
 from fastapi import APIRouter
 
 from ...services import history_service
@@ -12,4 +14,5 @@ router = APIRouter()
     summary="Stub tool: get file history context",
 )
 async def get_history(request: GetHistoryRequest) -> GetHistoryResponse:
+    """Return history entries matching the request scope."""
     return await history_service.get_history(request)

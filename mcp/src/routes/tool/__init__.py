@@ -1,3 +1,5 @@
+"""MCP tool endpoint route group."""
+
 from fastapi import APIRouter
 
 from .code_graph import router as code_graph_router

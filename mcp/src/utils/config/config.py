@@ -1,3 +1,5 @@
+"""MCP runtime settings model and bootstrap."""
+
 from functools import lru_cache
 
 from config_provider import bootstrap_runtime_config
@@ -61,6 +63,7 @@ class Settings(BaseSettings):
     @field_validator("cors_allow_origins", mode="before")
     @classmethod
     def _parse_cors_allow_origins(cls, value: str | list[str]) -> list[str]:
+        """Accept comma-delimited CORS origins or a pre-parsed list."""
         if isinstance(value, str):
             return [origin.strip() for origin in value.split(",") if origin.strip()]
         return value

@@ -1,3 +1,8 @@
+"""Service registry and singleton wiring for the MCP application.
+
+This module provides import-stable service instances used by route handlers.
+"""
+
 from ..clients import TemporalClientWrapper
 from .code_graph import CodeGraphService
 from .context import ContextService

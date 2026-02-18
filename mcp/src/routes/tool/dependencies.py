@@ -1,3 +1,5 @@
+"""Tool endpoint for dependency context queries."""
+
 from fastapi import APIRouter
 
 from ...services import dependency_service
@@ -14,4 +16,5 @@ router = APIRouter()
 async def get_dependency_context(
     request: GetDependencyContextRequest,
 ) -> GetDependencyContextResponse:
+    """Return dependency context records for a package or API."""
     return await dependency_service.get_dependency_context(request)

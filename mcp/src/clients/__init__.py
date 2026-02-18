@@ -1,3 +1,5 @@
+"""Client wrappers for external systems used by MCP services."""
+
 from .temporal import (
     TemporalClientWrapper,
     WorkflowAlreadyExistsError,

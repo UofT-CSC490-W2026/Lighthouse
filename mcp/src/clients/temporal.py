@@ -15,12 +15,16 @@ from ..utils import settings
 
 @dataclass(frozen=True, slots=True)
 class WorkflowStartResult:
+    """Result payload returned after starting a workflow execution."""
+
     workflow_id: str
     run_id: str | None
 
 
 @dataclass(frozen=True, slots=True)
 class WorkflowDescription:
+    """Subset of Temporal workflow description fields used by MCP."""
+
     workflow_id: str
     run_id: str
     status: str
@@ -28,14 +32,20 @@ class WorkflowDescription:
 
 
 class WorkflowAlreadyExistsError(RuntimeError):
+    """Raised when a start request collides with an already-running workflow id."""
+
     def __init__(self, workflow_id: str, run_id: str | None = None):
+        """Create an idempotency-collision error with optional active run id."""
         self.workflow_id = workflow_id
         self.run_id = run_id
         super().__init__(f"workflow already exists: {workflow_id}")
 
 
 class TemporalClientWrapper:
+    """MCP-facing Temporal client facade for runtime indexing workflows."""
+
     def __init__(self) -> None:
+        """Initialize lazy client state and synchronization lock."""
         self._client: Client | None = None
         self._lock = asyncio.Lock()
 
@@ -48,6 +58,7 @@ class TemporalClientWrapper:
         workflow_id: str,
         force_reindex: bool,
     ) -> WorkflowStartResult:
+        """Start canonical runtime index workflow and surface idempotency collisions."""
         client = await self._get_client()
         args = {
             "repo_id": repo_id,
@@ -81,6 +92,7 @@ class TemporalClientWrapper:
         ref: str,
         base_workflow_id: str,
     ) -> WorkflowStartResult:
+        """Start a unique forced runtime index workflow using a suffixed id."""
         suffix = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
         forced_workflow_id = f"{base_workflow_id}:force:{suffix}:{uuid4().hex[:8]}"
         return await self.start_runtime_index_workflow(
@@ -92,6 +104,7 @@ class TemporalClientWrapper:
         )
 
     async def describe_workflow(self, workflow_id: str) -> WorkflowDescription | None:
+        """Describe a workflow by id, returning `None` when unavailable."""
         client = await self._get_client()
         handle = client.get_workflow_handle(workflow_id)
         try:
@@ -111,6 +124,7 @@ class TemporalClientWrapper:
             return None
 
     async def _get_client(self) -> Client:
+        """Lazily connect and cache a Temporal client for this process."""
         if self._client is not None:
             return self._client
 

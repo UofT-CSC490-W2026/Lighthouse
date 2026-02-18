@@ -1,3 +1,5 @@
+"""MCP-local indexing payload models layered on shared canonical contracts."""
+
 from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict
@@ -16,6 +18,8 @@ from indexing import (
 
 
 class ToolIndexMetadata(BaseModel):
+    """Index status metadata attached to tool responses."""
+
     model_config = ConfigDict(extra="forbid")
 
     status: IndexStatus
@@ -26,6 +30,8 @@ class ToolIndexMetadata(BaseModel):
 
 
 class RetryIndexJobRequest(BaseModel):
+    """Payload for forcing a retry of runtime indexing on an existing repo/ref."""
+
     model_config = ConfigDict(extra="forbid")
 
     repo_url: str | None = None

@@ -1,3 +1,5 @@
+"""Tool endpoint for top-level context retrieval."""
+
 from fastapi import APIRouter
 
 from ...services import context_service
@@ -14,4 +16,5 @@ router = APIRouter()
 async def get_context_for_change(
     request: GetContextForChangeRequest,
 ) -> GetContextForChangeResponse:
+    """Return ranked context items for a proposed code change."""
     return await context_service.get_context_for_change(request)

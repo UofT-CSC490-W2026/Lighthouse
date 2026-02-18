@@ -1,3 +1,5 @@
+"""Canonical type exports consumed by MCP routes and services."""
+
 from .indexing import (
     IndexJobStatusResponse,
     IndexStage,

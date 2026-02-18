@@ -1,3 +1,5 @@
+"""Top-level route registry for MCP public and tool endpoints."""
+
 from fastapi import FastAPI
 
 from .tool import tool_router
@@ -9,13 +11,17 @@ log = get_logger(__name__)
 
 
 class Router:
+    """Attach and display grouped routers for MCP startup."""
+
     def __init__(self):
+        """Construct router registry metadata used at app boot."""
         self.routers: list[tuple[str, Colour, object]] = [
             ("public", Colour.green, public_router),
             ("tools", Colour.bold_cyan, tool_router),
         ]
 
     def attach(self, app: FastAPI):
+        """Attach all configured routers to the FastAPI application."""
         log.info("MCP router attach: registering %d routers", len(self.routers))
         for _, _, router in self.routers:
             app.include_router(router)
@@ -23,6 +29,7 @@ class Router:
         log.info("MCP routes registered: %s", self._get_paths())
 
     def _get_methods(self) -> set[str]:
+        """Collect unique HTTP methods exposed by configured routers."""
         methods = set()
         for _, _, router in self.routers:
             for route in router.routes:
@@ -31,6 +38,7 @@ class Router:
         return methods
 
     def _get_paths(self) -> list[str]:
+        """Collect all route paths exposed by configured routers."""
         paths = []
         for _, _, router in self.routers:
             for route in router.routes:
@@ -39,6 +47,7 @@ class Router:
         return paths
 
     def _display(self):
+        """Render a startup summary table of registered routes."""
         if not self._get_paths():
             return
 
