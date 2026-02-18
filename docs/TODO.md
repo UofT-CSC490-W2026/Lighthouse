@@ -7,8 +7,8 @@
 - [x] Implement canonical enums in code for `IndexStatus` (`NOT_FOUND`, `PENDING`, `READY`, `FAILED`, `STALE`) and stage names.
 - [x] Implement workflow ID/idempotency convention in code (for example: `runtime-index:{repo_id}:{ref}`).
 - [x] Implement API payload models for `start job`, `get job`, `get repo state`, and `retry job`.
-- [x] Decide shared-model location and refactor to single shared module: `shared/indexing.py`.
-- [ ] Add a configuration provider abstraction and pull runtime settings/secrets (endpoints, tokens, DSNs, queue names) from AWS Parameter Store, with local `.env` fallback for development.
+- [x] Decide shared-model location and refactor to single shared module: `shared/src/indexing.py`.
+- [x] Add a configuration provider abstraction and pull runtime settings/secrets (endpoints, tokens, DSNs, queue names) from AWS Parameter Store, with local `.env` fallback for development.
 
 ## Pipeline Service
 
