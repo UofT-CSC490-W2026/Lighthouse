@@ -28,4 +28,3 @@ async def store_activity(payload: dict[str, Any]) -> dict[str, Any]:
 @activity.defn(name="mental_model_activity")
 async def mental_model_activity(payload: dict[str, Any]) -> dict[str, Any]:
     return {"stage": "mental_model", "ok": True, "payload": payload}
-

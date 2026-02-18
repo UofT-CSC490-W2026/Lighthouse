@@ -32,7 +32,12 @@ async def _run_runtime_worker(client: Client) -> None:
         client,
         task_queue=settings.temporal_task_queue_runtime,
         workflows=[RuntimeIndexWorkflow],
-        activities=[ingest_activity, clean_activity, transform_activity, store_activity],
+        activities=[
+            ingest_activity,
+            clean_activity,
+            transform_activity,
+            store_activity,
+        ],
     )
     await worker.run()
 
@@ -42,7 +47,12 @@ async def _run_offline_worker(client: Client) -> None:
         client,
         task_queue=settings.temporal_task_queue_offline,
         workflows=[OfflineDatasetWorkflow],
-        activities=[ingest_activity, clean_activity, transform_activity, store_activity],
+        activities=[
+            ingest_activity,
+            clean_activity,
+            transform_activity,
+            store_activity,
+        ],
     )
     await worker.run()
 
@@ -68,4 +78,3 @@ async def main() -> None:
 
 if __name__ == "__main__":
     asyncio.run(main())
-

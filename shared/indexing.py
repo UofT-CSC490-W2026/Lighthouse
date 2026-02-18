@@ -31,9 +31,7 @@ def runtime_index_workflow_id(repo_id: str, ref: str = "main") -> str:
         raise ValueError("repo_id must be non-empty")
     if not normalized_ref:
         raise ValueError("ref must be non-empty")
-    return (
-        f"{RUNTIME_INDEX_WORKFLOW_PREFIX}:{normalized_repo_id}:{normalized_ref}"
-    )
+    return f"{RUNTIME_INDEX_WORKFLOW_PREFIX}:{normalized_repo_id}:{normalized_ref}"
 
 
 def should_reuse_runtime_workflow(force_reindex: bool) -> bool:
