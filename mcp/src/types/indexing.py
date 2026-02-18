@@ -25,11 +25,20 @@ class ToolIndexMetadata(BaseModel):
     job_id: str | None = None
 
 
+class RetryIndexJobRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    repo_url: str | None = None
+    trigger: str = "manual_retry"
+    requested_by: str = "index_control_retry"
+
+
 __all__ = [
     "IndexJobStatusResponse",
     "IndexStage",
     "IndexStatus",
     "RUNTIME_INDEX_WORKFLOW_PREFIX",
+    "RetryIndexJobRequest",
     "RepoIndexStateResponse",
     "StartIndexJobRequest",
     "StartIndexJobResponse",

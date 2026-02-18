@@ -1,8 +1,11 @@
+from ..clients import TemporalClientWrapper
 from .code_graph import CodeGraphService
 from .context import ContextService
 from .conventions import ConventionService
 from .dependencies import DependencyService
 from .history import HistoryService
+from .index_control import IndexControlService
+from .index_repository import IndexRepository
 from .mental_model import MentalModelService
 from .ranking import RankingService
 from .semantic_search import SemanticSearchService
@@ -20,6 +23,12 @@ code_graph_service = CodeGraphService()
 history_service = HistoryService()
 convention_service = ConventionService()
 dependency_service = DependencyService()
+temporal_client = TemporalClientWrapper()
+index_repository = IndexRepository()
+index_control_service = IndexControlService(
+    temporal_client=temporal_client,
+    repository=index_repository,
+)
 
 __all__ = [
     "CodeGraphService",
@@ -27,6 +36,8 @@ __all__ = [
     "ConventionService",
     "DependencyService",
     "HistoryService",
+    "IndexControlService",
+    "IndexRepository",
     "MentalModelService",
     "RankingService",
     "SemanticSearchService",
@@ -35,7 +46,10 @@ __all__ = [
     "convention_service",
     "dependency_service",
     "history_service",
+    "index_control_service",
+    "index_repository",
     "mental_model_service",
     "ranking_service",
     "semantic_search_service",
+    "temporal_client",
 ]
