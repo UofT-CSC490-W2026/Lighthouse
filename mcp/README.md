@@ -26,6 +26,14 @@ Run the server with `uvicorn`:
 uvicorn src.server:app --reload --host 0.0.0.0 --port 8000 --env-file .env
 ```
 
+## Running tests
+
+Run MCP tests with `pytest`:
+
+```shell
+python -m pytest -q
+```
+
 ## Docker
 
 Build (from repository root so the shared package is included):

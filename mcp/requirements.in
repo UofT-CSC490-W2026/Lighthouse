@@ -12,3 +12,4 @@ fastapi-mcp
 mcp_proxy
 mcp[cli]
 langgraph
+pytest

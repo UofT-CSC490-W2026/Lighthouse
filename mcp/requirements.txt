@@ -77,6 +77,8 @@ idna==3.11
     #   anyio
     #   httpx
     #   requests
+iniconfig==2.3.0
+    # via pytest
 jmespath==1.1.0
     # via
     #   boto3
@@ -135,12 +137,15 @@ packaging==26.0
     #   black
     #   langchain-core
     #   langsmith
+    #   pytest
 pandas==3.0.0
     # via pymilvus
 pathspec==1.0.4
     # via black
 platformdirs==4.9.2
     # via black
+pluggy==1.6.0
+    # via pytest
 protobuf==6.33.5
     # via
     #   pymilvus
@@ -166,10 +171,14 @@ pydantic-settings==2.13.0
     #   fastapi-mcp
     #   mcp
 pygments==2.19.2
-    # via rich
+    # via
+    #   pytest
+    #   rich
 pyjwt==2.11.0
     # via mcp
 pymilvus==2.6.9
+    # via -r requirements.in
+pytest==9.0.2
     # via -r requirements.in
 python-dateutil==2.9.0.post0
     # via
