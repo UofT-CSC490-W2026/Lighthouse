@@ -1,8 +1,10 @@
 """Temporal workflow definitions for pipeline execution."""
 
+import asyncio
 from dataclasses import dataclass
 from datetime import timedelta
 
+from temporalio import exceptions as temporal_exceptions
 from temporalio import workflow
 from temporalio.common import RetryPolicy
 
@@ -71,6 +73,17 @@ _MENTAL_MODEL_RETRY_POLICY = RetryPolicy(
     maximum_interval=timedelta(seconds=45),
     maximum_attempts=4,
 )
+
+_FAILURE_CLASS_RETRYABLE = "retryable"
+_FAILURE_CLASS_TERMINAL = "terminal"
+
+
+@dataclass(frozen=True)
+class FailureClassification:
+    """Classification result for runtime/offline workflow failures."""
+
+    failure_class: str
+    error_code: str
 
 
 @dataclass
@@ -203,18 +216,20 @@ class RuntimeIndexWorkflow:
                     start_to_close_timeout=timeout,
                     retry_policy=retry_policy,
                 )
+        except asyncio.CancelledError as exc:
+            await _persist_runtime_failure(
+                stage_payload=stage_payload,
+                stage=current_stage,
+                progress_pct=current_progress,
+                exc=exc,
+            )
+            raise
         except Exception as exc:
-            await workflow.execute_activity(
-                persist_runtime_index_failure_activity,
-                {
-                    **stage_payload,
-                    "stage": current_stage.value,
-                    "progress_pct": current_progress,
-                    "error_code": "RUNTIME_INDEX_FAILED",
-                    "error_message": str(exc)[:2000],
-                },
-                start_to_close_timeout=timedelta(seconds=30),
-                retry_policy=_PERSIST_RETRY_POLICY,
+            await _persist_runtime_failure(
+                stage_payload=stage_payload,
+                stage=current_stage,
+                progress_pct=current_progress,
+                exc=exc,
             )
             raise
 
@@ -246,30 +261,50 @@ class OfflineDatasetWorkflow:
             "dataset_name": params.dataset_name,
             "dataset_version": params.dataset_version,
         }
-        await workflow.execute_activity(
-            ingest_activity,
-            payload,
-            start_to_close_timeout=timedelta(minutes=30),
-            retry_policy=_OFFLINE_RETRY_POLICY,
-        )
-        await workflow.execute_activity(
-            clean_activity,
-            payload,
-            start_to_close_timeout=timedelta(minutes=20),
-            retry_policy=_OFFLINE_RETRY_POLICY,
-        )
-        await workflow.execute_activity(
-            transform_activity,
-            payload,
-            start_to_close_timeout=timedelta(minutes=30),
-            retry_policy=_OFFLINE_RETRY_POLICY,
-        )
-        await workflow.execute_activity(
-            store_activity,
-            payload,
-            start_to_close_timeout=timedelta(minutes=20),
-            retry_policy=_OFFLINE_RETRY_POLICY,
-        )
+        try:
+            await workflow.execute_activity(
+                ingest_activity,
+                payload,
+                start_to_close_timeout=timedelta(minutes=30),
+                retry_policy=_OFFLINE_RETRY_POLICY,
+            )
+            await workflow.execute_activity(
+                clean_activity,
+                payload,
+                start_to_close_timeout=timedelta(minutes=20),
+                retry_policy=_OFFLINE_RETRY_POLICY,
+            )
+            await workflow.execute_activity(
+                transform_activity,
+                payload,
+                start_to_close_timeout=timedelta(minutes=30),
+                retry_policy=_OFFLINE_RETRY_POLICY,
+            )
+            await workflow.execute_activity(
+                store_activity,
+                payload,
+                start_to_close_timeout=timedelta(minutes=20),
+                retry_policy=_OFFLINE_RETRY_POLICY,
+            )
+        except asyncio.CancelledError as exc:
+            classification = _classify_failure(exc)
+            workflow.logger.warning(
+                "OfflineDatasetWorkflow cancelled (class=%s code=%s)",
+                classification.failure_class,
+                classification.error_code,
+            )
+            raise
+        except Exception as exc:
+            classification = _classify_failure(exc)
+            workflow.logger.error(
+                "OfflineDatasetWorkflow failed (class=%s code=%s): %s",
+                classification.failure_class,
+                classification.error_code,
+                _format_failure_message(
+                    exc=exc, failure_class=classification.failure_class
+                ),
+            )
+            raise
         return {"status": IndexStatus.READY.value}
 
 
@@ -285,10 +320,154 @@ class MentalModelWorkflow:
             "from_sha": params.from_sha,
             "to_sha": params.to_sha,
         }
-        await workflow.execute_activity(
-            mental_model_activity,
-            payload,
-            start_to_close_timeout=timedelta(minutes=20),
-            retry_policy=_MENTAL_MODEL_RETRY_POLICY,
-        )
+        try:
+            await workflow.execute_activity(
+                mental_model_activity,
+                payload,
+                start_to_close_timeout=timedelta(minutes=20),
+                retry_policy=_MENTAL_MODEL_RETRY_POLICY,
+            )
+        except asyncio.CancelledError as exc:
+            classification = _classify_failure(exc)
+            workflow.logger.warning(
+                "MentalModelWorkflow cancelled (class=%s code=%s)",
+                classification.failure_class,
+                classification.error_code,
+            )
+            raise
+        except Exception as exc:
+            classification = _classify_failure(exc)
+            workflow.logger.error(
+                "MentalModelWorkflow failed (class=%s code=%s): %s",
+                classification.failure_class,
+                classification.error_code,
+                _format_failure_message(
+                    exc=exc, failure_class=classification.failure_class
+                ),
+            )
+            raise
         return {"status": IndexStatus.READY.value}
+
+
+async def _persist_runtime_failure(
+    *,
+    stage_payload: dict[str, object],
+    stage: IndexStage,
+    progress_pct: int,
+    exc: BaseException,
+) -> FailureClassification:
+    """Persist runtime workflow failure with retryability classification metadata."""
+    classification = _classify_failure(exc)
+    try:
+        await workflow.execute_activity(
+            persist_runtime_index_failure_activity,
+            {
+                **stage_payload,
+                "stage": stage.value,
+                "progress_pct": progress_pct,
+                "error_code": classification.error_code,
+                "error_message": _format_failure_message(
+                    exc=exc,
+                    failure_class=classification.failure_class,
+                ),
+            },
+            start_to_close_timeout=timedelta(seconds=30),
+            retry_policy=_PERSIST_RETRY_POLICY,
+            cancellation_type=workflow.ActivityCancellationType.ABANDON,
+        )
+    except Exception as persist_exc:
+        workflow.logger.error(
+            "Failed to persist runtime failure (class=%s code=%s stage=%s): %s",
+            classification.failure_class,
+            classification.error_code,
+            stage.value,
+            str(persist_exc)[:500],
+        )
+    workflow.logger.error(
+        "RuntimeIndexWorkflow failed (class=%s code=%s stage=%s)",
+        classification.failure_class,
+        classification.error_code,
+        stage.value,
+    )
+    return classification
+
+
+def _classify_failure(exc: BaseException) -> FailureClassification:
+    """Classify failures into `retryable` vs `terminal` and choose error code."""
+    root = _unwrap_exception(exc)
+
+    if _is_cancelled(exc) or _is_cancelled(root):
+        return FailureClassification(
+            failure_class=_FAILURE_CLASS_TERMINAL,
+            error_code="RUNTIME_INDEX_TERMINAL_CANCELLED",
+        )
+
+    if isinstance(root, ValueError):
+        return FailureClassification(
+            failure_class=_FAILURE_CLASS_TERMINAL,
+            error_code="RUNTIME_INDEX_TERMINAL_VALIDATION",
+        )
+
+    if isinstance(root, temporal_exceptions.ApplicationError):
+        if root.non_retryable:
+            return FailureClassification(
+                failure_class=_FAILURE_CLASS_TERMINAL,
+                error_code="RUNTIME_INDEX_TERMINAL_APPLICATION",
+            )
+        return FailureClassification(
+            failure_class=_FAILURE_CLASS_RETRYABLE,
+            error_code="RUNTIME_INDEX_RETRYABLE_APPLICATION",
+        )
+
+    if isinstance(root, temporal_exceptions.TimeoutError):
+        return FailureClassification(
+            failure_class=_FAILURE_CLASS_RETRYABLE,
+            error_code="RUNTIME_INDEX_RETRYABLE_TIMEOUT",
+        )
+
+    if isinstance(root, temporal_exceptions.ServerError):
+        return FailureClassification(
+            failure_class=_FAILURE_CLASS_RETRYABLE,
+            error_code="RUNTIME_INDEX_RETRYABLE_SERVER",
+        )
+
+    if isinstance(root, (OSError, ConnectionError)):
+        return FailureClassification(
+            failure_class=_FAILURE_CLASS_RETRYABLE,
+            error_code="RUNTIME_INDEX_RETRYABLE_IO",
+        )
+
+    return FailureClassification(
+        failure_class=_FAILURE_CLASS_TERMINAL,
+        error_code="RUNTIME_INDEX_TERMINAL_UNKNOWN",
+    )
+
+
+def _format_failure_message(*, exc: BaseException, failure_class: str) -> str:
+    """Build bounded failure message text with classification prefix."""
+    root = _unwrap_exception(exc)
+    root_message = str(root).strip()
+    if not root_message:
+        root_message = root.__class__.__name__
+    formatted = f"[{failure_class}] {root.__class__.__name__}: {root_message}"
+    return formatted[:2000]
+
+
+def _unwrap_exception(exc: BaseException) -> BaseException:
+    """Unwrap nested Temporal failure causes to deepest known exception."""
+    current: BaseException = exc
+    for _ in range(8):
+        cause = getattr(current, "cause", None) or getattr(current, "__cause__", None)
+        if cause is None or not isinstance(cause, BaseException):
+            break
+        current = cause
+    return current
+
+
+def _is_cancelled(exc: BaseException) -> bool:
+    """Return whether an exception represents a cancellation/termination path."""
+    if isinstance(exc, asyncio.CancelledError):
+        return True
+    if isinstance(exc, temporal_exceptions.TerminatedError):
+        return True
+    return temporal_exceptions.is_cancelled_exception(exc)
