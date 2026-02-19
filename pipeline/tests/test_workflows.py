@@ -160,6 +160,7 @@ def test_offline_workflow_happy_path() -> None:
                 workflows.OfflineDatasetParams(
                     dataset_name="swebench",
                     dataset_version="v1",
+                    dataset_source_path="/tmp/swebench-v1.jsonl",
                 )
             )
         )
@@ -197,6 +198,7 @@ def test_offline_workflow_failure_path() -> None:
                 workflows.OfflineDatasetParams(
                     dataset_name="swebench",
                     dataset_version="v1",
+                    dataset_source_path="/tmp/swebench-v1.jsonl",
                 )
             )
         )

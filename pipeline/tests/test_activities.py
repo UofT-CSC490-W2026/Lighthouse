@@ -134,6 +134,12 @@ def test_offline_activity_flow_happy_path(tmp_path: Path) -> None:
     with (
         patch.object(activities, "_log_activity_info"),
         patch.object(activities, "_offline_artifact_dir", return_value=tmp_path),
+        patch.object(activities.settings, "postgres_dsn", None),
+        patch.object(
+            activities,
+            "upsert_dataset_instances",
+            new=AsyncMock(),
+        ) as mock_export,
         patch.object(
             activities,
             "_maybe_store_offline_artifacts_to_s3",
@@ -161,11 +167,119 @@ def test_offline_activity_flow_happy_path(tmp_path: Path) -> None:
 
     assert store_result["stage"] == "store"
     assert store_result["store_stats"]["s3_key_prefix"] is not None
+    assert store_result["store_stats"]["dataset_instances_exported"] == 0
+    assert store_result["store_stats"]["dataset_instances_export_enabled"] is False
+    mock_export.assert_not_awaited()
     manifest_path = Path(store_result["artifact_manifest_path"])
     assert manifest_path.exists()
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     assert manifest["dataset_name"] == "swebench"
     assert manifest["dataset_version"] == "v1"
+    assert manifest["exports"]["dataset_instances"]["enabled"] is False
+    assert manifest["exports"]["dataset_instances"]["record_count"] == 0
+
+
+def test_store_offline_exports_dataset_instances_when_postgres_enabled(
+    tmp_path: Path,
+) -> None:
+    """Offline store should export transformed gold rows into Postgres."""
+    ingest_path = tmp_path / "offline_ingest_records.jsonl"
+    clean_path = tmp_path / "offline_clean_records.jsonl"
+    transform_path = tmp_path / "offline_dataset_instances.jsonl"
+    _write_jsonl(
+        ingest_path,
+        [
+            {
+                "record_id": "source-1",
+                "dataset_name": "swebench",
+                "dataset_version": "v1",
+                "raw": {"instance_id": "swe-1"},
+            }
+        ],
+    )
+    _write_jsonl(
+        clean_path,
+        [
+            {
+                "instance_id": "swe-1",
+                "task": "Fix parser regression",
+                "repo_id": "octo/repo",
+                "snapshot_sha": "abc1234",
+                "failure_type": "test_failure",
+                "failure_ref": "FAIL_TO_PASS=test_parser",
+                "corrected_diff_ref": "diff --git a/app.py b/app.py",
+                "split": "test",
+                "dataset_name": "swebench",
+                "dataset_version": "v1",
+            }
+        ],
+    )
+    _write_jsonl(
+        transform_path,
+        [
+            {
+                "instance_id": "swe-1",
+                "task": "Fix parser regression",
+                "repo_id": "octo/repo",
+                "snapshot_sha": "abc1234",
+                "failure_type": "test_failure",
+                "failure_ref": "FAIL_TO_PASS=test_parser",
+                "corrected_diff_ref": "diff --git a/app.py b/app.py",
+                "split": "test",
+                "dataset_name": "swebench",
+                "dataset_version": "v1",
+                "created_at": "2026-02-19T00:00:00+00:00",
+            }
+        ],
+    )
+    payload = {
+        **_offline_payload(),
+        "artifact_dir": str(tmp_path),
+        "ingest_path": str(ingest_path),
+        "clean_path": str(clean_path),
+        "transform_path": str(transform_path),
+        "ingest_stats": {"records_in": 1},
+        "clean_stats": {"clean_record_count": 1, "invalid_record_count": 0},
+        "transform_stats": {"dataset_instance_count": 1},
+    }
+    with (
+        patch.object(activities, "_log_activity_info"),
+        patch.object(
+            activities,
+            "_maybe_store_offline_artifacts_to_s3",
+            return_value=None,
+        ),
+        patch.object(
+            activities.settings,
+            "postgres_dsn",
+            "postgresql+asyncpg://postgres:postgres@localhost:5432/lighthouse",
+        ),
+        patch.object(
+            activities,
+            "upsert_dataset_instances",
+            new=AsyncMock(return_value=1),
+        ) as mock_export,
+    ):
+        result = _run(activities.store_activity(payload))
+
+    assert result["stage"] == "store"
+    assert result["store_stats"]["dataset_instances_export_enabled"] is True
+    assert result["store_stats"]["dataset_instances_exported"] == 1
+
+    mock_export.assert_awaited_once()
+    writes = mock_export.await_args.args[0]
+    assert len(writes) == 1
+    row = writes[0]
+    assert row.dataset_name == "swebench"
+    assert row.dataset_version == "v1"
+    assert row.instance_id == "swe-1"
+    assert row.workflow_id == "offline-datasets:swebench:v1"
+    assert row.run_id == "job_offline_001"
+
+    manifest_path = Path(result["artifact_manifest_path"])
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest["exports"]["dataset_instances"]["enabled"] is True
+    assert manifest["exports"]["dataset_instances"]["record_count"] == 1
 
 
 def test_offline_ingest_validation_failure() -> None:

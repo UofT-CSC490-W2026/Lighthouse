@@ -9,6 +9,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    PrimaryKeyConstraint,
     Integer,
     String,
     Text,
@@ -79,6 +80,47 @@ class IndexState(Base):
     last_indexed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+
+class DatasetInstance(Base):
+    """Offline gold dataset export table for normalized benchmark instances."""
+
+    __tablename__ = "dataset_instances"
+    __table_args__ = (
+        PrimaryKeyConstraint(
+            "dataset_name",
+            "dataset_version",
+            "instance_id",
+            name="pk_dataset_instances",
+        ),
+        Index("idx_dataset_instances_repo_id", "repo_id"),
+        Index("idx_dataset_instances_split", "split"),
+    )
+
+    dataset_name: Mapped[str] = mapped_column(String, nullable=False)
+    dataset_version: Mapped[str] = mapped_column(String, nullable=False)
+    instance_id: Mapped[str] = mapped_column(String, nullable=False)
+
+    task: Mapped[str] = mapped_column(Text, nullable=False)
+    repo_id: Mapped[str] = mapped_column(String, nullable=False)
+    snapshot_sha: Mapped[str | None] = mapped_column(String, nullable=True)
+    failure_type: Mapped[str] = mapped_column(String, nullable=False)
+    failure_ref: Mapped[str | None] = mapped_column(Text, nullable=True)
+    corrected_diff_ref: Mapped[str] = mapped_column(Text, nullable=False)
+    split: Mapped[str] = mapped_column(String, nullable=False)
+
+    workflow_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    run_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

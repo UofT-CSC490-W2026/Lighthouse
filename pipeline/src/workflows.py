@@ -104,6 +104,10 @@ class OfflineDatasetParams:
 
     dataset_name: str
     dataset_version: str | None = None
+    dataset_source_path: str = ""
+    trigger: str = "manual"
+    requested_by: str = "pipeline.offline_trigger"
+    source_event_id: str | None = None
 
 
 @dataclass
@@ -301,6 +305,10 @@ class OfflineDatasetWorkflow:
         stage_payload: dict[str, object] = {
             "dataset_name": params.dataset_name,
             "dataset_version": params.dataset_version,
+            "dataset_source_path": params.dataset_source_path,
+            "trigger": params.trigger,
+            "requested_by": params.requested_by,
+            "source_event_id": params.source_event_id,
             "workflow_id": workflow_info.workflow_id,
             "job_id": workflow_info.run_id,
         }
@@ -309,6 +317,9 @@ class OfflineDatasetWorkflow:
             **correlation,
             dataset_name=params.dataset_name,
             dataset_version=params.dataset_version,
+            trigger=params.trigger,
+            requested_by=params.requested_by,
+            source_event_id=params.source_event_id,
         )
         try:
             stage_payload = await workflow.execute_activity(

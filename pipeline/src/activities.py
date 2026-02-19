@@ -21,10 +21,12 @@ from .contracts import IndexStage
 from .offline_sources import SwebenchSnapshot, SwebenchSnapshotAdapter
 from .observability import correlation_from_payload, structured_event
 from .persistence import (
+    DatasetInstanceWrite,
     record_runtime_index_failed,
     record_runtime_index_progress,
     record_runtime_index_ready,
     record_runtime_index_started,
+    upsert_dataset_instances,
 )
 
 _MAX_ARCHIVE_BYTES = 50 * 1024 * 1024
@@ -375,7 +377,7 @@ async def store_activity(payload: dict[str, Any]) -> dict[str, Any]:
         return result
 
     if _is_offline_payload(payload):
-        result = _store_offline_dataset(payload)
+        result = await _store_offline_dataset(payload)
         _log_activity_info(
             "pipeline.store.complete",
             **correlation,
@@ -384,6 +386,9 @@ async def store_activity(payload: dict[str, Any]) -> dict[str, Any]:
                 "dataset_instance_count"
             ),
             s3_key_prefix=result["store_stats"]["s3_key_prefix"],
+            dataset_instances_exported=result["store_stats"][
+                "dataset_instances_exported"
+            ],
             mode="offline",
         )
         return result
@@ -751,7 +756,7 @@ def _transform_offline_dataset(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _store_offline_dataset(payload: dict[str, Any]) -> dict[str, Any]:
+async def _store_offline_dataset(payload: dict[str, Any]) -> dict[str, Any]:
     """Persist offline benchmark artifacts and write a run manifest."""
     _validate_offline_dataset_name(payload)
     artifact_dir = Path(_require_str(payload, "artifact_dir"))
@@ -766,6 +771,17 @@ def _store_offline_dataset(payload: dict[str, Any]) -> dict[str, Any]:
     clean_stats = payload.get("clean_stats") or {}
     transform_stats = payload.get("transform_stats") or {}
     quarantine_path_value = _coerce_optional_str(payload.get("quarantine_path"))
+    dataset_instance_writes = _load_dataset_instance_writes(
+        transform_path=transform_path,
+        workflow_id=workflow_id,
+        run_id=job_id,
+    )
+    dataset_instances_exported = 0
+    dataset_instances_export_enabled = bool(settings.postgres_dsn)
+    if dataset_instances_export_enabled:
+        dataset_instances_exported = await upsert_dataset_instances(
+            dataset_instance_writes
+        )
 
     s3_key_prefix = _offline_s3_key_prefix(
         dataset_name=dataset_name,
@@ -830,6 +846,13 @@ def _store_offline_dataset(payload: dict[str, Any]) -> dict[str, Any]:
             "bucket": settings.s3_bucket,
             "s3_key_prefix": s3_key_prefix,
         },
+        "exports": {
+            "dataset_instances": {
+                "target": "postgres.dataset_instances",
+                "enabled": dataset_instances_export_enabled,
+                "record_count": dataset_instances_exported,
+            }
+        },
     }
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
 
@@ -859,8 +882,39 @@ def _store_offline_dataset(payload: dict[str, Any]) -> dict[str, Any]:
         "artifact_dataset_instances_path": str(transform_path),
         "store_stats": {
             "s3_key_prefix": stored_s3_key_prefix,
+            "dataset_instances_exported": dataset_instances_exported,
+            "dataset_instances_export_enabled": dataset_instances_export_enabled,
         },
     }
+
+
+def _load_dataset_instance_writes(
+    *,
+    transform_path: Path,
+    workflow_id: str,
+    run_id: str,
+) -> list[DatasetInstanceWrite]:
+    """Read transformed gold rows and map them into Postgres export payloads."""
+    writes: list[DatasetInstanceWrite] = []
+    for row in _read_jsonl(transform_path):
+        writes.append(
+            DatasetInstanceWrite(
+                dataset_name=_require_mapping_str(row, "dataset_name"),
+                dataset_version=_require_mapping_str(row, "dataset_version"),
+                instance_id=_require_mapping_str(row, "instance_id"),
+                task=_require_mapping_str(row, "task"),
+                repo_id=_require_mapping_str(row, "repo_id"),
+                snapshot_sha=_coerce_optional_str(row.get("snapshot_sha")),
+                failure_type=_coerce_optional_str(row.get("failure_type"))
+                or "test_failure",
+                failure_ref=_coerce_optional_str(row.get("failure_ref")),
+                corrected_diff_ref=_require_mapping_str(row, "corrected_diff_ref"),
+                split=_coerce_optional_str(row.get("split")) or "unspecified",
+                workflow_id=workflow_id,
+                run_id=run_id,
+            )
+        )
+    return writes
 
 
 def _sanitize_identifier(value: str) -> str:

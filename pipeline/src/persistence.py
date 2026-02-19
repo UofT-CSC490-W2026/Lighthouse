@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
@@ -17,7 +18,7 @@ from sqlalchemy.ext.asyncio import (
 
 from .config import settings
 from .contracts import IndexStage, IndexStatus
-from .db_models import IndexJob, IndexState
+from .db_models import DatasetInstance, IndexJob, IndexState
 
 _ENGINE: AsyncEngine | None = None
 _SESSION_FACTORY: async_sessionmaker[AsyncSession] | None = None
@@ -50,6 +51,24 @@ class IndexStateWrite:
     snapshot_sha: str | None = None
     stale_after: datetime | None = None
     last_indexed_at: datetime | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class DatasetInstanceWrite:
+    """Typed upsert payload for one `dataset_instances` gold export row."""
+
+    dataset_name: str
+    dataset_version: str
+    instance_id: str
+    task: str
+    repo_id: str
+    corrected_diff_ref: str
+    snapshot_sha: str | None = None
+    failure_type: str = "test_failure"
+    failure_ref: str | None = None
+    split: str = "unspecified"
+    workflow_id: str | None = None
+    run_id: str | None = None
 
 
 async def record_runtime_index_started(
@@ -248,6 +267,53 @@ async def upsert_index_state(write: IndexStateWrite) -> None:
         },
     )
     await _execute_and_commit(session_factory, stmt)
+
+
+async def upsert_dataset_instances(writes: Sequence[DatasetInstanceWrite]) -> int:
+    """Insert or upsert many `dataset_instances` rows and return row count."""
+    if not writes:
+        return 0
+
+    session_factory = await _get_session_factory()
+    values = [
+        {
+            "dataset_name": write.dataset_name,
+            "dataset_version": write.dataset_version,
+            "instance_id": write.instance_id,
+            "task": write.task,
+            "repo_id": write.repo_id,
+            "snapshot_sha": write.snapshot_sha,
+            "failure_type": write.failure_type,
+            "failure_ref": write.failure_ref,
+            "corrected_diff_ref": write.corrected_diff_ref,
+            "split": write.split,
+            "workflow_id": write.workflow_id,
+            "run_id": write.run_id,
+        }
+        for write in writes
+    ]
+    stmt = insert(DatasetInstance).values(values)
+    stmt = stmt.on_conflict_do_update(
+        index_elements=[
+            DatasetInstance.dataset_name,
+            DatasetInstance.dataset_version,
+            DatasetInstance.instance_id,
+        ],
+        set_={
+            "task": stmt.excluded.task,
+            "repo_id": stmt.excluded.repo_id,
+            "snapshot_sha": stmt.excluded.snapshot_sha,
+            "failure_type": stmt.excluded.failure_type,
+            "failure_ref": stmt.excluded.failure_ref,
+            "corrected_diff_ref": stmt.excluded.corrected_diff_ref,
+            "split": stmt.excluded.split,
+            "workflow_id": stmt.excluded.workflow_id,
+            "run_id": stmt.excluded.run_id,
+            "updated_at": func.now(),
+        },
+    )
+    await _execute_and_commit(session_factory, stmt)
+    return len(values)
 
 
 async def _execute_and_commit(

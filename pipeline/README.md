@@ -30,6 +30,27 @@ alembic -c alembic.ini upgrade head
 python -m src.worker
 ```
 
+## Trigger offline benchmark ingestion (manual)
+
+Start one `OfflineDatasetWorkflow` run for a pinned benchmark snapshot:
+
+```bash
+set -a
+source .env
+set +a
+python -m src.offline_trigger \
+  --dataset-name swebench \
+  --dataset-version v1 \
+  --dataset-source-path /absolute/path/to/swebench-v1.jsonl \
+  --trigger manual \
+  --requested-by operator_cli
+```
+
+Optional:
+
+- `--force-reingest` to bypass canonical idempotency and start a unique rerun.
+- `--source-event-id <id>` when the trigger is from an external release event.
+
 ## Docker
 
 Build (from repository root so the shared package is included):
