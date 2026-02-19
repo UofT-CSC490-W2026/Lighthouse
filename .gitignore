@@ -42,3 +42,6 @@ cython_debug/
 
 # Hugging Face cache
 .hfcache/
+
+# Pipeline runtime artifacts
+pipeline/.artifacts/
