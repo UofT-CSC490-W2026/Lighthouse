@@ -40,6 +40,11 @@ class S3Connector:
         )
         return prefix
 
+    def check_bucket_access(self, *, bucket: str) -> None:
+        """Validate S3 bucket reachability and permissions."""
+        client = boto3.client("s3", region_name=self.region_name)
+        client.head_bucket(Bucket=bucket)
+
     @staticmethod
     def _runtime_prefix(*, repo_id: str, ref: str, job_id: str) -> str:
         """Build sanitized runtime artifact key prefix."""

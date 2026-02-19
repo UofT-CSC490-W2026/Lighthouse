@@ -53,6 +53,8 @@ class Settings(BaseSettings):
     aws_region: str = "us-east-1"
 
     github_read_token: SecretStr | None = None
+    validate_milvus_on_startup: bool = False
+    validate_s3_on_startup: bool = False
 
 
 @lru_cache(maxsize=1)

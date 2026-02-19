@@ -38,3 +38,9 @@ class PostgresConnector:
         pool = await self.get_pool()
         async with pool.acquire() as conn:
             await conn.execute("SELECT 1")
+
+    async def close(self) -> None:
+        """Close pooled connections if initialized."""
+        if self._pool is not None:
+            await self._pool.close()
+            self._pool = None
