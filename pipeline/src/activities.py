@@ -615,9 +615,8 @@ def _clean_offline_dataset(payload: dict[str, Any]) -> dict[str, Any]:
 
     dataset_name = _require_str(payload, "dataset_name")
     dataset_version = _coerce_optional_str(payload.get("dataset_version"))
-    clean_rows: list[dict[str, Any]] = []
+    normalized_candidates: list[dict[str, Any]] = []
     invalid_rows: list[dict[str, Any]] = []
-    seen_instance_ids: set[str] = set()
     for row_index, ingest_row in enumerate(_read_jsonl(ingest_path)):
         raw_record = ingest_row.get("raw")
         if not isinstance(raw_record, dict):
@@ -647,19 +646,20 @@ def _clean_offline_dataset(payload: dict[str, Any]) -> dict[str, Any]:
             )
             continue
 
-        instance_id = normalized["instance_id"]
-        if instance_id in seen_instance_ids:
-            invalid_rows.append(
-                {
-                    "row_index": row_index,
-                    "record_id": ingest_row.get("record_id"),
-                    "reason": "duplicate_instance_id",
-                    "instance_id": instance_id,
-                }
-            )
-            continue
-        seen_instance_ids.add(instance_id)
-        clean_rows.append(normalized)
+        normalized_candidates.append(
+            {
+                "row_index": row_index,
+                "record_id": _coerce_optional_str(ingest_row.get("record_id")),
+                "normalized": normalized,
+            }
+        )
+
+    dedupe_rows, dedupe_invalid_rows, dedupe_stats = _dedupe_offline_rows(
+        normalized_candidates
+    )
+    clean_rows = dedupe_rows
+    invalid_rows.extend(dedupe_invalid_rows)
+    clean_rows.sort(key=_offline_clean_row_sort_key)
 
     _write_jsonl(clean_path, clean_rows)
 
@@ -680,6 +680,8 @@ def _clean_offline_dataset(payload: dict[str, Any]) -> dict[str, Any]:
             "input_record_count": len(clean_rows) + len(invalid_rows),
             "clean_record_count": len(clean_rows),
             "invalid_record_count": len(invalid_rows),
+            "duplicate_instance_id_dropped": dedupe_stats["duplicate_instance_id"],
+            "duplicate_content_dropped": dedupe_stats["duplicate_content"],
         },
     }
 
@@ -886,6 +888,70 @@ def _coerce_text(value: Any) -> str | None:
     return _coerce_optional_str(value)
 
 
+def _normalize_offline_text(value: str | None) -> str | None:
+    """Normalize multiline text fields for deterministic comparison and storage."""
+    if value is None:
+        return None
+    normalized = value.replace("\r\n", "\n").replace("\r", "\n")
+    lines = [line.rstrip() for line in normalized.split("\n")]
+    cleaned_lines: list[str] = []
+    blank_run = 0
+    for line in lines:
+        if line:
+            cleaned_lines.append(line)
+            blank_run = 0
+            continue
+        blank_run += 1
+        if blank_run <= 1:
+            cleaned_lines.append("")
+    cleaned = "\n".join(cleaned_lines).strip()
+    return cleaned or None
+
+
+def _normalize_optional_scalar(value: str | None) -> str | None:
+    """Normalize optional scalar values for consistent dedupe keys."""
+    if value is None:
+        return None
+    normalized = value.strip()
+    return normalized or None
+
+
+def _normalize_repo_id(value: str | None) -> str | None:
+    """Normalize repository identifiers into canonical `owner/repo`-style strings."""
+    if value is None:
+        return None
+    normalized = value.strip()
+    if normalized.endswith(".git"):
+        normalized = normalized[: -len(".git")]
+    lowered = normalized.lower()
+    if lowered.startswith("https://github.com/"):
+        normalized = normalized[len("https://github.com/") :]
+    elif lowered.startswith("http://github.com/"):
+        normalized = normalized[len("http://github.com/") :]
+    elif lowered.startswith("git@github.com:"):
+        normalized = normalized[len("git@github.com:") :]
+    normalized = normalized.strip("/")
+    return normalized.lower() or None
+
+
+def _normalize_split(value: str | None) -> str:
+    """Normalize dataset split labels to stable lowercase tokens."""
+    if value is None:
+        return "unspecified"
+    normalized = re.sub(r"\s+", "_", value.strip().lower())
+    normalized = re.sub(r"[^a-z0-9._-]+", "_", normalized).strip("_")
+    return normalized or "unspecified"
+
+
+def _normalize_failure_type(value: str | None) -> str:
+    """Normalize failure type labels to stable lowercase tokens."""
+    if value is None:
+        return "test_failure"
+    normalized = re.sub(r"\s+", "_", value.strip().lower())
+    normalized = re.sub(r"[^a-z0-9._-]+", "_", normalized).strip("_")
+    return normalized or "test_failure"
+
+
 def _require_mapping_str(mapping: dict[str, Any], key: str) -> str:
     """Read and validate a required non-empty string field from one mapping."""
     value = _coerce_optional_str(mapping.get(key))
@@ -904,6 +970,143 @@ def _load_swebench_source_snapshot(
     return _SWEBENCH_SNAPSHOT_ADAPTER.load_snapshot(
         dataset_version=dataset_version,
         dataset_source_path=dataset_source_path,
+    )
+
+
+def _dedupe_offline_rows(
+    candidates: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, int]]:
+    """Apply deterministic dedupe rules and return clean rows + duplicate drops."""
+    duplicate_rows: list[dict[str, Any]] = []
+    dedupe_stats = {"duplicate_instance_id": 0, "duplicate_content": 0}
+    if not candidates:
+        return [], duplicate_rows, dedupe_stats
+
+    retained_after_instance: list[dict[str, Any]] = []
+    by_instance_id: dict[str, list[dict[str, Any]]] = {}
+    for candidate in candidates:
+        row = candidate["normalized"]
+        instance_id = _require_mapping_str(row, "instance_id")
+        by_instance_id.setdefault(instance_id, []).append(candidate)
+
+    for instance_id in sorted(by_instance_id):
+        winner, losers = _select_canonical_offline_candidate(by_instance_id[instance_id])
+        retained_after_instance.append(winner)
+        if losers:
+            dedupe_stats["duplicate_instance_id"] += len(losers)
+            winner_record_id = _coerce_optional_str(winner.get("record_id"))
+            for loser in losers:
+                duplicate_rows.append(
+                    {
+                        "row_index": loser.get("row_index"),
+                        "record_id": loser.get("record_id"),
+                        "reason": "duplicate_instance_id_dropped",
+                        "instance_id": instance_id,
+                        "winner_record_id": winner_record_id,
+                    }
+                )
+
+    retained_after_content: list[dict[str, Any]] = []
+    by_content_key: dict[str, list[dict[str, Any]]] = {}
+    for candidate in retained_after_instance:
+        row = candidate["normalized"]
+        content_key = _offline_content_fingerprint(row)
+        by_content_key.setdefault(content_key, []).append(candidate)
+
+    for content_key in sorted(by_content_key):
+        winner, losers = _select_canonical_offline_candidate(by_content_key[content_key])
+        retained_after_content.append(winner)
+        if losers:
+            dedupe_stats["duplicate_content"] += len(losers)
+            winner_record_id = _coerce_optional_str(winner.get("record_id"))
+            winner_instance_id = _coerce_optional_str(winner["normalized"].get("instance_id"))
+            for loser in losers:
+                duplicate_rows.append(
+                    {
+                        "row_index": loser.get("row_index"),
+                        "record_id": loser.get("record_id"),
+                        "reason": "duplicate_content_signature_dropped",
+                        "content_fingerprint": content_key,
+                        "winner_record_id": winner_record_id,
+                        "winner_instance_id": winner_instance_id,
+                    }
+                )
+
+    clean_rows = [
+        _strip_internal_offline_fields(candidate["normalized"])
+        for candidate in retained_after_content
+    ]
+    return clean_rows, duplicate_rows, dedupe_stats
+
+
+def _select_canonical_offline_candidate(
+    group: list[dict[str, Any]],
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Choose canonical candidate deterministically and return losers."""
+    ordered = sorted(group, key=_offline_candidate_sort_key)
+    winner = ordered[0]
+    return winner, ordered[1:]
+
+
+def _offline_candidate_sort_key(candidate: dict[str, Any]) -> tuple[Any, ...]:
+    """Deterministic winner ranking for duplicate candidate groups."""
+    row = candidate["normalized"]
+    instance_source = _coerce_optional_str(row.get("_instance_id_source")) or "fallback"
+    explicit_rank = 0 if instance_source == "explicit" else 1
+    completeness_score = _offline_candidate_completeness(row)
+    corrected_diff_ref = _coerce_optional_str(row.get("corrected_diff_ref")) or ""
+    record_id = _coerce_optional_str(candidate.get("record_id")) or ""
+    return (
+        explicit_rank,
+        -completeness_score,
+        -len(corrected_diff_ref),
+        record_id,
+        _coerce_optional_str(row.get("instance_id")) or "",
+        _coerce_optional_str(row.get("repo_id")) or "",
+        _coerce_optional_str(row.get("snapshot_sha")) or "",
+        _offline_content_fingerprint(row),
+    )
+
+
+def _offline_candidate_completeness(row: dict[str, Any]) -> int:
+    """Score normalized rows by optional signal density for dedupe ranking."""
+    score = 0
+    for key in ("snapshot_sha", "failure_ref", "split", "failure_type"):
+        if _coerce_optional_str(row.get(key)):
+            score += 1
+    return score
+
+
+def _offline_content_fingerprint(row: dict[str, Any]) -> str:
+    """Build a stable content-level fingerprint for secondary dedupe."""
+    seed = "|".join(
+        (
+            _require_mapping_str(row, "repo_id"),
+            _coerce_optional_str(row.get("snapshot_sha")) or "",
+            _require_mapping_str(row, "task"),
+            _require_mapping_str(row, "corrected_diff_ref"),
+            _coerce_optional_str(row.get("failure_ref")) or "",
+            _coerce_optional_str(row.get("split")) or "",
+            _require_mapping_str(row, "dataset_name"),
+            _coerce_optional_str(row.get("dataset_version")) or "",
+        )
+    )
+    return hashlib.sha1(seed.encode("utf-8")).hexdigest()
+
+
+def _strip_internal_offline_fields(row: dict[str, Any]) -> dict[str, Any]:
+    """Drop internal helper fields before persisting cleaned offline rows."""
+    return {key: value for key, value in row.items() if not key.startswith("_")}
+
+
+def _offline_clean_row_sort_key(row: dict[str, Any]) -> tuple[Any, ...]:
+    """Stable ordering for cleaned offline rows written to artifact files."""
+    return (
+        _coerce_optional_str(row.get("instance_id")) or "",
+        _coerce_optional_str(row.get("repo_id")) or "",
+        _coerce_optional_str(row.get("snapshot_sha")) or "",
+        _coerce_optional_str(row.get("split")) or "",
+        _offline_content_fingerprint(row),
     )
 
 
@@ -937,18 +1140,18 @@ def _normalize_offline_dataset_row(
     dataset_version: str | None,
 ) -> dict[str, Any] | None:
     """Normalize one raw offline record into canonical benchmark fields."""
-    task = (
+    task = _normalize_offline_text(
         _coerce_text(raw_record.get("task"))
         or _coerce_text(raw_record.get("problem_statement"))
         or _coerce_text(raw_record.get("issue_text"))
         or _coerce_text(raw_record.get("prompt"))
     )
-    repo_id = (
+    repo_id = _normalize_repo_id(
         _coerce_optional_str(raw_record.get("repo_id"))
         or _coerce_optional_str(raw_record.get("repo"))
         or _coerce_optional_str(raw_record.get("repository"))
     )
-    corrected_diff_ref = (
+    corrected_diff_ref = _normalize_offline_text(
         _coerce_text(raw_record.get("corrected_diff_ref"))
         or _coerce_text(raw_record.get("gold_patch"))
         or _coerce_text(raw_record.get("patch"))
@@ -957,31 +1160,34 @@ def _normalize_offline_dataset_row(
     if task is None or repo_id is None or corrected_diff_ref is None:
         return None
 
-    snapshot_sha = (
+    snapshot_sha = _normalize_optional_scalar(
         _coerce_optional_str(raw_record.get("snapshot_sha"))
         or _coerce_optional_str(raw_record.get("base_commit"))
         or _coerce_optional_str(raw_record.get("commit_sha"))
     )
-    failure_type = _coerce_optional_str(raw_record.get("failure_type")) or "test_failure"
-    failure_ref = (
+    failure_type = _normalize_failure_type(
+        _coerce_optional_str(raw_record.get("failure_type"))
+    )
+    failure_ref = _normalize_offline_text(
         _coerce_text(raw_record.get("failure_ref"))
         or _coerce_text(raw_record.get("test_patch"))
         or _coerce_text(raw_record.get("fail_to_pass"))
         or _coerce_text(raw_record.get("FAIL_TO_PASS"))
     )
-    split = (
+    split = _normalize_split(
         _coerce_optional_str(raw_record.get("split"))
         or _coerce_optional_str(raw_record.get("subset"))
-        or "unspecified"
     )
-    instance_id = (
+    explicit_instance_id = _normalize_optional_scalar(
         _coerce_optional_str(raw_record.get("instance_id"))
         or _coerce_optional_str(raw_record.get("id"))
-        or fallback_record_id
     )
+    instance_id = explicit_instance_id or _normalize_optional_scalar(fallback_record_id)
+    instance_id_source = "explicit" if explicit_instance_id else "fallback"
     if not instance_id:
         instance_seed = f"{repo_id}|{task}|{snapshot_sha or ''}|{corrected_diff_ref}"
         instance_id = hashlib.sha1(instance_seed.encode("utf-8")).hexdigest()[:20]
+        instance_id_source = "generated"
 
     return {
         "instance_id": instance_id,
@@ -994,6 +1200,7 @@ def _normalize_offline_dataset_row(
         "split": split,
         "dataset_name": dataset_name,
         "dataset_version": dataset_version,
+        "_instance_id_source": instance_id_source,
     }
 
 
