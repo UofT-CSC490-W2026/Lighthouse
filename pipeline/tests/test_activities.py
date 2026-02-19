@@ -29,6 +29,16 @@ def _runtime_payload() -> dict[str, object]:
     }
 
 
+def _offline_payload() -> dict[str, object]:
+    """Build a minimal offline benchmark payload used by activity tests."""
+    return {
+        "job_id": "job_offline_001",
+        "workflow_id": "offline-datasets:swebench:v1",
+        "dataset_name": "swebench",
+        "dataset_version": "v1",
+    }
+
+
 def _write_jsonl(path: Path, records: list[dict[str, object]]) -> None:
     """Write JSONL fixture records for activity stage input files."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -70,6 +80,91 @@ def test_ingest_activity_validation_failure() -> None:
     with (
         patch.object(activities, "_log_activity_info"),
         pytest.raises(ValueError, match="repo_url"),
+    ):
+        _run(activities.ingest_activity(payload))
+
+
+def test_offline_activity_flow_happy_path(tmp_path: Path) -> None:
+    """Offline ingest/clean/transform/store should process benchmark rows."""
+    payload = {
+        **_offline_payload(),
+        "dataset_records": [
+            {
+                "instance_id": "swe-1",
+                "repo": "octo/repo",
+                "problem_statement": "Fix parser edge-case regression",
+                "base_commit": "abc123",
+                "patch": "diff --git a/app.py b/app.py",
+                "test_patch": "FAIL_TO_PASS=test_parser",
+                "split": "test",
+            },
+            {
+                "instance_id": "swe-1",
+                "repo": "octo/repo",
+                "problem_statement": "duplicate row",
+                "patch": "diff --git a/app.py b/app.py",
+            },
+            {
+                "instance_id": "swe-3",
+                "problem_statement": "missing repo should be quarantined",
+                "patch": "diff --git a/app.py b/app.py",
+            },
+        ],
+    }
+    with (
+        patch.object(activities, "_log_activity_info"),
+        patch.object(activities, "_offline_artifact_dir", return_value=tmp_path),
+        patch.object(
+            activities,
+            "_maybe_store_offline_artifacts_to_s3",
+            return_value="offline-datasets/benchmark/swebench/v1/job_offline_001",
+        ),
+    ):
+        ingest_result = _run(activities.ingest_activity(payload))
+        clean_result = _run(activities.clean_activity(ingest_result))
+        transform_result = _run(activities.transform_activity(clean_result))
+        store_result = _run(activities.store_activity(transform_result))
+
+    assert ingest_result["stage"] == "ingest"
+    assert ingest_result["ingest_stats"]["records_in"] == 3
+    assert Path(ingest_result["ingest_path"]).exists()
+
+    assert clean_result["stage"] == "clean"
+    assert clean_result["clean_stats"]["clean_record_count"] == 1
+    assert clean_result["clean_stats"]["invalid_record_count"] == 2
+    assert Path(clean_result["clean_path"]).exists()
+    assert Path(clean_result["quarantine_path"]).exists()
+
+    assert transform_result["stage"] == "transform"
+    assert transform_result["transform_stats"]["dataset_instance_count"] == 1
+    assert Path(transform_result["transform_path"]).exists()
+
+    assert store_result["stage"] == "store"
+    assert store_result["store_stats"]["s3_key_prefix"] is not None
+    manifest_path = Path(store_result["artifact_manifest_path"])
+    assert manifest_path.exists()
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest["dataset_name"] == "swebench"
+    assert manifest["dataset_version"] == "v1"
+
+
+def test_offline_ingest_validation_failure() -> None:
+    """Offline ingest should reject unsupported dataset names."""
+    payload = {
+        **_offline_payload(),
+        "dataset_name": "unknown-benchmark",
+        "dataset_records": [
+            {
+                "instance_id": "a1",
+                "repo": "octo/repo",
+                "problem_statement": "sample",
+                "patch": "diff --git a/a b/a",
+            }
+        ],
+    }
+    with (
+        patch.object(activities, "_log_activity_info"),
+        pytest.raises(ValueError, match="unsupported"),
     ):
         _run(activities.ingest_activity(payload))
 

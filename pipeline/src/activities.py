@@ -33,6 +33,11 @@ _MAX_TOTAL_TEXT_BYTES = 12 * 1024 * 1024
 _CHUNK_SIZE_CHARS = 1200
 _CHUNK_OVERLAP_CHARS = 200
 _MIN_CHUNK_CHARS = 120
+_OFFLINE_SUPPORTED_DATASETS = {"swebench", "swe-bench", "swe_bench"}
+_OFFLINE_SUPPORTED_DATASET_KEYS = frozenset(
+    re.sub(r"[-_]+", "", name.strip().lower())
+    for name in _OFFLINE_SUPPORTED_DATASETS
+)
 
 _SKIP_PREFIXES = (
     ".git/",
@@ -101,41 +106,57 @@ async def ingest_activity(payload: dict[str, Any]) -> dict[str, Any]:
     """Ingest raw source inputs for the current workflow payload."""
     correlation = correlation_from_payload(payload)
     _log_activity_info("pipeline.ingest.start", **correlation)
-    if not _is_runtime_payload(payload):
-        _log_activity_info("pipeline.ingest.skip_non_runtime", **correlation)
-        return {"stage": "ingest", "ok": True, "payload": payload}
+    if _is_runtime_payload(payload):
+        repo_id = _require_str(payload, "repo_id")
+        repo_url = _require_str(payload, "repo_url")
+        ref = _coerce_ref(payload.get("ref"))
+        artifact_dir = _runtime_artifact_dir(payload)
+        ingest_path = artifact_dir / "ingest_files.jsonl"
 
-    repo_id = _require_str(payload, "repo_id")
-    repo_url = _require_str(payload, "repo_url")
-    ref = _coerce_ref(payload.get("ref"))
-    artifact_dir = _runtime_artifact_dir(payload)
-    ingest_path = artifact_dir / "ingest_files.jsonl"
+        snapshot_sha, files = _load_repo_files(
+            repo_url=repo_url,
+            ref=ref,
+            payload=payload,
+        )
+        _write_jsonl(ingest_path, files)
 
-    snapshot_sha, files = _load_repo_files(repo_url=repo_url, ref=ref, payload=payload)
-    _write_jsonl(ingest_path, files)
+        result = {
+            **payload,
+            "stage": "ingest",
+            "ok": True,
+            "repo_id": repo_id,
+            "ref": ref,
+            "snapshot_sha": snapshot_sha,
+            "artifact_dir": str(artifact_dir),
+            "ingest_path": str(ingest_path),
+            "ingest_stats": {
+                "file_count": len(files),
+                "total_text_bytes": sum(item["size_bytes"] for item in files),
+            },
+        }
+        _log_activity_info(
+            "pipeline.ingest.complete",
+            **correlation,
+            file_count=result["ingest_stats"]["file_count"],
+            total_text_bytes=result["ingest_stats"]["total_text_bytes"],
+            snapshot_sha=result.get("snapshot_sha"),
+            mode="runtime",
+        )
+        return result
 
-    result = {
-        **payload,
-        "stage": "ingest",
-        "ok": True,
-        "repo_id": repo_id,
-        "ref": ref,
-        "snapshot_sha": snapshot_sha,
-        "artifact_dir": str(artifact_dir),
-        "ingest_path": str(ingest_path),
-        "ingest_stats": {
-            "file_count": len(files),
-            "total_text_bytes": sum(item["size_bytes"] for item in files),
-        },
-    }
-    _log_activity_info(
-        "pipeline.ingest.complete",
-        **correlation,
-        file_count=result["ingest_stats"]["file_count"],
-        total_text_bytes=result["ingest_stats"]["total_text_bytes"],
-        snapshot_sha=result.get("snapshot_sha"),
-    )
-    return result
+    if _is_offline_payload(payload):
+        result = _ingest_offline_dataset(payload)
+        _log_activity_info(
+            "pipeline.ingest.complete",
+            **correlation,
+            records_in=result["ingest_stats"]["records_in"],
+            source_mode=result["ingest_stats"]["source_mode"],
+            mode="offline",
+        )
+        return result
+
+    _log_activity_info("pipeline.ingest.skip_unknown_payload", **correlation)
+    return {"stage": "ingest", "ok": True, "payload": payload}
 
 
 @activity.defn(name="clean_activity")
@@ -143,57 +164,69 @@ async def clean_activity(payload: dict[str, Any]) -> dict[str, Any]:
     """Clean and normalize ingested payload artifacts."""
     correlation = correlation_from_payload(payload)
     _log_activity_info("pipeline.clean.start", **correlation)
-    if not _is_runtime_payload(payload):
-        _log_activity_info("pipeline.clean.skip_non_runtime", **correlation)
-        return {"stage": "clean", "ok": True, "payload": payload}
+    if _is_runtime_payload(payload):
+        ingest_path = Path(_require_str(payload, "ingest_path"))
+        artifact_dir = Path(_require_str(payload, "artifact_dir"))
+        clean_path = artifact_dir / "clean_documents.jsonl"
 
-    ingest_path = Path(_require_str(payload, "ingest_path"))
-    artifact_dir = Path(_require_str(payload, "artifact_dir"))
-    clean_path = artifact_dir / "clean_documents.jsonl"
+        seen_paths: set[str] = set()
+        cleaned_docs: list[dict[str, Any]] = []
+        dropped_records = 0
+        for record in _read_jsonl(ingest_path):
+            path = str(record.get("path") or "").strip()
+            content = str(record.get("content") or "")
+            if not path or path in seen_paths:
+                dropped_records += 1
+                continue
+            normalized = _normalize_source_text(content)
+            if not normalized:
+                dropped_records += 1
+                continue
+            seen_paths.add(path)
+            cleaned_docs.append(
+                {
+                    "path": path,
+                    "content": normalized,
+                    "size_bytes": len(normalized.encode("utf-8")),
+                    "line_count": normalized.count("\n") + 1,
+                    "language": _infer_language(path),
+                }
+            )
 
-    seen_paths: set[str] = set()
-    cleaned_docs: list[dict[str, Any]] = []
-    dropped_records = 0
-    for record in _read_jsonl(ingest_path):
-        path = str(record.get("path") or "").strip()
-        content = str(record.get("content") or "")
-        if not path or path in seen_paths:
-            dropped_records += 1
-            continue
-        normalized = _normalize_source_text(content)
-        if not normalized:
-            dropped_records += 1
-            continue
-        seen_paths.add(path)
-        cleaned_docs.append(
-            {
-                "path": path,
-                "content": normalized,
-                "size_bytes": len(normalized.encode("utf-8")),
-                "line_count": normalized.count("\n") + 1,
-                "language": _infer_language(path),
-            }
+        _write_jsonl(clean_path, cleaned_docs)
+        result = {
+            **payload,
+            "stage": "clean",
+            "ok": True,
+            "clean_path": str(clean_path),
+            "clean_stats": {
+                "input_file_count": len(seen_paths) + dropped_records,
+                "document_count": len(cleaned_docs),
+                "dropped_records": dropped_records,
+            },
+        }
+        _log_activity_info(
+            "pipeline.clean.complete",
+            **correlation,
+            document_count=result["clean_stats"]["document_count"],
+            dropped_records=result["clean_stats"]["dropped_records"],
+            mode="runtime",
         )
+        return result
 
-    _write_jsonl(clean_path, cleaned_docs)
-    result = {
-        **payload,
-        "stage": "clean",
-        "ok": True,
-        "clean_path": str(clean_path),
-        "clean_stats": {
-            "input_file_count": len(seen_paths) + dropped_records,
-            "document_count": len(cleaned_docs),
-            "dropped_records": dropped_records,
-        },
-    }
-    _log_activity_info(
-        "pipeline.clean.complete",
-        **correlation,
-        document_count=result["clean_stats"]["document_count"],
-        dropped_records=result["clean_stats"]["dropped_records"],
-    )
-    return result
+    if _is_offline_payload(payload):
+        result = _clean_offline_dataset(payload)
+        _log_activity_info(
+            "pipeline.clean.complete",
+            **correlation,
+            records_out=result["clean_stats"]["clean_record_count"],
+            invalid_records=result["clean_stats"]["invalid_record_count"],
+            mode="offline",
+        )
+        return result
+
+    _log_activity_info("pipeline.clean.skip_unknown_payload", **correlation)
+    return {"stage": "clean", "ok": True, "payload": payload}
 
 
 @activity.defn(name="transform_activity")
@@ -201,67 +234,78 @@ async def transform_activity(payload: dict[str, Any]) -> dict[str, Any]:
     """Transform cleaned inputs into retrieval/evaluation ready structures."""
     correlation = correlation_from_payload(payload)
     _log_activity_info("pipeline.transform.start", **correlation)
-    if not _is_runtime_payload(payload):
-        _log_activity_info("pipeline.transform.skip_non_runtime", **correlation)
-        return {"stage": "transform", "ok": True, "payload": payload}
+    if _is_runtime_payload(payload):
+        repo_id = _require_str(payload, "repo_id")
+        ref = _coerce_ref(payload.get("ref"))
+        clean_path = Path(_require_str(payload, "clean_path"))
+        artifact_dir = Path(_require_str(payload, "artifact_dir"))
+        transform_path = artifact_dir / "transform_chunks.jsonl"
 
-    repo_id = _require_str(payload, "repo_id")
-    ref = _coerce_ref(payload.get("ref"))
-    clean_path = Path(_require_str(payload, "clean_path"))
-    artifact_dir = Path(_require_str(payload, "artifact_dir"))
-    transform_path = artifact_dir / "transform_chunks.jsonl"
+        chunks: list[dict[str, Any]] = []
+        chunk_digest = hashlib.sha1()
+        for doc in _read_jsonl(clean_path):
+            path = str(doc.get("path") or "")
+            content = str(doc.get("content") or "")
+            if not path or not content:
+                continue
+            for index, start, end, text in _chunk_text(
+                content=content,
+                chunk_size=_CHUNK_SIZE_CHARS,
+                overlap=_CHUNK_OVERLAP_CHARS,
+                min_chunk_size=_MIN_CHUNK_CHARS,
+            ):
+                chunk_id = hashlib.sha1(
+                    f"{repo_id}:{ref}:{path}:{index}:{start}:{end}".encode("utf-8")
+                ).hexdigest()
+                text_hash = hashlib.sha1(text.encode("utf-8")).hexdigest()
+                chunk_digest.update(text_hash.encode("utf-8"))
+                chunks.append(
+                    {
+                        "chunk_id": chunk_id,
+                        "repo_id": repo_id,
+                        "ref": ref,
+                        "path": path,
+                        "chunk_index": index,
+                        "start_char": start,
+                        "end_char": end,
+                        "text": text,
+                        "text_hash": text_hash,
+                    }
+                )
 
-    chunks: list[dict[str, Any]] = []
-    chunk_digest = hashlib.sha1()
-    for doc in _read_jsonl(clean_path):
-        path = str(doc.get("path") or "")
-        content = str(doc.get("content") or "")
-        if not path or not content:
-            continue
-        for index, start, end, text in _chunk_text(
-            content=content,
-            chunk_size=_CHUNK_SIZE_CHARS,
-            overlap=_CHUNK_OVERLAP_CHARS,
-            min_chunk_size=_MIN_CHUNK_CHARS,
-        ):
-            chunk_id = hashlib.sha1(
-                f"{repo_id}:{ref}:{path}:{index}:{start}:{end}".encode("utf-8")
-            ).hexdigest()
-            text_hash = hashlib.sha1(text.encode("utf-8")).hexdigest()
-            chunk_digest.update(text_hash.encode("utf-8"))
-            chunks.append(
-                {
-                    "chunk_id": chunk_id,
-                    "repo_id": repo_id,
-                    "ref": ref,
-                    "path": path,
-                    "chunk_index": index,
-                    "start_char": start,
-                    "end_char": end,
-                    "text": text,
-                    "text_hash": text_hash,
-                }
-            )
+        _write_jsonl(transform_path, chunks)
+        result = {
+            **payload,
+            "stage": "transform",
+            "ok": True,
+            "transform_path": str(transform_path),
+            "transform_stats": {
+                "chunk_count": len(chunks),
+                "chunk_chars_total": sum(len(chunk["text"]) for chunk in chunks),
+                "corpus_hash": chunk_digest.hexdigest(),
+            },
+        }
+        _log_activity_info(
+            "pipeline.transform.complete",
+            **correlation,
+            chunk_count=result["transform_stats"]["chunk_count"],
+            chunk_chars_total=result["transform_stats"]["chunk_chars_total"],
+            mode="runtime",
+        )
+        return result
 
-    _write_jsonl(transform_path, chunks)
-    result = {
-        **payload,
-        "stage": "transform",
-        "ok": True,
-        "transform_path": str(transform_path),
-        "transform_stats": {
-            "chunk_count": len(chunks),
-            "chunk_chars_total": sum(len(chunk["text"]) for chunk in chunks),
-            "corpus_hash": chunk_digest.hexdigest(),
-        },
-    }
-    _log_activity_info(
-        "pipeline.transform.complete",
-        **correlation,
-        chunk_count=result["transform_stats"]["chunk_count"],
-        chunk_chars_total=result["transform_stats"]["chunk_chars_total"],
-    )
-    return result
+    if _is_offline_payload(payload):
+        result = _transform_offline_dataset(payload)
+        _log_activity_info(
+            "pipeline.transform.complete",
+            **correlation,
+            dataset_instance_count=result["transform_stats"]["dataset_instance_count"],
+            mode="offline",
+        )
+        return result
+
+    _log_activity_info("pipeline.transform.skip_unknown_payload", **correlation)
+    return {"stage": "transform", "ok": True, "payload": payload}
 
 
 @activity.defn(name="store_activity")
@@ -269,62 +313,77 @@ async def store_activity(payload: dict[str, Any]) -> dict[str, Any]:
     """Persist transformed artifacts to configured storage backends."""
     correlation = correlation_from_payload(payload)
     _log_activity_info("pipeline.store.start", **correlation)
-    if not _is_runtime_payload(payload):
-        _log_activity_info("pipeline.store.skip_non_runtime", **correlation)
-        return {"stage": "store", "ok": True, "payload": payload}
+    if _is_runtime_payload(payload):
+        artifact_dir = Path(_require_str(payload, "artifact_dir"))
+        transform_path = Path(_require_str(payload, "transform_path"))
+        repo_id = _require_str(payload, "repo_id")
+        ref = _coerce_ref(payload.get("ref"))
+        job_id = _require_str(payload, "job_id")
+        workflow_id = _require_str(payload, "workflow_id")
 
-    artifact_dir = Path(_require_str(payload, "artifact_dir"))
-    transform_path = Path(_require_str(payload, "transform_path"))
-    repo_id = _require_str(payload, "repo_id")
-    ref = _coerce_ref(payload.get("ref"))
-    job_id = _require_str(payload, "job_id")
-    workflow_id = _require_str(payload, "workflow_id")
+        snapshot_sha = _resolve_snapshot_sha(
+            payload.get("snapshot_sha"),
+            corpus_hash=(payload.get("transform_stats") or {}).get("corpus_hash"),
+        )
+        manifest_path = artifact_dir / "manifest.json"
+        manifest = {
+            "repo_id": repo_id,
+            "ref": ref,
+            "job_id": job_id,
+            "workflow_id": workflow_id,
+            "snapshot_sha": snapshot_sha,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "ingest_stats": payload.get("ingest_stats"),
+            "clean_stats": payload.get("clean_stats"),
+            "transform_stats": payload.get("transform_stats"),
+            "transform_path": str(transform_path),
+        }
+        manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
 
-    snapshot_sha = _resolve_snapshot_sha(
-        payload.get("snapshot_sha"),
-        corpus_hash=(payload.get("transform_stats") or {}).get("corpus_hash"),
-    )
-    manifest_path = artifact_dir / "manifest.json"
-    manifest = {
-        "repo_id": repo_id,
-        "ref": ref,
-        "job_id": job_id,
-        "workflow_id": workflow_id,
-        "snapshot_sha": snapshot_sha,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "ingest_stats": payload.get("ingest_stats"),
-        "clean_stats": payload.get("clean_stats"),
-        "transform_stats": payload.get("transform_stats"),
-        "transform_path": str(transform_path),
-    }
-    manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+        s3_key_prefix = _maybe_store_runtime_artifacts_to_s3(
+            manifest_path=manifest_path,
+            chunks_path=transform_path,
+            repo_id=repo_id,
+            ref=ref,
+            job_id=job_id,
+        )
 
-    s3_key_prefix = _maybe_store_runtime_artifacts_to_s3(
-        manifest_path=manifest_path,
-        chunks_path=transform_path,
-        repo_id=repo_id,
-        ref=ref,
-        job_id=job_id,
-    )
+        result = {
+            **payload,
+            "stage": "store",
+            "ok": True,
+            "snapshot_sha": snapshot_sha,
+            "artifact_manifest_path": str(manifest_path),
+            "artifact_chunks_path": str(transform_path),
+            "store_stats": {
+                "s3_key_prefix": s3_key_prefix,
+            },
+        }
+        _log_activity_info(
+            "pipeline.store.complete",
+            **correlation,
+            snapshot_sha=result.get("snapshot_sha"),
+            s3_key_prefix=result["store_stats"]["s3_key_prefix"],
+            mode="runtime",
+        )
+        return result
 
-    result = {
-        **payload,
-        "stage": "store",
-        "ok": True,
-        "snapshot_sha": snapshot_sha,
-        "artifact_manifest_path": str(manifest_path),
-        "artifact_chunks_path": str(transform_path),
-        "store_stats": {
-            "s3_key_prefix": s3_key_prefix,
-        },
-    }
-    _log_activity_info(
-        "pipeline.store.complete",
-        **correlation,
-        snapshot_sha=result.get("snapshot_sha"),
-        s3_key_prefix=result["store_stats"]["s3_key_prefix"],
-    )
-    return result
+    if _is_offline_payload(payload):
+        result = _store_offline_dataset(payload)
+        _log_activity_info(
+            "pipeline.store.complete",
+            **correlation,
+            dataset_name=result.get("dataset_name"),
+            records_out=(result.get("transform_stats") or {}).get(
+                "dataset_instance_count"
+            ),
+            s3_key_prefix=result["store_stats"]["s3_key_prefix"],
+            mode="offline",
+        )
+        return result
+
+    _log_activity_info("pipeline.store.skip_unknown_payload", **correlation)
+    return {"stage": "store", "ok": True, "payload": payload}
 
 
 @activity.defn(name="mental_model_activity")
@@ -458,6 +517,12 @@ def _is_runtime_payload(payload: dict[str, Any]) -> bool:
     return isinstance(repo_id, str) and isinstance(repo_url, str)
 
 
+def _is_offline_payload(payload: dict[str, Any]) -> bool:
+    """Return true when payload corresponds to offline dataset processing."""
+    dataset_name = payload.get("dataset_name")
+    return isinstance(dataset_name, str) and bool(dataset_name.strip())
+
+
 def _coerce_ref(value: Any) -> str:
     """Normalize git ref value to a non-empty string."""
     if not isinstance(value, str):
@@ -475,10 +540,481 @@ def _runtime_artifact_dir(payload: dict[str, Any]) -> Path:
     return artifact_dir
 
 
+def _offline_artifact_dir(payload: dict[str, Any], *, dataset_key: str) -> Path:
+    """Build offline dataset artifact directory for this workflow run."""
+    job_id = _require_str(payload, "job_id")
+    base_dir = (
+        Path(__file__).resolve().parents[1]
+        / ".artifacts"
+        / "offline_datasets"
+        / _sanitize_identifier(dataset_key)
+    )
+    artifact_dir = base_dir / _sanitize_identifier(job_id)
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    return artifact_dir
+
+
+def _ingest_offline_dataset(payload: dict[str, Any]) -> dict[str, Any]:
+    """Load a benchmark dataset source and write canonical ingest artifacts."""
+    dataset_name, dataset_key = _validate_offline_dataset_name(payload)
+    dataset_version = _coerce_optional_str(payload.get("dataset_version"))
+    artifact_dir = _offline_artifact_dir(payload, dataset_key=dataset_key)
+    ingest_path = artifact_dir / "offline_ingest_records.jsonl"
+
+    source_records = _load_offline_source_records(payload)
+    ingest_records: list[dict[str, Any]] = []
+    for idx, source_row in enumerate(source_records):
+        ingest_records.append(
+            {
+                "record_id": _offline_record_id(
+                    source_row,
+                    index=idx,
+                    dataset_name=dataset_name,
+                    dataset_version=dataset_version,
+                ),
+                "dataset_name": dataset_name,
+                "dataset_version": dataset_version,
+                "raw": source_row,
+            }
+        )
+
+    _write_jsonl(ingest_path, ingest_records)
+    return {
+        **payload,
+        "stage": "ingest",
+        "ok": True,
+        "dataset_name": dataset_name,
+        "dataset_version": dataset_version,
+        "artifact_dir": str(artifact_dir),
+        "ingest_path": str(ingest_path),
+        "ingest_stats": {
+            "records_in": len(ingest_records),
+            "source_mode": _offline_source_mode(payload),
+        },
+    }
+
+
+def _clean_offline_dataset(payload: dict[str, Any]) -> dict[str, Any]:
+    """Normalize offline benchmark rows and quarantine invalid entries."""
+    _validate_offline_dataset_name(payload)
+    artifact_dir = Path(_require_str(payload, "artifact_dir"))
+    ingest_path = Path(_require_str(payload, "ingest_path"))
+    clean_path = artifact_dir / "offline_clean_records.jsonl"
+    quarantine_path = artifact_dir / "offline_quarantine_records.jsonl"
+
+    dataset_name = _require_str(payload, "dataset_name")
+    dataset_version = _coerce_optional_str(payload.get("dataset_version"))
+    clean_rows: list[dict[str, Any]] = []
+    invalid_rows: list[dict[str, Any]] = []
+    seen_instance_ids: set[str] = set()
+    for row_index, ingest_row in enumerate(_read_jsonl(ingest_path)):
+        raw_record = ingest_row.get("raw")
+        if not isinstance(raw_record, dict):
+            invalid_rows.append(
+                {
+                    "row_index": row_index,
+                    "record_id": ingest_row.get("record_id"),
+                    "reason": "raw_record_not_object",
+                }
+            )
+            continue
+
+        normalized = _normalize_offline_dataset_row(
+            raw_record=raw_record,
+            fallback_record_id=_coerce_optional_str(ingest_row.get("record_id"))
+            or f"record-{row_index}",
+            dataset_name=dataset_name,
+            dataset_version=dataset_version,
+        )
+        if normalized is None:
+            invalid_rows.append(
+                {
+                    "row_index": row_index,
+                    "record_id": ingest_row.get("record_id"),
+                    "reason": "missing_required_fields",
+                }
+            )
+            continue
+
+        instance_id = normalized["instance_id"]
+        if instance_id in seen_instance_ids:
+            invalid_rows.append(
+                {
+                    "row_index": row_index,
+                    "record_id": ingest_row.get("record_id"),
+                    "reason": "duplicate_instance_id",
+                    "instance_id": instance_id,
+                }
+            )
+            continue
+        seen_instance_ids.add(instance_id)
+        clean_rows.append(normalized)
+
+    _write_jsonl(clean_path, clean_rows)
+
+    quarantine_path_value: str | None = None
+    if invalid_rows:
+        _write_jsonl(quarantine_path, invalid_rows)
+        quarantine_path_value = str(quarantine_path)
+    elif quarantine_path.exists():
+        quarantine_path.unlink()
+
+    return {
+        **payload,
+        "stage": "clean",
+        "ok": True,
+        "clean_path": str(clean_path),
+        "quarantine_path": quarantine_path_value,
+        "clean_stats": {
+            "input_record_count": len(clean_rows) + len(invalid_rows),
+            "clean_record_count": len(clean_rows),
+            "invalid_record_count": len(invalid_rows),
+        },
+    }
+
+
+def _transform_offline_dataset(payload: dict[str, Any]) -> dict[str, Any]:
+    """Transform normalized offline rows into canonical dataset instances."""
+    _validate_offline_dataset_name(payload)
+    artifact_dir = Path(_require_str(payload, "artifact_dir"))
+    clean_path = Path(_require_str(payload, "clean_path"))
+    transform_path = artifact_dir / "offline_dataset_instances.jsonl"
+
+    dataset_instances: list[dict[str, Any]] = []
+    dataset_digest = hashlib.sha1()
+    created_at = datetime.now(timezone.utc).isoformat()
+    for row in _read_jsonl(clean_path):
+        instance = {
+            "instance_id": _require_mapping_str(row, "instance_id"),
+            "task": _require_mapping_str(row, "task"),
+            "repo_id": _require_mapping_str(row, "repo_id"),
+            "snapshot_sha": _coerce_optional_str(row.get("snapshot_sha")),
+            "failure_type": _coerce_optional_str(row.get("failure_type"))
+            or "test_failure",
+            "failure_ref": _coerce_optional_str(row.get("failure_ref")),
+            "corrected_diff_ref": _require_mapping_str(row, "corrected_diff_ref"),
+            "split": _coerce_optional_str(row.get("split")) or "unspecified",
+            "dataset_name": _require_mapping_str(row, "dataset_name"),
+            "dataset_version": _coerce_optional_str(row.get("dataset_version")),
+            "created_at": created_at,
+        }
+        dataset_instances.append(instance)
+        dataset_digest.update(
+            f"{instance['instance_id']}|{instance['repo_id']}|"
+            f"{instance['corrected_diff_ref']}".encode("utf-8")
+        )
+
+    _write_jsonl(transform_path, dataset_instances)
+    return {
+        **payload,
+        "stage": "transform",
+        "ok": True,
+        "transform_path": str(transform_path),
+        "transform_stats": {
+            "dataset_instance_count": len(dataset_instances),
+            "records_out": len(dataset_instances),
+            "dataset_hash": dataset_digest.hexdigest(),
+        },
+    }
+
+
+def _store_offline_dataset(payload: dict[str, Any]) -> dict[str, Any]:
+    """Persist offline benchmark artifacts and write a run manifest."""
+    _validate_offline_dataset_name(payload)
+    artifact_dir = Path(_require_str(payload, "artifact_dir"))
+    ingest_path = Path(_require_str(payload, "ingest_path"))
+    clean_path = Path(_require_str(payload, "clean_path"))
+    transform_path = Path(_require_str(payload, "transform_path"))
+    dataset_name = _require_str(payload, "dataset_name")
+    dataset_version = _coerce_optional_str(payload.get("dataset_version"))
+    job_id = _require_str(payload, "job_id")
+    workflow_id = _require_str(payload, "workflow_id")
+
+    manifest_path = artifact_dir / "offline_manifest.json"
+    manifest = {
+        "dataset_name": dataset_name,
+        "dataset_version": dataset_version,
+        "workflow_id": workflow_id,
+        "job_id": job_id,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "ingest_stats": payload.get("ingest_stats"),
+        "clean_stats": payload.get("clean_stats"),
+        "transform_stats": payload.get("transform_stats"),
+        "ingest_path": str(ingest_path),
+        "clean_path": str(clean_path),
+        "transform_path": str(transform_path),
+        "quarantine_path": _coerce_optional_str(payload.get("quarantine_path")),
+    }
+    manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+
+    artifacts: dict[str, bytes] = {
+        "manifest.json": manifest_path.read_bytes(),
+        "ingest.jsonl": ingest_path.read_bytes(),
+        "clean.jsonl": clean_path.read_bytes(),
+        "dataset_instances.jsonl": transform_path.read_bytes(),
+    }
+    quarantine_path_value = _coerce_optional_str(payload.get("quarantine_path"))
+    if quarantine_path_value:
+        quarantine_path = Path(quarantine_path_value)
+        if quarantine_path.exists():
+            artifacts["quarantine.jsonl"] = quarantine_path.read_bytes()
+
+    s3_key_prefix = _maybe_store_offline_artifacts_to_s3(
+        dataset_name=dataset_name,
+        dataset_version=dataset_version,
+        job_id=job_id,
+        artifacts=artifacts,
+    )
+
+    return {
+        **payload,
+        "stage": "store",
+        "ok": True,
+        "artifact_manifest_path": str(manifest_path),
+        "artifact_dataset_instances_path": str(transform_path),
+        "store_stats": {
+            "s3_key_prefix": s3_key_prefix,
+        },
+    }
+
+
 def _sanitize_identifier(value: str) -> str:
     """Produce a filesystem-safe identifier segment."""
     cleaned = re.sub(r"[^A-Za-z0-9._-]+", "_", value.strip())
     return cleaned or "unknown"
+
+
+def _normalize_offline_dataset_name(dataset_name: str) -> str:
+    """Normalize offline dataset names for compatibility checks."""
+    return re.sub(r"[-_]+", "", dataset_name.strip().lower())
+
+
+def _validate_offline_dataset_name(payload: dict[str, Any]) -> tuple[str, str]:
+    """Validate and normalize supported offline benchmark dataset names."""
+    dataset_name = _require_str(payload, "dataset_name")
+    dataset_key = _normalize_offline_dataset_name(dataset_name)
+    if dataset_key not in _OFFLINE_SUPPORTED_DATASET_KEYS:
+        supported = ", ".join(sorted(_OFFLINE_SUPPORTED_DATASETS))
+        raise ValueError(
+            f"dataset_name '{dataset_name}' is unsupported; expected one of: {supported}"
+        )
+    return dataset_name, dataset_key
+
+
+def _coerce_optional_str(value: Any) -> str | None:
+    """Coerce optional input values into trimmed strings."""
+    if isinstance(value, str):
+        normalized = value.strip()
+        return normalized or None
+    if isinstance(value, (int, float, bool)):
+        normalized = str(value).strip()
+        return normalized or None
+    return None
+
+
+def _coerce_text(value: Any) -> str | None:
+    """Coerce scalar/collection values into canonical text fields."""
+    if isinstance(value, str):
+        normalized = value.strip()
+        return normalized or None
+    if isinstance(value, (list, dict)):
+        encoded = json.dumps(value, ensure_ascii=True, sort_keys=True).strip()
+        return encoded or None
+    return _coerce_optional_str(value)
+
+
+def _require_mapping_str(mapping: dict[str, Any], key: str) -> str:
+    """Read and validate a required non-empty string field from one mapping."""
+    value = _coerce_optional_str(mapping.get(key))
+    if value is None:
+        raise ValueError(f"mapping field '{key}' is required")
+    return value
+
+
+def _offline_source_mode(payload: dict[str, Any]) -> str:
+    """Resolve descriptive source mode string for offline ingest metadata."""
+    if isinstance(payload.get("dataset_records"), list):
+        return "inline_records"
+    if isinstance(payload.get("dataset_source_path"), str):
+        return "file_path"
+    return "unknown"
+
+
+def _load_offline_source_records(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """Load offline source records from payload inline rows or local files."""
+    inline_records = payload.get("dataset_records")
+    if isinstance(inline_records, list):
+        records = []
+        for index, row in enumerate(inline_records):
+            if not isinstance(row, dict):
+                raise ValueError(
+                    f"dataset_records[{index}] must be an object-like mapping"
+                )
+            records.append(row)
+        if not records:
+            raise ValueError("dataset_records cannot be empty")
+        return records
+
+    source_path_value = _coerce_optional_str(payload.get("dataset_source_path"))
+    if source_path_value is None:
+        raise ValueError(
+            "offline ingest requires either 'dataset_records' or 'dataset_source_path'"
+        )
+    source_path = Path(source_path_value).expanduser()
+    if not source_path.exists():
+        raise ValueError(f"dataset_source_path does not exist: {source_path}")
+
+    if source_path.is_dir():
+        source_path = _resolve_offline_source_file(source_path)
+    suffix = source_path.suffix.lower()
+    if suffix == ".jsonl":
+        return list(_read_jsonl(source_path))
+    if suffix == ".json":
+        parsed = json.loads(source_path.read_text(encoding="utf-8"))
+        return _extract_offline_json_records(parsed)
+    raise ValueError(
+        "dataset_source_path must point to a .jsonl or .json file "
+        f"(received: {source_path})"
+    )
+
+
+def _resolve_offline_source_file(source_dir: Path) -> Path:
+    """Resolve a canonical benchmark source file inside one directory."""
+    candidates = (
+        "instances.jsonl",
+        "dataset_instances.jsonl",
+        "swebench.jsonl",
+        "records.jsonl",
+        "instances.json",
+        "dataset_instances.json",
+        "swebench.json",
+        "records.json",
+    )
+    for candidate in candidates:
+        path = source_dir / candidate
+        if path.exists() and path.is_file():
+            return path
+    raise ValueError(
+        "dataset_source_path directory does not contain a supported source file; "
+        f"looked for: {', '.join(candidates)}"
+    )
+
+
+def _extract_offline_json_records(parsed: Any) -> list[dict[str, Any]]:
+    """Extract list-of-mapping records from common JSON envelope shapes."""
+    if isinstance(parsed, list):
+        return _ensure_record_mappings(parsed, context="json list")
+    if isinstance(parsed, dict):
+        for key in ("instances", "records", "data"):
+            value = parsed.get(key)
+            if isinstance(value, list):
+                return _ensure_record_mappings(value, context=f"json key '{key}'")
+    raise ValueError(
+        "JSON source must be a list of records or object with one of: "
+        "'instances', 'records', 'data'"
+    )
+
+
+def _ensure_record_mappings(records: list[Any], *, context: str) -> list[dict[str, Any]]:
+    """Validate that parsed record collections only contain mapping rows."""
+    validated: list[dict[str, Any]] = []
+    for index, row in enumerate(records):
+        if not isinstance(row, dict):
+            raise ValueError(f"{context}[{index}] must be an object-like mapping")
+        validated.append(row)
+    if not validated:
+        raise ValueError(f"{context} cannot be empty")
+    return validated
+
+
+def _offline_record_id(
+    source_row: dict[str, Any],
+    *,
+    index: int,
+    dataset_name: str,
+    dataset_version: str | None,
+) -> str:
+    """Build deterministic ingest-level record IDs for offline rows."""
+    explicit = (
+        _coerce_optional_str(source_row.get("instance_id"))
+        or _coerce_optional_str(source_row.get("id"))
+        or _coerce_optional_str(source_row.get("task_id"))
+    )
+    if explicit:
+        return explicit
+    seed = (
+        f"{dataset_name}|{dataset_version or 'latest'}|{index}|"
+        f"{json.dumps(source_row, ensure_ascii=True, sort_keys=True)}"
+    )
+    return hashlib.sha1(seed.encode("utf-8")).hexdigest()[:20]
+
+
+def _normalize_offline_dataset_row(
+    *,
+    raw_record: dict[str, Any],
+    fallback_record_id: str,
+    dataset_name: str,
+    dataset_version: str | None,
+) -> dict[str, Any] | None:
+    """Normalize one raw offline record into canonical benchmark fields."""
+    task = (
+        _coerce_text(raw_record.get("task"))
+        or _coerce_text(raw_record.get("problem_statement"))
+        or _coerce_text(raw_record.get("issue_text"))
+        or _coerce_text(raw_record.get("prompt"))
+    )
+    repo_id = (
+        _coerce_optional_str(raw_record.get("repo_id"))
+        or _coerce_optional_str(raw_record.get("repo"))
+        or _coerce_optional_str(raw_record.get("repository"))
+    )
+    corrected_diff_ref = (
+        _coerce_text(raw_record.get("corrected_diff_ref"))
+        or _coerce_text(raw_record.get("gold_patch"))
+        or _coerce_text(raw_record.get("patch"))
+        or _coerce_text(raw_record.get("fix_patch"))
+    )
+    if task is None or repo_id is None or corrected_diff_ref is None:
+        return None
+
+    snapshot_sha = (
+        _coerce_optional_str(raw_record.get("snapshot_sha"))
+        or _coerce_optional_str(raw_record.get("base_commit"))
+        or _coerce_optional_str(raw_record.get("commit_sha"))
+    )
+    failure_type = _coerce_optional_str(raw_record.get("failure_type")) or "test_failure"
+    failure_ref = (
+        _coerce_text(raw_record.get("failure_ref"))
+        or _coerce_text(raw_record.get("test_patch"))
+        or _coerce_text(raw_record.get("fail_to_pass"))
+        or _coerce_text(raw_record.get("FAIL_TO_PASS"))
+    )
+    split = (
+        _coerce_optional_str(raw_record.get("split"))
+        or _coerce_optional_str(raw_record.get("subset"))
+        or "unspecified"
+    )
+    instance_id = (
+        _coerce_optional_str(raw_record.get("instance_id"))
+        or _coerce_optional_str(raw_record.get("id"))
+        or fallback_record_id
+    )
+    if not instance_id:
+        instance_seed = f"{repo_id}|{task}|{snapshot_sha or ''}|{corrected_diff_ref}"
+        instance_id = hashlib.sha1(instance_seed.encode("utf-8")).hexdigest()[:20]
+
+    return {
+        "instance_id": instance_id,
+        "task": task,
+        "repo_id": repo_id,
+        "snapshot_sha": snapshot_sha,
+        "failure_type": failure_type,
+        "failure_ref": failure_ref,
+        "corrected_diff_ref": corrected_diff_ref,
+        "split": split,
+        "dataset_name": dataset_name,
+        "dataset_version": dataset_version,
+    }
 
 
 def _load_repo_files(
@@ -780,6 +1316,30 @@ def _maybe_store_runtime_artifacts_to_s3(
             job_id=job_id,
             manifest_bytes=manifest_path.read_bytes(),
             chunks_bytes=chunks_path.read_bytes(),
+        )
+    except Exception:
+        return None
+
+
+def _maybe_store_offline_artifacts_to_s3(
+    *,
+    dataset_name: str,
+    dataset_version: str | None,
+    job_id: str,
+    artifacts: dict[str, bytes],
+) -> str | None:
+    """Optionally upload offline benchmark artifacts to S3 when configured."""
+    bucket = settings.s3_bucket
+    if not bucket:
+        return None
+
+    try:
+        return _S3_CONNECTOR.upload_offline_benchmark_artifacts(
+            bucket=bucket,
+            dataset_name=dataset_name,
+            dataset_version=dataset_version,
+            job_id=job_id,
+            artifacts=artifacts,
         )
     except Exception:
         return None

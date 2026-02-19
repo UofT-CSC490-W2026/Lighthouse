@@ -298,9 +298,11 @@ class OfflineDatasetWorkflow:
             workflow_id=workflow_info.workflow_id,
             job_id=workflow_info.run_id,
         )
-        payload = {
+        stage_payload: dict[str, object] = {
             "dataset_name": params.dataset_name,
             "dataset_version": params.dataset_version,
+            "workflow_id": workflow_info.workflow_id,
+            "job_id": workflow_info.run_id,
         }
         _log_workflow_info(
             "pipeline.offline.start",
@@ -309,27 +311,27 @@ class OfflineDatasetWorkflow:
             dataset_version=params.dataset_version,
         )
         try:
-            await workflow.execute_activity(
+            stage_payload = await workflow.execute_activity(
                 ingest_activity,
-                payload,
+                stage_payload,
                 start_to_close_timeout=timedelta(minutes=30),
                 retry_policy=_OFFLINE_RETRY_POLICY,
             )
-            await workflow.execute_activity(
+            stage_payload = await workflow.execute_activity(
                 clean_activity,
-                payload,
+                stage_payload,
                 start_to_close_timeout=timedelta(minutes=20),
                 retry_policy=_OFFLINE_RETRY_POLICY,
             )
-            await workflow.execute_activity(
+            stage_payload = await workflow.execute_activity(
                 transform_activity,
-                payload,
+                stage_payload,
                 start_to_close_timeout=timedelta(minutes=30),
                 retry_policy=_OFFLINE_RETRY_POLICY,
             )
-            await workflow.execute_activity(
+            stage_payload = await workflow.execute_activity(
                 store_activity,
-                payload,
+                stage_payload,
                 start_to_close_timeout=timedelta(minutes=20),
                 retry_policy=_OFFLINE_RETRY_POLICY,
             )
@@ -360,6 +362,9 @@ class OfflineDatasetWorkflow:
             **correlation,
             status=IndexStatus.READY.value,
             dataset_name=params.dataset_name,
+            records_out=(stage_payload.get("transform_stats") or {}).get(
+                "dataset_instance_count"
+            ),
         )
         return {"status": IndexStatus.READY.value}
 
@@ -381,6 +386,8 @@ class MentalModelWorkflow:
             "repo_id": params.repo_id,
             "from_sha": params.from_sha,
             "to_sha": params.to_sha,
+            "workflow_id": workflow_info.workflow_id,
+            "job_id": workflow_info.run_id,
         }
         _log_workflow_info(
             "pipeline.mental_model.start",

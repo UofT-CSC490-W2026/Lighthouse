@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from typing import Mapping
 
 import boto3
 
@@ -44,6 +45,37 @@ class S3Connector:
         """Validate S3 bucket reachability and permissions."""
         client = boto3.client("s3", region_name=self.region_name)
         client.head_bucket(Bucket=bucket)
+
+    def upload_offline_benchmark_artifacts(
+        self,
+        *,
+        bucket: str,
+        dataset_name: str,
+        dataset_version: str | None,
+        job_id: str,
+        artifacts: Mapping[str, bytes],
+    ) -> str:
+        """Upload offline benchmark artifacts and return stored S3 prefix."""
+        client = boto3.client("s3", region_name=self.region_name)
+        version_key = self._sanitize_identifier(dataset_version or "latest")
+        prefix = (
+            "offline-datasets/benchmark/"
+            f"{self._sanitize_identifier(dataset_name)}/"
+            f"{version_key}/"
+            f"{self._sanitize_identifier(job_id)}"
+        )
+        for filename, data in artifacts.items():
+            if filename.endswith(".jsonl"):
+                content_type = "application/x-ndjson"
+            else:
+                content_type = "application/json"
+            client.put_object(
+                Bucket=bucket,
+                Key=f"{prefix}/{filename}",
+                Body=data,
+                ContentType=content_type,
+            )
+        return prefix
 
     @staticmethod
     def _runtime_prefix(*, repo_id: str, ref: str, job_id: str) -> str:
