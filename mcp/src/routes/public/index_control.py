@@ -1,7 +1,10 @@
 """Public index-control endpoints used by MCP callers and operators."""
 
-from fastapi import APIRouter, Body, Query, status
+from typing import TypeVar
 
+from fastapi import APIRouter, Body, Query, Request, status
+
+from ...auth import extract_request_auth
 from ...errors import (
     BackendUnavailableError,
     RequestValidationAppError,
@@ -20,6 +23,21 @@ from ...types import (
 
 router = APIRouter(prefix="/v1/index", tags=["index-control"])
 
+TIndexRequest = TypeVar("TIndexRequest", StartIndexJobRequest, RetryIndexJobRequest)
+
+
+def _attach_request_github_token(
+    request_model: TIndexRequest,
+    http_request: Request,
+) -> TIndexRequest:
+    """Attach optional request-scoped GitHub token when header is present."""
+    auth = extract_request_auth(http_request)
+    if not auth.github_token:
+        return request_model
+    if getattr(request_model, "github_token", None):
+        return request_model
+    return request_model.model_copy(update={"github_token": auth.github_token})
+
 
 @router.post(
     "/jobs",
@@ -28,11 +46,13 @@ router = APIRouter(prefix="/v1/index", tags=["index-control"])
     summary="Start runtime index job",
 )
 async def start_index_job(
+    http_request: Request,
     request: StartIndexJobRequest,
 ) -> StartIndexJobResponse:
     """Start a runtime index workflow for a repository/ref target."""
     try:
-        return await index_control_service.start_job(request)
+        start_request = _attach_request_github_token(request, http_request)
+        return await index_control_service.start_job(start_request)
     except ValueError as exc:
         raise RequestValidationAppError(str(exc)) from exc
     except RuntimeError as exc:
@@ -83,16 +103,18 @@ async def get_repo_index_state(
     summary="Force retry runtime indexing for a repository/ref",
 )
 async def retry_repo_index(
+    http_request: Request,
     repo_id: str,
     ref: str = Query(default="main"),
     request: RetryIndexJobRequest = Body(default_factory=RetryIndexJobRequest),
 ) -> StartIndexJobResponse:
     """Force-start a retry run for runtime indexing."""
     try:
+        retry_request = _attach_request_github_token(request, http_request)
         return await index_control_service.retry_job(
             repo_id=repo_id,
             ref=ref,
-            request=request,
+            request=retry_request,
         )
     except ValueError as exc:
         raise RequestValidationAppError(str(exc)) from exc

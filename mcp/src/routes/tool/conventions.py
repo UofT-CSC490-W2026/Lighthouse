@@ -1,6 +1,6 @@
 """Tool endpoint for repository convention lookups."""
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 
 from ...services import convention_service
 from ...types import (
@@ -8,7 +8,7 @@ from ...types import (
     GetConventionsResponse,
     ToolResponseEnvelope,
 )
-from .common import build_tool_envelope, gate_tool_request
+from .common import build_tool_envelope, gate_tool_request, resolve_request_github_token
 
 router = APIRouter()
 
@@ -19,6 +19,7 @@ router = APIRouter()
     summary="Stub tool: get repository conventions",
 )
 async def get_conventions(
+    http_request: Request,
     tool_request: GetConventionsRequest,
 ) -> ToolResponseEnvelope[GetConventionsResponse]:
     """Return convention entries for the requested category/scope."""
@@ -26,6 +27,7 @@ async def get_conventions(
         repo_id=tool_request.repo_id,
         ref=tool_request.ref,
         tool_name="get_conventions",
+        github_token=resolve_request_github_token(http_request),
     )
     if not gate.allow_execute:
         return build_tool_envelope(

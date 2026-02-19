@@ -6,6 +6,9 @@ from dataclasses import dataclass
 from typing import TypeVar
 from urllib.parse import quote
 
+from fastapi import Request
+
+from ...auth import extract_request_auth
 from ...errors import (
     BackendUnavailableError,
     RequestValidationAppError,
@@ -49,12 +52,18 @@ def build_tool_envelope(
     )
 
 
+def resolve_request_github_token(http_request: Request) -> str | None:
+    """Extract optional request-scoped GitHub token for workflow start propagation."""
+    return extract_request_auth(http_request).github_token
+
+
 async def gate_tool_request(
     *,
     repo_id: str,
     ref: str,
     tool_name: str,
     auto_start_on_missing: bool = True,
+    github_token: str | None = None,
 ) -> ToolGateDecision:
     """Gate a tool request by current index state and optional auto-start policy."""
     try:
@@ -106,6 +115,7 @@ async def gate_tool_request(
                     ref=ref,
                     trigger="mcp_auto",
                     requested_by=tool_name,
+                    github_token=github_token,
                     force_reindex=False,
                 )
             )

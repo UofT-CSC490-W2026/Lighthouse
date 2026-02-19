@@ -56,6 +56,7 @@ class StartIndexJobRequest(BaseModel):
     ref: str = "main"
     trigger: str
     requested_by: str
+    github_token: str | None = None
     force_reindex: bool = False
 
 

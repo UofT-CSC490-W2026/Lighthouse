@@ -106,6 +106,7 @@ class RuntimeIndexParams:
     repo_id: str
     repo_url: str
     ref: str = "main"
+    github_token: str | None = None
     force_reindex: bool = False
 
 
@@ -177,6 +178,7 @@ class RuntimeIndexWorkflow:
             "repo_id": params.repo_id,
             "repo_url": params.repo_url,
             "ref": params.ref,
+            "github_token": params.github_token,
             "force_reindex": params.force_reindex,
             "workflow_id": current_workflow_id,
             "canonical_workflow_id": canonical_workflow_id,

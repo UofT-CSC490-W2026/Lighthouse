@@ -188,4 +188,46 @@ def test_not_found_state_auto_starts_job_and_returns_pending() -> None:
     assert start_request.ref == "main"
     assert start_request.trigger == "mcp_auto"
     assert start_request.requested_by == "get_context_for_change"
+    assert start_request.github_token is None
     assert start_request.force_reindex is False
+
+
+def test_not_found_state_forwards_header_token_to_start_job() -> None:
+    """NOT_FOUND auto-start should forward request-scoped GitHub token."""
+    with (
+        TestClient(app) as client,
+        patch(
+            "src.routes.tool.common.index_control_service.get_repo_state",
+            new=AsyncMock(return_value=_repo_state(IndexStatus.NOT_FOUND)),
+        ),
+        patch(
+            "src.routes.tool.common.index_control_service.start_job",
+            new=AsyncMock(
+                return_value=StartIndexJobResponse(
+                    job_id="job_auto_token_001",
+                    workflow_id="runtime-index:octo-org/octo-repo:main",
+                    status=IndexStatus.PENDING,
+                )
+            ),
+        ) as mock_start_job,
+        patch(
+            "src.routes.tool.context.context_service.get_context_for_change",
+            new=AsyncMock(return_value=GetContextForChangeResponse(items=[])),
+        ) as mock_context,
+    ):
+        response = client.post(
+            "/tools/get_context_for_change",
+            json=_payload(),
+            headers={"Authorization": "Bearer ghs_header_token"},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["index"]["status"] == "PENDING"
+    assert body["index"]["job_id"] == "job_auto_token_001"
+    assert body["result"] is None
+    mock_context.assert_not_awaited()
+    mock_start_job.assert_awaited_once()
+
+    start_request = mock_start_job.await_args.args[0]
+    assert start_request.github_token == "ghs_header_token"

@@ -803,12 +803,20 @@ def test_store_activity_happy_path(tmp_path: Path) -> None:
         patch.object(
             activities, "_maybe_store_runtime_artifacts_to_s3", return_value=None
         ),
+        patch.object(
+            activities,
+            "_upsert_runtime_chunks_to_milvus",
+            return_value=1,
+        ) as mock_upsert_runtime,
     ):
         result = _run(activities.store_activity(payload))
 
     assert result["stage"] == "store"
     assert result["snapshot_sha"] == "content-cafebabe"
+    assert result["store_stats"]["milvus_chunk_count"] == 1
+    assert result["store_stats"]["milvus_write_enabled"] is True
     assert Path(result["artifact_manifest_path"]).exists()
+    mock_upsert_runtime.assert_called_once()
 
 
 def test_store_activity_validation_failure(tmp_path: Path) -> None:
@@ -823,6 +831,59 @@ def test_store_activity_validation_failure(tmp_path: Path) -> None:
         pytest.raises(ValueError, match="transform_path"),
     ):
         _run(activities.store_activity(payload))
+
+
+def test_load_runtime_chunk_records_for_milvus_embeds_chunks(tmp_path: Path) -> None:
+    """Runtime Milvus rows should include deterministic embeddings per chunk."""
+    transform_path = tmp_path / "transform_chunks.jsonl"
+    _write_jsonl(
+        transform_path,
+        [
+            {
+                "chunk_id": "chunk_1",
+                "repo_id": "octo/repo",
+                "ref": "main",
+                "path": "src/a.py",
+                "chunk_index": 0,
+                "start_char": 0,
+                "end_char": 24,
+                "text": "def add(a, b): return a + b",
+                "text_hash": "hash_1",
+            }
+        ],
+    )
+
+    records = activities._load_runtime_chunk_records_for_milvus(
+        transform_path=transform_path,
+        snapshot_sha="abc123",
+    )
+
+    assert len(records) == 1
+    record = records[0]
+    assert record.snapshot_sha == "abc123"
+    assert record.chunk_id == "chunk_1"
+    assert len(record.embedding) == activities.settings.runtime_milvus_vector_dimensions
+    assert any(abs(value) > 0 for value in record.embedding)
+
+
+def test_upsert_runtime_chunks_to_milvus_skips_when_disabled(tmp_path: Path) -> None:
+    """Runtime Milvus writes should skip when runtime write flag is disabled."""
+    transform_path = tmp_path / "transform_chunks.jsonl"
+    _write_jsonl(transform_path, [])
+
+    with (
+        patch.object(activities.settings, "runtime_milvus_write_enabled", False),
+        patch.object(activities._MILVUS_CONNECTOR, "upsert_runtime_chunks") as mock_call,
+    ):
+        inserted = activities._upsert_runtime_chunks_to_milvus(
+            repo_id="octo/repo",
+            ref="main",
+            snapshot_sha="abc123",
+            transform_path=transform_path,
+        )
+
+    assert inserted == 0
+    mock_call.assert_not_called()
 
 
 def test_mental_model_activity_happy_path() -> None:

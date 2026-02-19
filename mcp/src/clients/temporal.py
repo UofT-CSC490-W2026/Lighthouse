@@ -57,6 +57,7 @@ class TemporalClientWrapper:
         ref: str,
         workflow_id: str,
         force_reindex: bool,
+        github_token: str | None = None,
     ) -> WorkflowStartResult:
         """Start canonical runtime index workflow and surface idempotency collisions."""
         client = await self._get_client()
@@ -66,6 +67,8 @@ class TemporalClientWrapper:
             "ref": ref,
             "force_reindex": force_reindex,
         }
+        if github_token:
+            args["github_token"] = github_token
         try:
             handle = await client.start_workflow(
                 "RuntimeIndexWorkflow",
@@ -91,6 +94,7 @@ class TemporalClientWrapper:
         repo_url: str,
         ref: str,
         base_workflow_id: str,
+        github_token: str | None = None,
     ) -> WorkflowStartResult:
         """Start a unique forced runtime index workflow using a suffixed id."""
         suffix = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
@@ -101,6 +105,7 @@ class TemporalClientWrapper:
             ref=ref,
             workflow_id=forced_workflow_id,
             force_reindex=True,
+            github_token=github_token,
         )
 
     async def describe_workflow(self, workflow_id: str) -> WorkflowDescription | None:

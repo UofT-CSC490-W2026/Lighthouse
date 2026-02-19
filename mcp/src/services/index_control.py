@@ -53,6 +53,7 @@ class IndexControlService:
                 repo_url=request.repo_url,
                 ref=request.ref,
                 base_workflow_id=canonical_workflow_id,
+                github_token=request.github_token,
             )
             return StartIndexJobResponse(
                 job_id=started.run_id or started.workflow_id,
@@ -67,6 +68,7 @@ class IndexControlService:
                 ref=request.ref,
                 workflow_id=canonical_workflow_id,
                 force_reindex=False,
+                github_token=request.github_token,
             )
             return StartIndexJobResponse(
                 job_id=started.run_id or started.workflow_id,
@@ -100,6 +102,7 @@ class IndexControlService:
                 ref=ref,
                 trigger=request.trigger,
                 requested_by=request.requested_by,
+                github_token=request.github_token,
                 force_reindex=True,
             )
         )

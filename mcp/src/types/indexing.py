@@ -37,6 +37,7 @@ class RetryIndexJobRequest(BaseModel):
     repo_url: str | None = None
     trigger: str = "manual_retry"
     requested_by: str = "index_control_retry"
+    github_token: str | None = None
 
 
 __all__ = [

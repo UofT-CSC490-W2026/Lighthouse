@@ -155,6 +155,80 @@ def test_runtime_workflow_failure_path_persists_classified_error() -> None:
     assert captured_metrics_payloads[0]["failure_count"] == 1
 
 
+def test_runtime_workflow_propagates_optional_github_token() -> None:
+    """Runtime workflow should forward optional GitHub token to ingest payload."""
+    captured_ingest_payloads: list[dict[str, object]] = []
+
+    async def execute_side_effect(activity_fn, payload, **kwargs):
+        if activity_fn is workflows.persist_runtime_index_start_activity:
+            return {"ok": True}
+        if activity_fn is workflows.persist_runtime_index_progress_activity:
+            return {"ok": True}
+        if activity_fn is workflows.ingest_activity:
+            captured_ingest_payloads.append(dict(payload))
+            return {
+                **payload,
+                "artifact_dir": "/tmp/artifacts",
+                "ingest_path": "/tmp/ingest.jsonl",
+                "snapshot_sha": "abc123",
+                "ingest_stats": {"file_count": 1, "total_text_bytes": 10},
+            }
+        if activity_fn is workflows.clean_activity:
+            return {
+                **payload,
+                "clean_path": "/tmp/clean.jsonl",
+                "clean_stats": {"document_count": 1, "dropped_records": 0},
+            }
+        if activity_fn is workflows.transform_activity:
+            return {
+                **payload,
+                "transform_path": "/tmp/transform.jsonl",
+                "transform_stats": {
+                    "chunk_count": 1,
+                    "chunk_chars_total": 10,
+                    "corpus_hash": "hash2",
+                },
+            }
+        if activity_fn is workflows.store_activity:
+            return {**payload, "snapshot_sha": "abc123"}
+        if activity_fn is workflows.persist_runtime_index_success_activity:
+            return {"ok": True}
+        if activity_fn is workflows.persist_pipeline_run_metrics_activity:
+            return {"ok": True}
+        raise AssertionError(f"Unexpected activity dispatch: {activity_fn}")
+
+    mock_execute = AsyncMock(side_effect=execute_side_effect)
+    with (
+        patch.object(
+            workflows.workflow,
+            "info",
+            return_value=SimpleNamespace(
+                workflow_id="runtime-index:octo/repo:main",
+                run_id="run_token_001",
+            ),
+        ),
+        patch.object(workflows.workflow, "execute_activity", new=mock_execute),
+        patch.object(workflows, "_log_workflow_info"),
+        patch.object(workflows, "_log_workflow_warning"),
+        patch.object(workflows, "_log_workflow_error"),
+    ):
+        result = _run(
+            workflows.RuntimeIndexWorkflow().run(
+                workflows.RuntimeIndexParams(
+                    repo_id="octo/repo",
+                    repo_url="https://github.com/octo/repo",
+                    ref="main",
+                    github_token="ghs_runtime_token",
+                    force_reindex=False,
+                )
+            )
+        )
+
+    assert result["status"] == "READY"
+    assert len(captured_ingest_payloads) == 1
+    assert captured_ingest_payloads[0]["github_token"] == "ghs_runtime_token"
+
+
 def test_offline_workflow_happy_path() -> None:
     """Offline workflow should execute all stages and return READY."""
     mock_execute = AsyncMock(return_value={"ok": True})

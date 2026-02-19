@@ -5,6 +5,8 @@ from functools import lru_cache
 from config_provider import bootstrap_runtime_config
 from pydantic import AliasChoices, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from retrieval_vectors import DEFAULT_VECTOR_DIMENSIONS
+from runtime_retrieval import RUNTIME_CHUNK_COLLECTION
 
 bootstrap_runtime_config(service="pipeline")
 
@@ -49,6 +51,13 @@ class Settings(BaseSettings):
     milvus_user: str | None = None
     milvus_password: SecretStr | None = None
     milvus_database: str = "default"
+    runtime_milvus_write_enabled: bool = True
+    runtime_milvus_collection: str = RUNTIME_CHUNK_COLLECTION
+    runtime_milvus_vector_dimensions: int = Field(
+        default=DEFAULT_VECTOR_DIMENSIONS,
+        ge=8,
+        le=4096,
+    )
     s3_bucket: str | None = None
     aws_region: str = "us-east-1"
 

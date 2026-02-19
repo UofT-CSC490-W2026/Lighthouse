@@ -17,4 +17,9 @@ aws = ["boto3>=1.34.0"]
 
 [tool.setuptools]
 package-dir = {"" = "src"}
-py-modules = ["config_provider", "indexing"]
+py-modules = [
+  "config_provider",
+  "indexing",
+  "retrieval_vectors",
+  "runtime_retrieval",
+]

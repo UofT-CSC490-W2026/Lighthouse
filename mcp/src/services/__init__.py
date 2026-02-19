@@ -13,9 +13,13 @@ from .index_control import IndexControlService
 from .index_repository import IndexRepository
 from .mental_model import MentalModelService
 from .ranking import RankingService
+from .retrieval_backend import RetrievalBackendService
 from .semantic_search import SemanticSearchService
 
-semantic_search_service = SemanticSearchService()
+retrieval_backend_service = RetrievalBackendService()
+semantic_search_service = SemanticSearchService(
+    retrieval_backend=retrieval_backend_service
+)
 ranking_service = RankingService()
 mental_model_service = MentalModelService()
 
@@ -27,7 +31,9 @@ context_service = ContextService(
 code_graph_service = CodeGraphService()
 history_service = HistoryService()
 convention_service = ConventionService()
-dependency_service = DependencyService()
+dependency_service = DependencyService(
+    retrieval_backend=retrieval_backend_service,
+)
 temporal_client = TemporalClientWrapper()
 index_repository = IndexRepository()
 index_control_service = IndexControlService(
@@ -45,6 +51,7 @@ __all__ = [
     "IndexRepository",
     "MentalModelService",
     "RankingService",
+    "RetrievalBackendService",
     "SemanticSearchService",
     "code_graph_service",
     "context_service",
@@ -55,6 +62,7 @@ __all__ = [
     "index_repository",
     "mental_model_service",
     "ranking_service",
+    "retrieval_backend_service",
     "semantic_search_service",
     "temporal_client",
 ]

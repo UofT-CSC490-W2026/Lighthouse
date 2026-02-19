@@ -13,10 +13,12 @@ import tarfile
 from typing import Any
 from urllib.parse import urlparse
 from git import Repo
+from retrieval_vectors import embed_text
+from runtime_retrieval import RuntimeChunkRecord
 from temporalio import activity
 
 from .config import settings
-from .connectors import GitHubConnector, S3Connector
+from .connectors import GitHubConnector, MilvusConnector, S3Connector
 from .contracts import IndexStage
 from .offline_sources import (
     RollingIssuePrDiffSnapshot,
@@ -132,6 +134,18 @@ _SUPPORTED_FILENAMES = {
 }
 _GITHUB_CONNECTOR = GitHubConnector()
 _S3_CONNECTOR = S3Connector(region_name=settings.aws_region)
+_MILVUS_CONNECTOR = MilvusConnector(
+    uri=settings.milvus_uri,
+    user=settings.milvus_user,
+    password=(
+        settings.milvus_password.get_secret_value()
+        if settings.milvus_password is not None
+        else None
+    ),
+    database=settings.milvus_database,
+    collection_name=settings.runtime_milvus_collection,
+    dimensions=settings.runtime_milvus_vector_dimensions,
+)
 _SWEBENCH_SNAPSHOT_ADAPTER = SwebenchSnapshotAdapter()
 _ROLLING_ISSUE_PR_DIFF_ADAPTER = RollingIssuePrDiffAdapter()
 
@@ -382,6 +396,12 @@ async def store_activity(payload: dict[str, Any]) -> dict[str, Any]:
             ref=ref,
             job_id=job_id,
         )
+        milvus_chunk_count = _upsert_runtime_chunks_to_milvus(
+            repo_id=repo_id,
+            ref=ref,
+            snapshot_sha=snapshot_sha,
+            transform_path=transform_path,
+        )
 
         result = {
             **payload,
@@ -392,6 +412,9 @@ async def store_activity(payload: dict[str, Any]) -> dict[str, Any]:
             "artifact_chunks_path": str(transform_path),
             "store_stats": {
                 "s3_key_prefix": s3_key_prefix,
+                "milvus_collection": settings.runtime_milvus_collection,
+                "milvus_chunk_count": milvus_chunk_count,
+                "milvus_write_enabled": settings.runtime_milvus_write_enabled,
             },
         }
         _log_activity_info(
@@ -399,6 +422,9 @@ async def store_activity(payload: dict[str, Any]) -> dict[str, Any]:
             **correlation,
             snapshot_sha=result.get("snapshot_sha"),
             s3_key_prefix=result["store_stats"]["s3_key_prefix"],
+            milvus_collection=result["store_stats"]["milvus_collection"],
+            milvus_chunk_count=result["store_stats"]["milvus_chunk_count"],
+            milvus_write_enabled=result["store_stats"]["milvus_write_enabled"],
             mode="runtime",
         )
         return result
@@ -871,6 +897,70 @@ def _evaluation_refresh_artifact_dir(payload: dict[str, Any], *, dataset_key: st
     artifact_dir = base_dir / _sanitize_identifier(job_id)
     artifact_dir.mkdir(parents=True, exist_ok=True)
     return artifact_dir
+
+
+def _upsert_runtime_chunks_to_milvus(
+    *,
+    repo_id: str,
+    ref: str,
+    snapshot_sha: str,
+    transform_path: Path,
+) -> int:
+    """Write runtime chunk vectors into Milvus and return inserted row count."""
+    if not settings.runtime_milvus_write_enabled:
+        return 0
+    chunk_records = _load_runtime_chunk_records_for_milvus(
+        transform_path=transform_path,
+        snapshot_sha=snapshot_sha,
+    )
+    return _MILVUS_CONNECTOR.upsert_runtime_chunks(
+        repo_id=repo_id,
+        ref=ref,
+        snapshot_sha=snapshot_sha,
+        chunks=chunk_records,
+    )
+
+
+def _load_runtime_chunk_records_for_milvus(
+    *,
+    transform_path: Path,
+    snapshot_sha: str,
+) -> list[RuntimeChunkRecord]:
+    """Load runtime chunk JSONL rows and map them to Milvus upsert records."""
+    chunk_records: list[RuntimeChunkRecord] = []
+    for row in _read_jsonl(transform_path):
+        chunk_id = _coerce_optional_str(row.get("chunk_id"))
+        repo_id = _coerce_optional_str(row.get("repo_id"))
+        ref = _coerce_optional_str(row.get("ref"))
+        path = _coerce_optional_str(row.get("path"))
+        text = _coerce_optional_str(row.get("text"))
+        if not chunk_id or not repo_id or not ref or not path or not text:
+            continue
+        start_char = _coerce_optional_non_negative_int(row.get("start_char")) or 0
+        end_char = _coerce_optional_non_negative_int(row.get("end_char")) or 0
+        chunk_index = _coerce_optional_non_negative_int(row.get("chunk_index")) or 0
+        text_hash = _coerce_optional_str(row.get("text_hash")) or hashlib.sha1(
+            text.encode("utf-8")
+        ).hexdigest()
+        chunk_records.append(
+            RuntimeChunkRecord(
+                chunk_id=chunk_id,
+                repo_id=repo_id,
+                ref=ref,
+                snapshot_sha=snapshot_sha,
+                path=path,
+                chunk_index=chunk_index,
+                start_char=start_char,
+                end_char=end_char,
+                text=text,
+                text_hash=text_hash,
+                embedding=embed_text(
+                    text,
+                    dimensions=settings.runtime_milvus_vector_dimensions,
+                ),
+            )
+        )
+    return chunk_records
 
 
 def _ingest_offline_dataset(payload: dict[str, Any]) -> dict[str, Any]:

@@ -1,6 +1,6 @@
 """Tool endpoint for top-level context retrieval."""
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 
 from ...services import context_service
 from ...types import (
@@ -8,7 +8,7 @@ from ...types import (
     GetContextForChangeResponse,
     ToolResponseEnvelope,
 )
-from .common import build_tool_envelope, gate_tool_request
+from .common import build_tool_envelope, gate_tool_request, resolve_request_github_token
 
 router = APIRouter()
 
@@ -19,6 +19,7 @@ router = APIRouter()
     summary="Stub tool: get context for a planned change",
 )
 async def get_context_for_change(
+    http_request: Request,
     tool_request: GetContextForChangeRequest,
 ) -> ToolResponseEnvelope[GetContextForChangeResponse]:
     """Return ranked context items for a proposed code change."""
@@ -26,6 +27,7 @@ async def get_context_for_change(
         repo_id=tool_request.repo_id,
         ref=tool_request.ref,
         tool_name="get_context_for_change",
+        github_token=resolve_request_github_token(http_request),
     )
     if not gate.allow_execute:
         return build_tool_envelope(
