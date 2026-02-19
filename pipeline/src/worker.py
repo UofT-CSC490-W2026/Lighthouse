@@ -19,6 +19,7 @@ from .activities import (
 )
 from .config import settings
 from .connectors import MilvusConnector, PostgresConnector, S3Connector
+from .observability import configure_logging, structured_event
 from .workflows import (
     MentalModelWorkflow,
     OfflineDatasetWorkflow,
@@ -67,6 +68,7 @@ async def _validate_backend_connectivity() -> None:
     postgres = PostgresConnector(dsn=settings.postgres_dsn or "")
     try:
         await postgres.check_connection()
+        LOGGER.info(structured_event("pipeline.worker.probe.postgres.ok"))
     finally:
         await postgres.close()
 
@@ -83,9 +85,13 @@ async def _validate_backend_connectivity() -> None:
             database=settings.milvus_database,
         )
         await asyncio.to_thread(milvus.check_connection)
+        LOGGER.info(structured_event("pipeline.worker.probe.milvus.ok"))
     else:
         LOGGER.info(
-            "Skipping Milvus startup probe (`validate_milvus_on_startup=false`)."
+            structured_event(
+                "pipeline.worker.probe.milvus.skipped",
+                validate_milvus_on_startup=False,
+            )
         )
 
     if settings.validate_s3_on_startup:
@@ -95,8 +101,19 @@ async def _validate_backend_connectivity() -> None:
             )
         s3 = S3Connector(region_name=settings.aws_region)
         await asyncio.to_thread(s3.check_bucket_access, bucket=settings.s3_bucket)
+        LOGGER.info(
+            structured_event(
+                "pipeline.worker.probe.s3.ok",
+                bucket=settings.s3_bucket,
+            )
+        )
     else:
-        LOGGER.info("Skipping S3 startup probe (`validate_s3_on_startup=false`).")
+        LOGGER.info(
+            structured_event(
+                "pipeline.worker.probe.s3.skipped",
+                validate_s3_on_startup=False,
+            )
+        )
 
 
 async def _run_runtime_worker(client: Client) -> None:
@@ -148,9 +165,21 @@ async def _run_mental_model_worker(client: Client) -> None:
 
 async def main() -> None:
     """Start all pipeline workers concurrently in a single process."""
+    configure_logging(debug=settings.debug)
+    LOGGER.info(
+        structured_event(
+            "pipeline.worker.startup.begin",
+            temporal_target_host=settings.temporal_target_host,
+            temporal_namespace=settings.temporal_namespace,
+            temporal_task_queue_runtime=settings.temporal_task_queue_runtime,
+            temporal_task_queue_offline=settings.temporal_task_queue_offline,
+            temporal_task_queue_mental_model=settings.temporal_task_queue_mental_model,
+        )
+    )
     _validate_required_settings()
     client = await _create_client()
     await _validate_backend_connectivity()
+    LOGGER.info(structured_event("pipeline.worker.startup.ready"))
     await asyncio.gather(
         _run_runtime_worker(client),
         _run_offline_worker(client),

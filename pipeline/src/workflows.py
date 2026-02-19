@@ -3,6 +3,7 @@
 import asyncio
 from dataclasses import dataclass
 from datetime import timedelta
+from typing import Any
 
 from temporalio import exceptions as temporal_exceptions
 from temporalio import workflow
@@ -20,6 +21,7 @@ from .activities import (
     transform_activity,
 )
 from .contracts import runtime_index_workflow_id, should_reuse_runtime_workflow
+from .observability import structured_event
 from .state import IndexStage, IndexStatus
 
 _PERSIST_RETRY_POLICY = RetryPolicy(
@@ -132,11 +134,12 @@ class RuntimeIndexWorkflow:
             should_reuse_runtime_workflow(params.force_reindex)
             and current_workflow_id != canonical_workflow_id
         ):
-            workflow.logger.warning(
-                "Runtime workflow ID does not match canonical idempotent value "
-                "(expected=%s actual=%s)",
-                canonical_workflow_id,
-                current_workflow_id,
+            _log_workflow_warning(
+                "pipeline.runtime.workflow_id_mismatch",
+                repo_id=params.repo_id,
+                workflow_id=current_workflow_id,
+                job_id=current_run_id,
+                canonical_workflow_id=canonical_workflow_id,
             )
 
         payload: dict[str, str | bool | None] = {
@@ -148,6 +151,14 @@ class RuntimeIndexWorkflow:
             "workflow_id": current_workflow_id,
             "canonical_workflow_id": canonical_workflow_id,
         }
+        _log_workflow_info(
+            "pipeline.runtime.start",
+            repo_id=params.repo_id,
+            workflow_id=current_workflow_id,
+            job_id=current_run_id,
+            ref=params.ref,
+            force_reindex=params.force_reindex,
+        )
 
         await workflow.execute_activity(
             persist_runtime_index_start_activity,
@@ -200,6 +211,15 @@ class RuntimeIndexWorkflow:
             ) in stage_plan:
                 current_stage = stage
                 current_progress = progress_pct
+                _log_workflow_info(
+                    "pipeline.runtime.stage.dispatch",
+                    repo_id=params.repo_id,
+                    workflow_id=current_workflow_id,
+                    job_id=current_run_id,
+                    stage=stage.value,
+                    progress_pct=progress_pct,
+                    activity=str(stage_activity),
+                )
                 await workflow.execute_activity(
                     persist_runtime_index_progress_activity,
                     {
@@ -215,6 +235,14 @@ class RuntimeIndexWorkflow:
                     stage_payload,
                     start_to_close_timeout=timeout,
                     retry_policy=retry_policy,
+                )
+                _log_workflow_info(
+                    "pipeline.runtime.stage.complete",
+                    repo_id=params.repo_id,
+                    workflow_id=current_workflow_id,
+                    job_id=current_run_id,
+                    stage=stage.value,
+                    progress_pct=progress_pct,
                 )
         except asyncio.CancelledError as exc:
             await _persist_runtime_failure(
@@ -242,6 +270,14 @@ class RuntimeIndexWorkflow:
             start_to_close_timeout=timedelta(seconds=30),
             retry_policy=_PERSIST_RETRY_POLICY,
         )
+        _log_workflow_info(
+            "pipeline.runtime.complete",
+            repo_id=params.repo_id,
+            workflow_id=current_workflow_id,
+            job_id=current_run_id,
+            status=IndexStatus.READY.value,
+            snapshot_sha=stage_payload.get("snapshot_sha"),
+        )
 
         return {
             "status": IndexStatus.READY.value,
@@ -257,10 +293,21 @@ class OfflineDatasetWorkflow:
     @workflow.run
     async def run(self, params: OfflineDatasetParams) -> dict[str, str]:
         """Run ingest/clean/transform/store over an offline dataset payload."""
+        workflow_info = workflow.info()
+        correlation = _workflow_correlation(
+            workflow_id=workflow_info.workflow_id,
+            job_id=workflow_info.run_id,
+        )
         payload = {
             "dataset_name": params.dataset_name,
             "dataset_version": params.dataset_version,
         }
+        _log_workflow_info(
+            "pipeline.offline.start",
+            **correlation,
+            dataset_name=params.dataset_name,
+            dataset_version=params.dataset_version,
+        )
         try:
             await workflow.execute_activity(
                 ingest_activity,
@@ -288,23 +335,32 @@ class OfflineDatasetWorkflow:
             )
         except asyncio.CancelledError as exc:
             classification = _classify_failure(exc)
-            workflow.logger.warning(
-                "OfflineDatasetWorkflow cancelled (class=%s code=%s)",
-                classification.failure_class,
-                classification.error_code,
+            _log_workflow_warning(
+                "pipeline.offline.cancelled",
+                **correlation,
+                failure_class=classification.failure_class,
+                error_code=classification.error_code,
             )
             raise
         except Exception as exc:
             classification = _classify_failure(exc)
-            workflow.logger.error(
-                "OfflineDatasetWorkflow failed (class=%s code=%s): %s",
-                classification.failure_class,
-                classification.error_code,
-                _format_failure_message(
-                    exc=exc, failure_class=classification.failure_class
+            _log_workflow_error(
+                "pipeline.offline.failed",
+                **correlation,
+                failure_class=classification.failure_class,
+                error_code=classification.error_code,
+                error_message=_format_failure_message(
+                    exc=exc,
+                    failure_class=classification.failure_class,
                 ),
             )
             raise
+        _log_workflow_info(
+            "pipeline.offline.complete",
+            **correlation,
+            status=IndexStatus.READY.value,
+            dataset_name=params.dataset_name,
+        )
         return {"status": IndexStatus.READY.value}
 
 
@@ -315,11 +371,23 @@ class MentalModelWorkflow:
     @workflow.run
     async def run(self, params: MentalModelParams) -> dict[str, str]:
         """Execute mental-model activity for a repository commit range."""
+        workflow_info = workflow.info()
+        correlation = _workflow_correlation(
+            repo_id=params.repo_id,
+            workflow_id=workflow_info.workflow_id,
+            job_id=workflow_info.run_id,
+        )
         payload = {
             "repo_id": params.repo_id,
             "from_sha": params.from_sha,
             "to_sha": params.to_sha,
         }
+        _log_workflow_info(
+            "pipeline.mental_model.start",
+            **correlation,
+            from_sha=params.from_sha,
+            to_sha=params.to_sha,
+        )
         try:
             await workflow.execute_activity(
                 mental_model_activity,
@@ -329,23 +397,31 @@ class MentalModelWorkflow:
             )
         except asyncio.CancelledError as exc:
             classification = _classify_failure(exc)
-            workflow.logger.warning(
-                "MentalModelWorkflow cancelled (class=%s code=%s)",
-                classification.failure_class,
-                classification.error_code,
+            _log_workflow_warning(
+                "pipeline.mental_model.cancelled",
+                **correlation,
+                failure_class=classification.failure_class,
+                error_code=classification.error_code,
             )
             raise
         except Exception as exc:
             classification = _classify_failure(exc)
-            workflow.logger.error(
-                "MentalModelWorkflow failed (class=%s code=%s): %s",
-                classification.failure_class,
-                classification.error_code,
-                _format_failure_message(
-                    exc=exc, failure_class=classification.failure_class
+            _log_workflow_error(
+                "pipeline.mental_model.failed",
+                **correlation,
+                failure_class=classification.failure_class,
+                error_code=classification.error_code,
+                error_message=_format_failure_message(
+                    exc=exc,
+                    failure_class=classification.failure_class,
                 ),
             )
             raise
+        _log_workflow_info(
+            "pipeline.mental_model.complete",
+            **correlation,
+            status=IndexStatus.READY.value,
+        )
         return {"status": IndexStatus.READY.value}
 
 
@@ -358,6 +434,11 @@ async def _persist_runtime_failure(
 ) -> FailureClassification:
     """Persist runtime workflow failure with retryability classification metadata."""
     classification = _classify_failure(exc)
+    correlation = _workflow_correlation(
+        repo_id=_coerce_str(stage_payload.get("repo_id")),
+        workflow_id=_coerce_str(stage_payload.get("workflow_id")),
+        job_id=_coerce_str(stage_payload.get("job_id")),
+    )
     try:
         await workflow.execute_activity(
             persist_runtime_index_failure_activity,
@@ -376,18 +457,20 @@ async def _persist_runtime_failure(
             cancellation_type=workflow.ActivityCancellationType.ABANDON,
         )
     except Exception as persist_exc:
-        workflow.logger.error(
-            "Failed to persist runtime failure (class=%s code=%s stage=%s): %s",
-            classification.failure_class,
-            classification.error_code,
-            stage.value,
-            str(persist_exc)[:500],
+        _log_workflow_error(
+            "pipeline.runtime.failure_persist_failed",
+            **correlation,
+            failure_class=classification.failure_class,
+            error_code=classification.error_code,
+            stage=stage.value,
+            persist_error=str(persist_exc)[:500],
         )
-    workflow.logger.error(
-        "RuntimeIndexWorkflow failed (class=%s code=%s stage=%s)",
-        classification.failure_class,
-        classification.error_code,
-        stage.value,
+    _log_workflow_error(
+        "pipeline.runtime.failed",
+        **correlation,
+        failure_class=classification.failure_class,
+        error_code=classification.error_code,
+        stage=stage.value,
     )
     return classification
 
@@ -471,3 +554,40 @@ def _is_cancelled(exc: BaseException) -> bool:
     if isinstance(exc, temporal_exceptions.TerminatedError):
         return True
     return temporal_exceptions.is_cancelled_exception(exc)
+
+
+def _workflow_correlation(
+    *,
+    repo_id: str | None = None,
+    workflow_id: str | None = None,
+    job_id: str | None = None,
+) -> dict[str, str | None]:
+    """Build canonical workflow correlation field payload."""
+    return {
+        "repo_id": repo_id,
+        "workflow_id": workflow_id,
+        "job_id": job_id,
+    }
+
+
+def _coerce_str(value: Any) -> str | None:
+    """Convert to non-empty string or `None`."""
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    return normalized or None
+
+
+def _log_workflow_info(event: str, **fields: Any) -> None:
+    """Emit a structured info-level workflow log event."""
+    workflow.logger.info(structured_event(event, **fields))
+
+
+def _log_workflow_warning(event: str, **fields: Any) -> None:
+    """Emit a structured warning-level workflow log event."""
+    workflow.logger.warning(structured_event(event, **fields))
+
+
+def _log_workflow_error(event: str, **fields: Any) -> None:
+    """Emit a structured error-level workflow log event."""
+    workflow.logger.error(structured_event(event, **fields))

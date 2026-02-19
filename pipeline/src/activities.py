@@ -18,6 +18,7 @@ from temporalio import activity
 from .config import settings
 from .connectors import GitHubConnector, S3Connector
 from .contracts import IndexStage
+from .observability import correlation_from_payload, structured_event
 from .persistence import (
     record_runtime_index_failed,
     record_runtime_index_progress,
@@ -98,7 +99,10 @@ _S3_CONNECTOR = S3Connector(region_name=settings.aws_region)
 @activity.defn(name="ingest_activity")
 async def ingest_activity(payload: dict[str, Any]) -> dict[str, Any]:
     """Ingest raw source inputs for the current workflow payload."""
+    correlation = correlation_from_payload(payload)
+    _log_activity_info("pipeline.ingest.start", **correlation)
     if not _is_runtime_payload(payload):
+        _log_activity_info("pipeline.ingest.skip_non_runtime", **correlation)
         return {"stage": "ingest", "ok": True, "payload": payload}
 
     repo_id = _require_str(payload, "repo_id")
@@ -110,7 +114,7 @@ async def ingest_activity(payload: dict[str, Any]) -> dict[str, Any]:
     snapshot_sha, files = _load_repo_files(repo_url=repo_url, ref=ref, payload=payload)
     _write_jsonl(ingest_path, files)
 
-    return {
+    result = {
         **payload,
         "stage": "ingest",
         "ok": True,
@@ -124,12 +128,23 @@ async def ingest_activity(payload: dict[str, Any]) -> dict[str, Any]:
             "total_text_bytes": sum(item["size_bytes"] for item in files),
         },
     }
+    _log_activity_info(
+        "pipeline.ingest.complete",
+        **correlation,
+        file_count=result["ingest_stats"]["file_count"],
+        total_text_bytes=result["ingest_stats"]["total_text_bytes"],
+        snapshot_sha=result.get("snapshot_sha"),
+    )
+    return result
 
 
 @activity.defn(name="clean_activity")
 async def clean_activity(payload: dict[str, Any]) -> dict[str, Any]:
     """Clean and normalize ingested payload artifacts."""
+    correlation = correlation_from_payload(payload)
+    _log_activity_info("pipeline.clean.start", **correlation)
     if not _is_runtime_payload(payload):
+        _log_activity_info("pipeline.clean.skip_non_runtime", **correlation)
         return {"stage": "clean", "ok": True, "payload": payload}
 
     ingest_path = Path(_require_str(payload, "ingest_path"))
@@ -161,7 +176,7 @@ async def clean_activity(payload: dict[str, Any]) -> dict[str, Any]:
         )
 
     _write_jsonl(clean_path, cleaned_docs)
-    return {
+    result = {
         **payload,
         "stage": "clean",
         "ok": True,
@@ -172,12 +187,22 @@ async def clean_activity(payload: dict[str, Any]) -> dict[str, Any]:
             "dropped_records": dropped_records,
         },
     }
+    _log_activity_info(
+        "pipeline.clean.complete",
+        **correlation,
+        document_count=result["clean_stats"]["document_count"],
+        dropped_records=result["clean_stats"]["dropped_records"],
+    )
+    return result
 
 
 @activity.defn(name="transform_activity")
 async def transform_activity(payload: dict[str, Any]) -> dict[str, Any]:
     """Transform cleaned inputs into retrieval/evaluation ready structures."""
+    correlation = correlation_from_payload(payload)
+    _log_activity_info("pipeline.transform.start", **correlation)
     if not _is_runtime_payload(payload):
+        _log_activity_info("pipeline.transform.skip_non_runtime", **correlation)
         return {"stage": "transform", "ok": True, "payload": payload}
 
     repo_id = _require_str(payload, "repo_id")
@@ -219,7 +244,7 @@ async def transform_activity(payload: dict[str, Any]) -> dict[str, Any]:
             )
 
     _write_jsonl(transform_path, chunks)
-    return {
+    result = {
         **payload,
         "stage": "transform",
         "ok": True,
@@ -230,12 +255,22 @@ async def transform_activity(payload: dict[str, Any]) -> dict[str, Any]:
             "corpus_hash": chunk_digest.hexdigest(),
         },
     }
+    _log_activity_info(
+        "pipeline.transform.complete",
+        **correlation,
+        chunk_count=result["transform_stats"]["chunk_count"],
+        chunk_chars_total=result["transform_stats"]["chunk_chars_total"],
+    )
+    return result
 
 
 @activity.defn(name="store_activity")
 async def store_activity(payload: dict[str, Any]) -> dict[str, Any]:
     """Persist transformed artifacts to configured storage backends."""
+    correlation = correlation_from_payload(payload)
+    _log_activity_info("pipeline.store.start", **correlation)
     if not _is_runtime_payload(payload):
+        _log_activity_info("pipeline.store.skip_non_runtime", **correlation)
         return {"stage": "store", "ok": True, "payload": payload}
 
     artifact_dir = Path(_require_str(payload, "artifact_dir"))
@@ -272,7 +307,7 @@ async def store_activity(payload: dict[str, Any]) -> dict[str, Any]:
         job_id=job_id,
     )
 
-    return {
+    result = {
         **payload,
         "stage": "store",
         "ok": True,
@@ -283,11 +318,21 @@ async def store_activity(payload: dict[str, Any]) -> dict[str, Any]:
             "s3_key_prefix": s3_key_prefix,
         },
     }
+    _log_activity_info(
+        "pipeline.store.complete",
+        **correlation,
+        snapshot_sha=result.get("snapshot_sha"),
+        s3_key_prefix=result["store_stats"]["s3_key_prefix"],
+    )
+    return result
 
 
 @activity.defn(name="mental_model_activity")
 async def mental_model_activity(payload: dict[str, Any]) -> dict[str, Any]:
     """Build or refresh mental-model artifacts for a repository scope."""
+    correlation = correlation_from_payload(payload)
+    _log_activity_info("pipeline.mental_model.start", **correlation)
+    _log_activity_info("pipeline.mental_model.complete", **correlation)
     return {"stage": "mental_model", "ok": True, "payload": payload}
 
 
@@ -296,12 +341,15 @@ async def persist_runtime_index_start_activity(
     payload: dict[str, Any],
 ) -> dict[str, Any]:
     """Persist initial runtime index job/state records at workflow start."""
+    correlation = correlation_from_payload(payload)
+    _log_activity_info("pipeline.persist.start", **correlation)
     await record_runtime_index_started(
         job_id=_require_str(payload, "job_id"),
         workflow_id=_require_str(payload, "workflow_id"),
         repo_id=_require_str(payload, "repo_id"),
         ref=_require_str(payload, "ref"),
     )
+    _log_activity_info("pipeline.persist.start.complete", **correlation)
     return {"stage": "persist_start", "ok": True, "job_id": payload["job_id"]}
 
 
@@ -310,6 +358,8 @@ async def persist_runtime_index_success_activity(
     payload: dict[str, Any],
 ) -> dict[str, Any]:
     """Persist terminal READY state for a completed runtime index run."""
+    correlation = correlation_from_payload(payload)
+    _log_activity_info("pipeline.persist.success", **correlation)
     await record_runtime_index_ready(
         job_id=_require_str(payload, "job_id"),
         workflow_id=_require_str(payload, "workflow_id"),
@@ -317,6 +367,7 @@ async def persist_runtime_index_success_activity(
         ref=_require_str(payload, "ref"),
         snapshot_sha=payload.get("snapshot_sha"),
     )
+    _log_activity_info("pipeline.persist.success.complete", **correlation)
     return {"stage": "persist_success", "ok": True, "job_id": payload["job_id"]}
 
 
@@ -325,6 +376,12 @@ async def persist_runtime_index_failure_activity(
     payload: dict[str, Any],
 ) -> dict[str, Any]:
     """Persist terminal FAILED state and error metadata for runtime indexing."""
+    correlation = correlation_from_payload(payload)
+    _log_activity_info(
+        "pipeline.persist.failure",
+        **correlation,
+        error_code=payload.get("error_code"),
+    )
     stage_raw = payload.get("stage")
     stage = IndexStage(stage_raw) if stage_raw else None
     await record_runtime_index_failed(
@@ -337,6 +394,7 @@ async def persist_runtime_index_failure_activity(
         error_message=_require_str(payload, "error_message"),
         progress_pct=_require_progress(payload, "progress_pct"),
     )
+    _log_activity_info("pipeline.persist.failure.complete", **correlation)
     return {"stage": "persist_failure", "ok": True, "job_id": payload["job_id"]}
 
 
@@ -345,8 +403,15 @@ async def persist_runtime_index_progress_activity(
     payload: dict[str, Any],
 ) -> dict[str, Any]:
     """Persist in-flight stage and progress updates for runtime indexing."""
+    correlation = correlation_from_payload(payload)
     stage = IndexStage(_require_str(payload, "stage"))
     progress = _require_progress(payload, "progress_pct")
+    _log_activity_info(
+        "pipeline.persist.progress",
+        **correlation,
+        stage=stage.value,
+        progress_pct=progress,
+    )
     await record_runtime_index_progress(
         job_id=_require_str(payload, "job_id"),
         workflow_id=_require_str(payload, "workflow_id"),
@@ -361,6 +426,11 @@ async def persist_runtime_index_progress_activity(
         "job_id": payload["job_id"],
         "progress_pct": progress,
     }
+
+
+def _log_activity_info(event: str, **fields: Any) -> None:
+    """Emit one structured activity log line."""
+    activity.logger.info(structured_event(event, **fields))
 
 
 def _require_str(payload: dict[str, Any], key: str) -> str:
