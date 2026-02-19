@@ -86,9 +86,10 @@ def test_ingest_activity_validation_failure() -> None:
 
 def test_offline_activity_flow_happy_path(tmp_path: Path) -> None:
     """Offline ingest/clean/transform/store should process benchmark rows."""
-    payload = {
-        **_offline_payload(),
-        "dataset_records": [
+    source_path = tmp_path / "swebench-v1.jsonl"
+    _write_jsonl(
+        source_path,
+        [
             {
                 "instance_id": "swe-1",
                 "repo": "octo/repo",
@@ -97,19 +98,26 @@ def test_offline_activity_flow_happy_path(tmp_path: Path) -> None:
                 "patch": "diff --git a/app.py b/app.py",
                 "test_patch": "FAIL_TO_PASS=test_parser",
                 "split": "test",
+                "dataset_version": "v1",
             },
             {
                 "instance_id": "swe-1",
                 "repo": "octo/repo",
                 "problem_statement": "duplicate row",
                 "patch": "diff --git a/app.py b/app.py",
+                "dataset_version": "v1",
             },
             {
                 "instance_id": "swe-3",
                 "problem_statement": "missing repo should be quarantined",
                 "patch": "diff --git a/app.py b/app.py",
+                "dataset_version": "v1",
             },
         ],
+    )
+    payload = {
+        **_offline_payload(),
+        "dataset_source_path": str(source_path),
     }
     with (
         patch.object(activities, "_log_activity_info"),
@@ -153,18 +161,48 @@ def test_offline_ingest_validation_failure() -> None:
     payload = {
         **_offline_payload(),
         "dataset_name": "unknown-benchmark",
-        "dataset_records": [
+        "dataset_source_path": "/tmp/swebench-v1.jsonl",
+    }
+    with (
+        patch.object(activities, "_log_activity_info"),
+        pytest.raises(ValueError, match="unsupported"),
+    ):
+        _run(activities.ingest_activity(payload))
+
+
+def test_offline_ingest_requires_dataset_version(tmp_path: Path) -> None:
+    """SWE-bench adapter should require explicit version pinning."""
+    source_path = tmp_path / "swebench-v1.jsonl"
+    _write_jsonl(
+        source_path,
+        [
             {
-                "instance_id": "a1",
+                "instance_id": "swe-1",
                 "repo": "octo/repo",
                 "problem_statement": "sample",
                 "patch": "diff --git a/a b/a",
             }
         ],
+    )
+    payload = {
+        "job_id": "job_offline_001",
+        "workflow_id": "offline-datasets:swebench:v1",
+        "dataset_name": "swebench",
+        "dataset_source_path": str(source_path),
     }
     with (
         patch.object(activities, "_log_activity_info"),
-        pytest.raises(ValueError, match="unsupported"),
+        pytest.raises(ValueError, match="dataset_version"),
+    ):
+        _run(activities.ingest_activity(payload))
+
+
+def test_offline_ingest_requires_dataset_source_path() -> None:
+    """SWE-bench adapter should reject missing source path payloads."""
+    payload = _offline_payload()
+    with (
+        patch.object(activities, "_log_activity_info"),
+        pytest.raises(ValueError, match="dataset_source_path"),
     ):
         _run(activities.ingest_activity(payload))
 

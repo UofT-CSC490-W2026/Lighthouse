@@ -18,6 +18,7 @@ from temporalio import activity
 from .config import settings
 from .connectors import GitHubConnector, S3Connector
 from .contracts import IndexStage
+from .offline_sources import SwebenchSnapshot, SwebenchSnapshotAdapter
 from .observability import correlation_from_payload, structured_event
 from .persistence import (
     record_runtime_index_failed,
@@ -99,6 +100,7 @@ _SUPPORTED_FILENAMES = {
 }
 _GITHUB_CONNECTOR = GitHubConnector()
 _S3_CONNECTOR = S3Connector(region_name=settings.aws_region)
+_SWEBENCH_SNAPSHOT_ADAPTER = SwebenchSnapshotAdapter()
 
 
 @activity.defn(name="ingest_activity")
@@ -557,11 +559,15 @@ def _offline_artifact_dir(payload: dict[str, Any], *, dataset_key: str) -> Path:
 def _ingest_offline_dataset(payload: dict[str, Any]) -> dict[str, Any]:
     """Load a benchmark dataset source and write canonical ingest artifacts."""
     dataset_name, dataset_key = _validate_offline_dataset_name(payload)
-    dataset_version = _coerce_optional_str(payload.get("dataset_version"))
+    dataset_version = _require_str(payload, "dataset_version")
     artifact_dir = _offline_artifact_dir(payload, dataset_key=dataset_key)
     ingest_path = artifact_dir / "offline_ingest_records.jsonl"
 
-    source_records = _load_offline_source_records(payload)
+    source_snapshot = _load_swebench_source_snapshot(
+        payload=payload,
+        dataset_version=dataset_version,
+    )
+    source_records = source_snapshot.records
     ingest_records: list[dict[str, Any]] = []
     for idx, source_row in enumerate(source_records):
         ingest_records.append(
@@ -589,7 +595,12 @@ def _ingest_offline_dataset(payload: dict[str, Any]) -> dict[str, Any]:
         "ingest_path": str(ingest_path),
         "ingest_stats": {
             "records_in": len(ingest_records),
-            "source_mode": _offline_source_mode(payload),
+            "source_mode": source_snapshot.source_mode,
+            "source_format": source_snapshot.source_format,
+            "source_path": source_snapshot.source_path,
+            "snapshot_sha256": source_snapshot.snapshot_sha256,
+            "snapshot_size_bytes": source_snapshot.snapshot_size_bytes,
+            "immutable_snapshot": True,
         },
     }
 
@@ -883,100 +894,17 @@ def _require_mapping_str(mapping: dict[str, Any], key: str) -> str:
     return value
 
 
-def _offline_source_mode(payload: dict[str, Any]) -> str:
-    """Resolve descriptive source mode string for offline ingest metadata."""
-    if isinstance(payload.get("dataset_records"), list):
-        return "inline_records"
-    if isinstance(payload.get("dataset_source_path"), str):
-        return "file_path"
-    return "unknown"
-
-
-def _load_offline_source_records(payload: dict[str, Any]) -> list[dict[str, Any]]:
-    """Load offline source records from payload inline rows or local files."""
-    inline_records = payload.get("dataset_records")
-    if isinstance(inline_records, list):
-        records = []
-        for index, row in enumerate(inline_records):
-            if not isinstance(row, dict):
-                raise ValueError(
-                    f"dataset_records[{index}] must be an object-like mapping"
-                )
-            records.append(row)
-        if not records:
-            raise ValueError("dataset_records cannot be empty")
-        return records
-
-    source_path_value = _coerce_optional_str(payload.get("dataset_source_path"))
-    if source_path_value is None:
-        raise ValueError(
-            "offline ingest requires either 'dataset_records' or 'dataset_source_path'"
-        )
-    source_path = Path(source_path_value).expanduser()
-    if not source_path.exists():
-        raise ValueError(f"dataset_source_path does not exist: {source_path}")
-
-    if source_path.is_dir():
-        source_path = _resolve_offline_source_file(source_path)
-    suffix = source_path.suffix.lower()
-    if suffix == ".jsonl":
-        return list(_read_jsonl(source_path))
-    if suffix == ".json":
-        parsed = json.loads(source_path.read_text(encoding="utf-8"))
-        return _extract_offline_json_records(parsed)
-    raise ValueError(
-        "dataset_source_path must point to a .jsonl or .json file "
-        f"(received: {source_path})"
+def _load_swebench_source_snapshot(
+    *,
+    payload: dict[str, Any],
+    dataset_version: str,
+) -> SwebenchSnapshot:
+    """Load immutable version-pinned SWE-bench records via dedicated adapter."""
+    dataset_source_path = _require_str(payload, "dataset_source_path")
+    return _SWEBENCH_SNAPSHOT_ADAPTER.load_snapshot(
+        dataset_version=dataset_version,
+        dataset_source_path=dataset_source_path,
     )
-
-
-def _resolve_offline_source_file(source_dir: Path) -> Path:
-    """Resolve a canonical benchmark source file inside one directory."""
-    candidates = (
-        "instances.jsonl",
-        "dataset_instances.jsonl",
-        "swebench.jsonl",
-        "records.jsonl",
-        "instances.json",
-        "dataset_instances.json",
-        "swebench.json",
-        "records.json",
-    )
-    for candidate in candidates:
-        path = source_dir / candidate
-        if path.exists() and path.is_file():
-            return path
-    raise ValueError(
-        "dataset_source_path directory does not contain a supported source file; "
-        f"looked for: {', '.join(candidates)}"
-    )
-
-
-def _extract_offline_json_records(parsed: Any) -> list[dict[str, Any]]:
-    """Extract list-of-mapping records from common JSON envelope shapes."""
-    if isinstance(parsed, list):
-        return _ensure_record_mappings(parsed, context="json list")
-    if isinstance(parsed, dict):
-        for key in ("instances", "records", "data"):
-            value = parsed.get(key)
-            if isinstance(value, list):
-                return _ensure_record_mappings(value, context=f"json key '{key}'")
-    raise ValueError(
-        "JSON source must be a list of records or object with one of: "
-        "'instances', 'records', 'data'"
-    )
-
-
-def _ensure_record_mappings(records: list[Any], *, context: str) -> list[dict[str, Any]]:
-    """Validate that parsed record collections only contain mapping rows."""
-    validated: list[dict[str, Any]] = []
-    for index, row in enumerate(records):
-        if not isinstance(row, dict):
-            raise ValueError(f"{context}[{index}] must be an object-like mapping")
-        validated.append(row)
-    if not validated:
-        raise ValueError(f"{context} cannot be empty")
-    return validated
 
 
 def _offline_record_id(
