@@ -57,25 +57,42 @@ class S3Connector:
     ) -> str:
         """Upload offline benchmark artifacts and return stored S3 prefix."""
         client = boto3.client("s3", region_name=self.region_name)
-        version_key = self._sanitize_identifier(dataset_version or "latest")
-        prefix = (
-            "offline-datasets/benchmark/"
-            f"{self._sanitize_identifier(dataset_name)}/"
-            f"{version_key}/"
-            f"{self._sanitize_identifier(job_id)}"
+        prefix = self.offline_benchmark_prefix(
+            dataset_name=dataset_name,
+            dataset_version=dataset_version,
+            job_id=job_id,
         )
         for filename, data in artifacts.items():
+            key = self.offline_benchmark_artifact_key(prefix=prefix, filename=filename)
             if filename.endswith(".jsonl"):
                 content_type = "application/x-ndjson"
             else:
                 content_type = "application/json"
             client.put_object(
                 Bucket=bucket,
-                Key=f"{prefix}/{filename}",
+                Key=key,
                 Body=data,
                 ContentType=content_type,
             )
         return prefix
+
+    def offline_benchmark_prefix(
+        self,
+        *,
+        dataset_name: str,
+        dataset_version: str | None,
+        job_id: str,
+    ) -> str:
+        """Build canonical offline benchmark key prefix with partition labels."""
+        return self._offline_benchmark_prefix(
+            dataset_name=dataset_name,
+            dataset_version=dataset_version,
+            job_id=job_id,
+        )
+
+    def offline_benchmark_artifact_key(self, *, prefix: str, filename: str) -> str:
+        """Resolve canonical S3 object key for one offline benchmark artifact."""
+        return self._offline_benchmark_artifact_key(prefix=prefix, filename=filename)
 
     @staticmethod
     def _runtime_prefix(*, repo_id: str, ref: str, job_id: str) -> str:
@@ -84,6 +101,40 @@ class S3Connector:
         ref_key = S3Connector._sanitize_identifier(ref)
         job_key = S3Connector._sanitize_identifier(job_id)
         return f"runtime-index/{repo_key}/{ref_key}/{job_key}"
+
+    @staticmethod
+    def _offline_benchmark_prefix(
+        *,
+        dataset_name: str,
+        dataset_version: str | None,
+        job_id: str,
+    ) -> str:
+        """Build canonical offline benchmark root prefix for one dataset run."""
+        dataset_key = S3Connector._sanitize_identifier(dataset_name)
+        version_key = S3Connector._sanitize_identifier(dataset_version or "latest")
+        job_key = S3Connector._sanitize_identifier(job_id)
+        return (
+            "offline-datasets/benchmark/"
+            f"dataset={dataset_key}/"
+            f"version={version_key}/"
+            f"run_id={job_key}"
+        )
+
+    @staticmethod
+    def _offline_benchmark_artifact_key(*, prefix: str, filename: str) -> str:
+        """Map artifact filenames to canonical medallion/object-key locations."""
+        mappings = {
+            "manifest.json": "manifests/run_manifest.json",
+            "ingest.jsonl": "bronze/records.jsonl",
+            "clean.jsonl": "silver/records.jsonl",
+            "dataset_instances.jsonl": "gold/dataset_instances.jsonl",
+            "quarantine.jsonl": "quarantine/invalid_rows.jsonl",
+        }
+        suffix = mappings.get(filename)
+        if suffix is None:
+            safe_filename = S3Connector._sanitize_identifier(filename)
+            suffix = f"misc/{safe_filename}"
+        return f"{prefix}/{suffix}"
 
     @staticmethod
     def _sanitize_identifier(value: str) -> str:

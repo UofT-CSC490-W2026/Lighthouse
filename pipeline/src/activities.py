@@ -729,21 +729,74 @@ def _store_offline_dataset(payload: dict[str, Any]) -> dict[str, Any]:
     dataset_version = _coerce_optional_str(payload.get("dataset_version"))
     job_id = _require_str(payload, "job_id")
     workflow_id = _require_str(payload, "workflow_id")
+    ingest_stats = payload.get("ingest_stats") or {}
+    clean_stats = payload.get("clean_stats") or {}
+    transform_stats = payload.get("transform_stats") or {}
+    quarantine_path_value = _coerce_optional_str(payload.get("quarantine_path"))
+
+    s3_key_prefix = _offline_s3_key_prefix(
+        dataset_name=dataset_name,
+        dataset_version=dataset_version,
+        job_id=job_id,
+    )
+    s3_artifact_keys = _offline_s3_artifact_keys(
+        s3_key_prefix=s3_key_prefix,
+        artifact_names=[
+            "manifest.json",
+            "ingest.jsonl",
+            "clean.jsonl",
+            "dataset_instances.jsonl",
+            "quarantine.jsonl",
+        ],
+    )
 
     manifest_path = artifact_dir / "offline_manifest.json"
     manifest = {
+        "manifest_schema_version": "offline-run-manifest/v1",
+        "workflow_type": "OfflineDatasetWorkflow",
+        "status": "READY",
         "dataset_name": dataset_name,
         "dataset_version": dataset_version,
         "workflow_id": workflow_id,
-        "job_id": job_id,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "ingest_stats": payload.get("ingest_stats"),
-        "clean_stats": payload.get("clean_stats"),
-        "transform_stats": payload.get("transform_stats"),
-        "ingest_path": str(ingest_path),
-        "clean_path": str(clean_path),
-        "transform_path": str(transform_path),
-        "quarantine_path": _coerce_optional_str(payload.get("quarantine_path")),
+        "run_id": job_id,
+        "created_at_utc": datetime.now(timezone.utc).isoformat(),
+        "partitions": {
+            "dataset": dataset_name,
+            "version": dataset_version or "latest",
+            "run_id": job_id,
+        },
+        "metrics": {
+            "records_in": ingest_stats.get("records_in"),
+            "records_clean": clean_stats.get("clean_record_count"),
+            "records_invalid": clean_stats.get("invalid_record_count"),
+            "records_out": transform_stats.get("dataset_instance_count"),
+        },
+        "artifacts": {
+            "bronze": {
+                "local_path": str(ingest_path),
+                "s3_key": s3_artifact_keys.get("ingest.jsonl"),
+            },
+            "silver": {
+                "local_path": str(clean_path),
+                "s3_key": s3_artifact_keys.get("clean.jsonl"),
+            },
+            "gold": {
+                "local_path": str(transform_path),
+                "s3_key": s3_artifact_keys.get("dataset_instances.jsonl"),
+            },
+            "quarantine": {
+                "local_path": quarantine_path_value,
+                "s3_key": s3_artifact_keys.get("quarantine.jsonl"),
+            },
+            "manifest": {
+                "local_path": str(manifest_path),
+                "s3_key": s3_artifact_keys.get("manifest.json"),
+            },
+        },
+        "storage": {
+            "bucket": settings.s3_bucket,
+            "s3_key_prefix": s3_key_prefix,
+        },
     }
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
 
@@ -753,13 +806,12 @@ def _store_offline_dataset(payload: dict[str, Any]) -> dict[str, Any]:
         "clean.jsonl": clean_path.read_bytes(),
         "dataset_instances.jsonl": transform_path.read_bytes(),
     }
-    quarantine_path_value = _coerce_optional_str(payload.get("quarantine_path"))
     if quarantine_path_value:
         quarantine_path = Path(quarantine_path_value)
         if quarantine_path.exists():
             artifacts["quarantine.jsonl"] = quarantine_path.read_bytes()
 
-    s3_key_prefix = _maybe_store_offline_artifacts_to_s3(
+    stored_s3_key_prefix = _maybe_store_offline_artifacts_to_s3(
         dataset_name=dataset_name,
         dataset_version=dataset_version,
         job_id=job_id,
@@ -773,7 +825,7 @@ def _store_offline_dataset(payload: dict[str, Any]) -> dict[str, Any]:
         "artifact_manifest_path": str(manifest_path),
         "artifact_dataset_instances_path": str(transform_path),
         "store_stats": {
-            "s3_key_prefix": s3_key_prefix,
+            "s3_key_prefix": stored_s3_key_prefix,
         },
     }
 
@@ -1293,6 +1345,41 @@ def _resolve_snapshot_sha(snapshot_sha: Any, *, corpus_hash: Any) -> str:
     if isinstance(corpus_hash, str) and corpus_hash.strip():
         return f"content-{corpus_hash.strip()[:40]}"
     return "content-unknown"
+
+
+def _offline_s3_key_prefix(
+    *,
+    dataset_name: str,
+    dataset_version: str | None,
+    job_id: str,
+) -> str | None:
+    """Resolve offline benchmark S3 prefix if bucket storage is configured."""
+    bucket = settings.s3_bucket
+    if not bucket:
+        return None
+    return _S3_CONNECTOR.offline_benchmark_prefix(
+        dataset_name=dataset_name,
+        dataset_version=dataset_version,
+        job_id=job_id,
+    )
+
+
+def _offline_s3_artifact_keys(
+    *,
+    s3_key_prefix: str | None,
+    artifact_names: Iterable[str],
+) -> dict[str, str | None]:
+    """Resolve optional S3 keys for offline artifact filenames."""
+    result: dict[str, str | None] = {}
+    for artifact_name in artifact_names:
+        if s3_key_prefix is None:
+            result[artifact_name] = None
+            continue
+        result[artifact_name] = _S3_CONNECTOR.offline_benchmark_artifact_key(
+            prefix=s3_key_prefix,
+            filename=artifact_name,
+        )
+    return result
 
 
 def _maybe_store_runtime_artifacts_to_s3(
