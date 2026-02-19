@@ -39,6 +39,10 @@ _OFFLINE_SUPPORTED_DATASET_KEYS = frozenset(
     re.sub(r"[-_]+", "", name.strip().lower())
     for name in _OFFLINE_SUPPORTED_DATASETS
 )
+_OFFLINE_SCHEMA_VERSION = "offline-clean-schema/v1"
+_OFFLINE_REPO_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*$")
+_OFFLINE_TOKEN_PATTERN = re.compile(r"^[a-z0-9._-]+$")
+_OFFLINE_SNAPSHOT_SHA_PATTERN = re.compile(r"^[0-9a-f]{7,64}$")
 
 _SKIP_PREFIXES = (
     ".git/",
@@ -617,6 +621,7 @@ def _clean_offline_dataset(payload: dict[str, Any]) -> dict[str, Any]:
     dataset_version = _coerce_optional_str(payload.get("dataset_version"))
     normalized_candidates: list[dict[str, Any]] = []
     invalid_rows: list[dict[str, Any]] = []
+    schema_invalid_count = 0
     for row_index, ingest_row in enumerate(_read_jsonl(ingest_path)):
         raw_record = ingest_row.get("raw")
         if not isinstance(raw_record, dict):
@@ -642,6 +647,20 @@ def _clean_offline_dataset(payload: dict[str, Any]) -> dict[str, Any]:
                     "row_index": row_index,
                     "record_id": ingest_row.get("record_id"),
                     "reason": "missing_required_fields",
+                }
+            )
+            continue
+
+        schema_errors = _validate_offline_clean_row_schema(normalized)
+        if schema_errors:
+            schema_invalid_count += 1
+            invalid_rows.append(
+                {
+                    "row_index": row_index,
+                    "record_id": ingest_row.get("record_id"),
+                    "reason": "schema_validation_failed",
+                    "schema_version": _OFFLINE_SCHEMA_VERSION,
+                    "validation_errors": schema_errors,
                 }
             )
             continue
@@ -682,6 +701,7 @@ def _clean_offline_dataset(payload: dict[str, Any]) -> dict[str, Any]:
             "invalid_record_count": len(invalid_rows),
             "duplicate_instance_id_dropped": dedupe_stats["duplicate_instance_id"],
             "duplicate_content_dropped": dedupe_stats["duplicate_content"],
+            "schema_invalid_count": schema_invalid_count,
         },
     }
 
@@ -971,6 +991,53 @@ def _load_swebench_source_snapshot(
         dataset_version=dataset_version,
         dataset_source_path=dataset_source_path,
     )
+
+
+def _validate_offline_clean_row_schema(row: dict[str, Any]) -> list[str]:
+    """Validate normalized offline rows against the canonical clean schema."""
+    errors: list[str] = []
+    required_fields = (
+        "instance_id",
+        "task",
+        "repo_id",
+        "corrected_diff_ref",
+        "split",
+        "failure_type",
+        "dataset_name",
+        "dataset_version",
+    )
+    for field in required_fields:
+        value = row.get(field)
+        if not isinstance(value, str) or not value.strip():
+            errors.append(f"{field}: required non-empty string")
+
+    repo_id = _coerce_optional_str(row.get("repo_id"))
+    if repo_id is not None and _OFFLINE_REPO_ID_PATTERN.fullmatch(repo_id) is None:
+        errors.append("repo_id: expected owner/repo format")
+
+    split = _coerce_optional_str(row.get("split"))
+    if split is not None and _OFFLINE_TOKEN_PATTERN.fullmatch(split) is None:
+        errors.append("split: expected lowercase token format")
+
+    failure_type = _coerce_optional_str(row.get("failure_type"))
+    if (
+        failure_type is not None
+        and _OFFLINE_TOKEN_PATTERN.fullmatch(failure_type) is None
+    ):
+        errors.append("failure_type: expected lowercase token format")
+
+    snapshot_sha = _coerce_optional_str(row.get("snapshot_sha"))
+    if (
+        snapshot_sha is not None
+        and _OFFLINE_SNAPSHOT_SHA_PATTERN.fullmatch(snapshot_sha) is None
+    ):
+        errors.append("snapshot_sha: expected 7-64 lowercase hex characters")
+
+    failure_ref = row.get("failure_ref")
+    if failure_ref is not None and not isinstance(failure_ref, str):
+        errors.append("failure_ref: expected string or null")
+
+    return errors
 
 
 def _dedupe_offline_rows(

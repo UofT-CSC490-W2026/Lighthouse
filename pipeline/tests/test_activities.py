@@ -106,7 +106,7 @@ def test_offline_activity_flow_happy_path(tmp_path: Path) -> None:
                 "instance_id": "swe-1",
                 "repo": "octo/repo",
                 "problem_statement": "Fix parser edge-case regression",
-                "base_commit": "abc123",
+                "base_commit": "abc1234",
                 "patch": "diff --git a/app.py b/app.py",
                 "test_patch": "FAIL_TO_PASS=test_parser",
                 "split": "test",
@@ -229,7 +229,7 @@ def test_offline_clean_dedupe_rules_are_deterministic(tmp_path: Path) -> None:
                 "instance_id": "dup-1",
                 "repo": "Octo/Repo",
                 "problem_statement": "Fix same bug",
-                "base_commit": "abc123",
+                "base_commit": "abc1234",
                 "patch": "diff --git a/a.py b/a.py\n+fix\n",
                 "test_patch": "FAIL_TO_PASS=test_alpha",
                 "split": "Test",
@@ -239,7 +239,7 @@ def test_offline_clean_dedupe_rules_are_deterministic(tmp_path: Path) -> None:
                 "instance_id": "dup-1",
                 "repo": "octo/repo",
                 "problem_statement": "Fix same bug",
-                "base_commit": "abc123",
+                "base_commit": "abc1234",
                 "patch": "diff --git a/a.py b/a.py\n+fix\n",
                 "split": "test",
                 "dataset_version": "v1",
@@ -248,7 +248,7 @@ def test_offline_clean_dedupe_rules_are_deterministic(tmp_path: Path) -> None:
                 "instance_id": "alias-1",
                 "repo": "https://github.com/octo/repo",
                 "problem_statement": "Fix same bug",
-                "base_commit": "abc123",
+                "base_commit": "abc1234",
                 "patch": "diff --git a/a.py b/a.py\n+fix\n",
                 "test_patch": "FAIL_TO_PASS=test_alpha",
                 "split": "test",
@@ -287,6 +287,60 @@ def test_offline_clean_dedupe_rules_are_deterministic(tmp_path: Path) -> None:
         "duplicate_instance_id_dropped",
         "duplicate_content_signature_dropped",
     }
+
+
+def test_offline_clean_schema_validation_quarantine(tmp_path: Path) -> None:
+    """Offline clean should quarantine rows that fail clean-schema validation."""
+    source_path = tmp_path / "swebench-v1.jsonl"
+    _write_jsonl(
+        source_path,
+        [
+            {
+                "instance_id": "valid-1",
+                "repo": "octo/repo",
+                "problem_statement": "valid row",
+                "base_commit": "abc1234",
+                "patch": "diff --git a/a.py b/a.py\n+fix\n",
+                "split": "test",
+                "dataset_version": "v1",
+            },
+            {
+                "instance_id": "invalid-1",
+                "repo": "octo repo",
+                "problem_statement": "invalid repo id row",
+                "base_commit": "NOT_HEX_SHA",
+                "patch": "diff --git a/a.py b/a.py\n+fix\n",
+                "split": "test",
+                "dataset_version": "v1",
+            },
+        ],
+    )
+    payload = {
+        **_offline_payload(),
+        "dataset_source_path": str(source_path),
+    }
+    with (
+        patch.object(activities, "_log_activity_info"),
+        patch.object(activities, "_offline_artifact_dir", return_value=tmp_path),
+    ):
+        ingest_result = _run(activities.ingest_activity(payload))
+        clean_result = _run(activities.clean_activity(ingest_result))
+
+    clean_rows = _read_jsonl(Path(clean_result["clean_path"]))
+    quarantine_rows = _read_jsonl(Path(clean_result["quarantine_path"]))
+
+    assert len(clean_rows) == 1
+    assert clean_rows[0]["instance_id"] == "valid-1"
+    assert clean_result["clean_stats"]["clean_record_count"] == 1
+    assert clean_result["clean_stats"]["invalid_record_count"] == 1
+    assert clean_result["clean_stats"]["schema_invalid_count"] == 1
+
+    assert len(quarantine_rows) == 1
+    assert quarantine_rows[0]["reason"] == "schema_validation_failed"
+    assert quarantine_rows[0]["schema_version"] == "offline-clean-schema/v1"
+    validation_errors = quarantine_rows[0]["validation_errors"]
+    assert any("repo_id" in error for error in validation_errors)
+    assert any("snapshot_sha" in error for error in validation_errors)
 
 
 def test_clean_activity_happy_path(tmp_path: Path) -> None:
