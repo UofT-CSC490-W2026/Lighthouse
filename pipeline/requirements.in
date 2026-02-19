@@ -9,3 +9,4 @@ pymilvus
 gitpython
 boto3
 PyGithub
+pytest
