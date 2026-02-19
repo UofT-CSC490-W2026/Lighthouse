@@ -55,6 +55,7 @@ class Settings(BaseSettings):
     github_read_token: SecretStr | None = None
     validate_milvus_on_startup: bool = False
     validate_s3_on_startup: bool = False
+    run_worker_on_startup: bool = True
 
 
 @lru_cache(maxsize=1)

@@ -19,7 +19,7 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-## Run worker
+## Run service (HTTP + worker)
 
 ```bash
 set -a
@@ -27,6 +27,24 @@ source .env
 set +a
 # ensure persistence tables are present
 alembic -c alembic.ini upgrade head
+python -m uvicorn src.server:app --host 0.0.0.0 --port 8080
+```
+
+Health endpoints:
+
+- `GET /health` for liveness
+- `GET /ready` for readiness (worker/task status)
+
+Optional:
+
+- Set `RUN_WORKER_ON_STARTUP=false` to expose HTTP endpoints without starting worker loops (useful for tests/dev diagnostics).
+
+## Run worker only (no HTTP server)
+
+```bash
+set -a
+source .env
+set +a
 python -m src.worker
 ```
 

@@ -173,7 +173,13 @@ async def _run_mental_model_worker(client: Client) -> None:
 
 async def main() -> None:
     """Start all pipeline workers concurrently in a single process."""
-    configure_logging(debug=settings.debug)
+    await run_worker_service()
+
+
+async def run_worker_service(*, configure_log: bool = True) -> None:
+    """Run worker startup validation and poll all task queues indefinitely."""
+    if configure_log:
+        configure_logging(debug=settings.debug)
     LOGGER.info(
         structured_event(
             "pipeline.worker.startup.begin",

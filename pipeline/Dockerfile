@@ -11,4 +11,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY pipeline/src /app/pipeline/src
 
-CMD ["python", "-m", "src.worker"]
+EXPOSE 8080
+
+CMD ["python", "-m", "uvicorn", "src.server:app", "--host", "0.0.0.0", "--port", "8080"]
