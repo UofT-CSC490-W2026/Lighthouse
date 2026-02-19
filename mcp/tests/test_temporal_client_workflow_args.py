@@ -18,7 +18,9 @@ def test_start_runtime_index_workflow_includes_github_token_when_provided() -> N
     )
 
     async def _run() -> None:
-        with patch.object(wrapper, "_get_client", new=AsyncMock(return_value=mock_client)):
+        with patch.object(
+            wrapper, "_get_client", new=AsyncMock(return_value=mock_client)
+        ):
             await wrapper.start_runtime_index_workflow(
                 repo_id="octo/repo",
                 repo_url="https://github.com/octo/repo",
@@ -44,7 +46,9 @@ def test_start_runtime_index_workflow_omits_github_token_when_not_provided() -> 
     )
 
     async def _run() -> None:
-        with patch.object(wrapper, "_get_client", new=AsyncMock(return_value=mock_client)):
+        with patch.object(
+            wrapper, "_get_client", new=AsyncMock(return_value=mock_client)
+        ):
             await wrapper.start_runtime_index_workflow(
                 repo_id="octo/repo",
                 repo_url="https://github.com/octo/repo",

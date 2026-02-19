@@ -206,8 +206,7 @@ class SwebenchSnapshotAdapter:
         suffix = path.suffix.lower()
         if suffix not in _SUPPORTED_SUFFIXES:
             raise ValueError(
-                "SWE-bench snapshot file must be .json or .jsonl "
-                f"(received: {path})"
+                "SWE-bench snapshot file must be .json or .jsonl " f"(received: {path})"
             )
 
     def _parse_records(self, *, source_path: Path) -> list[dict[str, Any]]:

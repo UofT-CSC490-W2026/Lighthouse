@@ -98,12 +98,8 @@ def _extract_version(*, package: str, text: str) -> str | None:
     python_pattern = re.compile(
         rf"(?im)^\s*{re.escape(normalized_package)}\s*(?:==|~=|>=|<=|>|<)\s*([A-Za-z0-9._+-]+)\s*$"
     )
-    npm_pattern = re.compile(
-        rf'(?i)"{re.escape(normalized_package)}"\s*:\s*"([^"]+)"'
-    )
-    poetry_pattern = re.compile(
-        rf'(?i){re.escape(normalized_package)}\s*=\s*"([^"]+)"'
-    )
+    npm_pattern = re.compile(rf'(?i)"{re.escape(normalized_package)}"\s*:\s*"([^"]+)"')
+    poetry_pattern = re.compile(rf'(?i){re.escape(normalized_package)}\s*=\s*"([^"]+)"')
 
     for pattern in (python_pattern, npm_pattern, poetry_pattern):
         match = pattern.search(text)

@@ -404,9 +404,13 @@ def test_mental_model_workflow_failure_path() -> None:
 
 def test_evaluation_refresh_workflow_happy_path() -> None:
     """Evaluation refresh workflow should execute and return READY."""
+
     async def execute_side_effect(activity_fn, payload, **kwargs):
         if activity_fn is workflows.evaluation_refresh_activity:
-            return {**payload, "evaluation_refresh_stats": {"dataset_instance_count": 42}}
+            return {
+                **payload,
+                "evaluation_refresh_stats": {"dataset_instance_count": 42},
+            }
         if activity_fn is workflows.baseline_evaluation_activity:
             return {
                 **payload,

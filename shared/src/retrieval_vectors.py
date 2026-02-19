@@ -10,7 +10,9 @@ _TOKEN_PATTERN = re.compile(r"[A-Za-z0-9_./:-]+")
 DEFAULT_VECTOR_DIMENSIONS = 64
 
 
-def embed_text(text: str, *, dimensions: int = DEFAULT_VECTOR_DIMENSIONS) -> list[float]:
+def embed_text(
+    text: str, *, dimensions: int = DEFAULT_VECTOR_DIMENSIONS
+) -> list[float]:
     """Return a deterministic unit vector embedding for the provided text."""
     if dimensions <= 0:
         raise ValueError("dimensions must be a positive integer")

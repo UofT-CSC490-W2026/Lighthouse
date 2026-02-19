@@ -44,7 +44,9 @@ def test_start_offline_ingestion_happy_path() -> None:
         source_event_id=None,
         force_reingest=False,
     )
-    with patch("src.offline_trigger.Client.connect", new=AsyncMock(return_value=fake_client)):
+    with patch(
+        "src.offline_trigger.Client.connect", new=AsyncMock(return_value=fake_client)
+    ):
         result = _run(OfflineIngestionTriggerClient().start(request))
 
     assert result.status == "PENDING"
@@ -83,7 +85,9 @@ def test_start_offline_ingestion_reuses_existing_workflow_on_collision() -> None
         dataset_version="v1",
         dataset_source_path="/tmp/swebench-v1.jsonl",
     )
-    with patch("src.offline_trigger.Client.connect", new=AsyncMock(return_value=fake_client)):
+    with patch(
+        "src.offline_trigger.Client.connect", new=AsyncMock(return_value=fake_client)
+    ):
         result = _run(OfflineIngestionTriggerClient().start(request))
 
     assert result.status == "PENDING"
@@ -104,7 +108,9 @@ def test_start_offline_ingestion_force_reingest_uses_unique_workflow_id() -> Non
         dataset_source_path="/tmp/swebench-v1.jsonl",
         force_reingest=True,
     )
-    with patch("src.offline_trigger.Client.connect", new=AsyncMock(return_value=fake_client)):
+    with patch(
+        "src.offline_trigger.Client.connect", new=AsyncMock(return_value=fake_client)
+    ):
         result = _run(OfflineIngestionTriggerClient().start(request))
 
     assert result.status == "PENDING"
@@ -128,7 +134,9 @@ def test_start_offline_ingestion_passes_incremental_bounds() -> None:
         max_records=500,
         source_cursor="cursor-001",
     )
-    with patch("src.offline_trigger.Client.connect", new=AsyncMock(return_value=fake_client)):
+    with patch(
+        "src.offline_trigger.Client.connect", new=AsyncMock(return_value=fake_client)
+    ):
         result = _run(OfflineIngestionTriggerClient().start(request))
 
     assert result.status == "PENDING"

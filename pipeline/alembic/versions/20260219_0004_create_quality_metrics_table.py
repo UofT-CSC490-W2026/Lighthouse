@@ -61,4 +61,3 @@ def downgrade() -> None:
     """Drop quality metric table and related index."""
     op.drop_index("idx_quality_metrics_dataset", table_name="quality_metrics")
     op.drop_table("quality_metrics")
-

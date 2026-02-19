@@ -70,7 +70,9 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("run_id"),
     )
-    op.create_index("idx_pipeline_runs_workflow_type", "pipeline_runs", ["workflow_type"])
+    op.create_index(
+        "idx_pipeline_runs_workflow_type", "pipeline_runs", ["workflow_type"]
+    )
     op.create_index("idx_pipeline_runs_status", "pipeline_runs", ["status"])
     op.create_index(
         "idx_pipeline_runs_dataset",
@@ -85,4 +87,3 @@ def downgrade() -> None:
     op.drop_index("idx_pipeline_runs_status", table_name="pipeline_runs")
     op.drop_index("idx_pipeline_runs_workflow_type", table_name="pipeline_runs")
     op.drop_table("pipeline_runs")
-

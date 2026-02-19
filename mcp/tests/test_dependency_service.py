@@ -42,9 +42,7 @@ def test_dependency_service_maps_hits_and_extracts_version() -> None:
             score=0.88,
         )
     ]
-    service = DependencyService(
-        retrieval_backend=_FakeRetrievalBackend(hits=hits)
-    )
+    service = DependencyService(retrieval_backend=_FakeRetrievalBackend(hits=hits))
 
     response = _run(
         service.get_dependency_context(

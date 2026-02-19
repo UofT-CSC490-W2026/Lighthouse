@@ -95,7 +95,9 @@ class RollingIssuePrDiffAdapter:
         """Validate explicit dataset version label for rolling snapshots."""
         normalized = dataset_version.strip()
         if not normalized:
-            raise ValueError("dataset_version is required for rolling issue/pr snapshots")
+            raise ValueError(
+                "dataset_version is required for rolling issue/pr snapshots"
+            )
         return normalized
 
     def _resolve_input_path(self, dataset_source_path: str) -> Path:
@@ -286,9 +288,7 @@ class RollingIssuePrDiffAdapter:
 def _rolling_chain_key(record: dict[str, Any], *, fallback_index: int) -> str:
     """Build deterministic chain-level dedupe key for rolling records."""
     explicit = _coerce_text(
-        record.get("chain_id")
-        or record.get("instance_id")
-        or record.get("event_id")
+        record.get("chain_id") or record.get("instance_id") or record.get("event_id")
     )
     if explicit:
         return explicit

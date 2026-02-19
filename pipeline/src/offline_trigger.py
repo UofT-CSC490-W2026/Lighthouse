@@ -64,7 +64,9 @@ class OfflineIngestionTriggerClient:
         self._client: Client | None = None
         self._lock = asyncio.Lock()
 
-    async def start(self, request: StartOfflineIngestionRequest) -> StartOfflineIngestionResponse:
+    async def start(
+        self, request: StartOfflineIngestionRequest
+    ) -> StartOfflineIngestionResponse:
         """Start an offline dataset workflow with canonical idempotency behavior."""
         client = await self._get_client()
         workflow_id = offline_dataset_workflow_id(

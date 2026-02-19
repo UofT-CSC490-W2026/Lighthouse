@@ -873,7 +873,9 @@ def test_upsert_runtime_chunks_to_milvus_skips_when_disabled(tmp_path: Path) -> 
 
     with (
         patch.object(activities.settings, "runtime_milvus_write_enabled", False),
-        patch.object(activities._MILVUS_CONNECTOR, "upsert_runtime_chunks") as mock_call,
+        patch.object(
+            activities._MILVUS_CONNECTOR, "upsert_runtime_chunks"
+        ) as mock_call,
     ):
         inserted = activities._upsert_runtime_chunks_to_milvus(
             repo_id="octo/repo",

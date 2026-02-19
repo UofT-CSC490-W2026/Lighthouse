@@ -389,11 +389,7 @@ async def get_dataset_baseline_counts(
         DatasetInstance.dataset_name == dataset_name,
         DatasetInstance.dataset_version == dataset_version,
     )
-    stmt_total = (
-        select(func.count())
-        .select_from(DatasetInstance)
-        .where(*base_filters)
-    )
+    stmt_total = select(func.count()).select_from(DatasetInstance).where(*base_filters)
     stmt_fail_to_pass = (
         select(func.count())
         .select_from(DatasetInstance)

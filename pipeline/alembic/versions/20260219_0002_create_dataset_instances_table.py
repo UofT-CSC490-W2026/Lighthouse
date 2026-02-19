@@ -61,4 +61,3 @@ def downgrade() -> None:
     op.drop_index("idx_dataset_instances_split", table_name="dataset_instances")
     op.drop_index("idx_dataset_instances_repo_id", table_name="dataset_instances")
     op.drop_table("dataset_instances")
-

@@ -94,4 +94,3 @@ def test_start_monthly_evaluation_refresh_reuses_existing_schedule() -> None:
     assert result.reused_existing is True
     assert result.workflow_id == "evaluation-refresh:swebench:v1:monthly"
     assert result.run_id == "existing_eval_run"
-

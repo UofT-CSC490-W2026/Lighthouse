@@ -95,7 +95,9 @@ async def lifespan(app: FastAPI):
                 await worker_task
 
 
-app = FastAPI(title="Lighthouse Pipeline Service", debug=settings.debug, lifespan=lifespan)
+app = FastAPI(
+    title="Lighthouse Pipeline Service", debug=settings.debug, lifespan=lifespan
+)
 
 
 @app.get("/health")

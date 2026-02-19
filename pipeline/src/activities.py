@@ -58,16 +58,13 @@ _OFFLINE_ROLLING_DATASETS = {
 }
 _OFFLINE_SUPPORTED_DATASETS = _OFFLINE_BENCHMARK_DATASETS | _OFFLINE_ROLLING_DATASETS
 _OFFLINE_SUPPORTED_DATASET_KEYS = frozenset(
-    re.sub(r"[-_]+", "", name.strip().lower())
-    for name in _OFFLINE_SUPPORTED_DATASETS
+    re.sub(r"[-_]+", "", name.strip().lower()) for name in _OFFLINE_SUPPORTED_DATASETS
 )
 _OFFLINE_BENCHMARK_DATASET_KEYS = frozenset(
-    re.sub(r"[-_]+", "", name.strip().lower())
-    for name in _OFFLINE_BENCHMARK_DATASETS
+    re.sub(r"[-_]+", "", name.strip().lower()) for name in _OFFLINE_BENCHMARK_DATASETS
 )
 _OFFLINE_ROLLING_DATASET_KEYS = frozenset(
-    re.sub(r"[-_]+", "", name.strip().lower())
-    for name in _OFFLINE_ROLLING_DATASETS
+    re.sub(r"[-_]+", "", name.strip().lower()) for name in _OFFLINE_ROLLING_DATASETS
 )
 _OFFLINE_SCHEMA_VERSION = "offline-clean-schema/v1"
 _OFFLINE_REPO_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*$")
@@ -885,7 +882,9 @@ def _offline_artifact_dir(payload: dict[str, Any], *, dataset_key: str) -> Path:
     return artifact_dir
 
 
-def _evaluation_refresh_artifact_dir(payload: dict[str, Any], *, dataset_key: str) -> Path:
+def _evaluation_refresh_artifact_dir(
+    payload: dict[str, Any], *, dataset_key: str
+) -> Path:
     """Build evaluation refresh artifact directory for a pinned dataset run."""
     job_id = _require_str(payload, "job_id")
     base_dir = (
@@ -939,9 +938,10 @@ def _load_runtime_chunk_records_for_milvus(
         start_char = _coerce_optional_non_negative_int(row.get("start_char")) or 0
         end_char = _coerce_optional_non_negative_int(row.get("end_char")) or 0
         chunk_index = _coerce_optional_non_negative_int(row.get("chunk_index")) or 0
-        text_hash = _coerce_optional_str(row.get("text_hash")) or hashlib.sha1(
-            text.encode("utf-8")
-        ).hexdigest()
+        text_hash = (
+            _coerce_optional_str(row.get("text_hash"))
+            or hashlib.sha1(text.encode("utf-8")).hexdigest()
+        )
         chunk_records.append(
             RuntimeChunkRecord(
                 chunk_id=chunk_id,
@@ -1611,7 +1611,9 @@ def _dedupe_offline_rows(
         by_instance_id.setdefault(instance_id, []).append(candidate)
 
     for instance_id in sorted(by_instance_id):
-        winner, losers = _select_canonical_offline_candidate(by_instance_id[instance_id])
+        winner, losers = _select_canonical_offline_candidate(
+            by_instance_id[instance_id]
+        )
         retained_after_instance.append(winner)
         if losers:
             dedupe_stats["duplicate_instance_id"] += len(losers)
@@ -1635,12 +1637,16 @@ def _dedupe_offline_rows(
         by_content_key.setdefault(content_key, []).append(candidate)
 
     for content_key in sorted(by_content_key):
-        winner, losers = _select_canonical_offline_candidate(by_content_key[content_key])
+        winner, losers = _select_canonical_offline_candidate(
+            by_content_key[content_key]
+        )
         retained_after_content.append(winner)
         if losers:
             dedupe_stats["duplicate_content"] += len(losers)
             winner_record_id = _coerce_optional_str(winner.get("record_id"))
-            winner_instance_id = _coerce_optional_str(winner["normalized"].get("instance_id"))
+            winner_instance_id = _coerce_optional_str(
+                winner["normalized"].get("instance_id")
+            )
             for loser in losers:
                 duplicate_rows.append(
                     {
@@ -1849,7 +1855,9 @@ def _build_issue_task(raw_record: dict[str, Any]) -> str | None:
     return issue_body
 
 
-def _compose_issue_pr_chain_id(raw_record: dict[str, Any], *, repo_id: str) -> str | None:
+def _compose_issue_pr_chain_id(
+    raw_record: dict[str, Any], *, repo_id: str
+) -> str | None:
     """Build deterministic chain id from repo + issue/pr numbers when present."""
     issue_number = _coerce_optional_str(raw_record.get("issue_number"))
     pr_number = _coerce_optional_str(raw_record.get("pr_number"))
