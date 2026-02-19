@@ -111,3 +111,31 @@ def test_start_offline_ingestion_force_reingest_uses_unique_workflow_id() -> Non
     assert result.reused_existing is False
     assert result.workflow_id.startswith("offline-datasets:swebench:v1:force:")
     assert result.run_id == "run_offline_forced"
+
+
+def test_start_offline_ingestion_passes_incremental_bounds() -> None:
+    """Trigger client should propagate rolling-window controls to workflow args."""
+    fake_handle = SimpleNamespace(first_execution_run_id="run_offline_windowed")
+    fake_client = SimpleNamespace(
+        start_workflow=AsyncMock(return_value=fake_handle),
+    )
+    request = StartOfflineIngestionRequest(
+        dataset_name="issue_pr_diff",
+        dataset_version="rolling-live",
+        dataset_source_path="/tmp/issue-pr-diff.jsonl",
+        watermark_start="2026-02-01T00:00:00Z",
+        watermark_end="2026-02-02T00:00:00Z",
+        max_records=500,
+        source_cursor="cursor-001",
+    )
+    with patch("src.offline_trigger.Client.connect", new=AsyncMock(return_value=fake_client)):
+        result = _run(OfflineIngestionTriggerClient().start(request))
+
+    assert result.status == "PENDING"
+    assert result.workflow_id == "offline-datasets:issue_pr_diff:rolling-live"
+    call = fake_client.start_workflow.await_args
+    payload = call.args[1]
+    assert payload["watermark_start"] == "2026-02-01T00:00:00Z"
+    assert payload["watermark_end"] == "2026-02-02T00:00:00Z"
+    assert payload["max_records"] == 500
+    assert payload["source_cursor"] == "cursor-001"

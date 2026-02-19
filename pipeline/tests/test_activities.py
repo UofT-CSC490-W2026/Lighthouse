@@ -179,6 +179,102 @@ def test_offline_activity_flow_happy_path(tmp_path: Path) -> None:
     assert manifest["exports"]["dataset_instances"]["record_count"] == 0
 
 
+def test_offline_activity_flow_rolling_issue_pr_diff_happy_path(tmp_path: Path) -> None:
+    """Rolling issue/pr flow should support incremental ingest and upsert-ready output."""
+    source_path = tmp_path / "issue_pr_diff.jsonl"
+    _write_jsonl(
+        source_path,
+        [
+            {
+                "repository_full_name": "octo/repo",
+                "issue_number": 10,
+                "pr_number": 20,
+                "issue_title": "Parser fails on unicode edge case",
+                "issue_body": "Failure occurs when reading mixed-width characters.",
+                "merge_patch": "diff --git a/parser.py b/parser.py",
+                "failing_tests": ["tests/test_parser.py::test_unicode"],
+                "merged_at": "2026-02-01T01:00:00Z",
+                "dataset_version": "rolling-live",
+            },
+            {
+                "repository_full_name": "octo/repo",
+                "issue_number": 10,
+                "pr_number": 20,
+                "issue_title": "Parser fails on unicode edge case",
+                "issue_body": "Latest correction with expanded coverage.",
+                "merge_patch": "diff --git a/parser.py b/parser.py",
+                "failing_tests": ["tests/test_parser.py::test_unicode"],
+                "merged_at": "2026-02-01T02:00:00Z",
+                "dataset_version": "rolling-live",
+            },
+            {
+                "repository_full_name": "octo/repo",
+                "issue_number": 11,
+                "pr_number": 21,
+                "issue_title": "Invalid row should be quarantined",
+                "issue_body": "No patch content in this sample.",
+                "merged_at": "2026-02-01T03:00:00Z",
+                "dataset_version": "rolling-live",
+            },
+        ],
+    )
+    payload = {
+        "job_id": "job_offline_rolling_001",
+        "workflow_id": "offline-datasets:issue_pr_diff:rolling-live",
+        "dataset_name": "issue_pr_diff",
+        "dataset_version": "rolling-live",
+        "dataset_source_path": str(source_path),
+        "watermark_start": "2026-02-01T00:00:00Z",
+        "watermark_end": "2026-02-02T00:00:00Z",
+        "max_records": 1000,
+        "source_cursor": "cursor-001",
+    }
+    with (
+        patch.object(activities, "_log_activity_info"),
+        patch.object(activities, "_offline_artifact_dir", return_value=tmp_path),
+        patch.object(activities.settings, "postgres_dsn", None),
+        patch.object(
+            activities,
+            "upsert_dataset_instances",
+            new=AsyncMock(),
+        ) as mock_export,
+        patch.object(
+            activities,
+            "_maybe_store_offline_artifacts_to_s3",
+            return_value="offline-datasets/rolling/issue_pr_diff/rolling-live/job_offline_rolling_001",
+        ),
+    ):
+        ingest_result = _run(activities.ingest_activity(payload))
+        clean_result = _run(activities.clean_activity(ingest_result))
+        transform_result = _run(activities.transform_activity(clean_result))
+        store_result = _run(activities.store_activity(transform_result))
+
+    assert ingest_result["stage"] == "ingest"
+    assert ingest_result["ingest_stats"]["records_in"] == 2
+    assert ingest_result["ingest_stats"]["raw_records_in"] == 3
+    assert ingest_result["ingest_stats"]["incremental"] is True
+    assert ingest_result["ingest_stats"]["immutable_snapshot"] is False
+    assert ingest_result["ingest_stats"]["watermark_start"] is not None
+    assert ingest_result["ingest_stats"]["watermark_end"] is not None
+
+    assert clean_result["stage"] == "clean"
+    assert clean_result["clean_stats"]["clean_record_count"] == 1
+    assert clean_result["clean_stats"]["invalid_record_count"] == 1
+    assert Path(clean_result["clean_path"]).exists()
+    assert Path(clean_result["quarantine_path"]).exists()
+
+    assert transform_result["stage"] == "transform"
+    assert transform_result["transform_stats"]["dataset_instance_count"] == 1
+    transformed_rows = _read_jsonl(Path(transform_result["transform_path"]))
+    assert transformed_rows[0]["instance_id"] == "octo/repo:10:20"
+
+    assert store_result["stage"] == "store"
+    assert store_result["store_stats"]["s3_key_prefix"] is not None
+    assert store_result["store_stats"]["dataset_instances_exported"] == 0
+    assert store_result["store_stats"]["dataset_instances_export_enabled"] is False
+    mock_export.assert_not_awaited()
+
+
 def test_store_offline_exports_dataset_instances_when_postgres_enabled(
     tmp_path: Path,
 ) -> None:
@@ -457,6 +553,139 @@ def test_offline_clean_schema_validation_quarantine(tmp_path: Path) -> None:
     assert any("snapshot_sha" in error for error in validation_errors)
 
 
+def test_evaluation_refresh_activity_happy_path(tmp_path: Path) -> None:
+    """Evaluation refresh activity should emit metadata for pinned snapshots."""
+    payload = {
+        "dataset_name": "swebench",
+        "dataset_version": "v1",
+        "workflow_id": "evaluation-refresh:swebench:v1:monthly",
+        "job_id": "run_eval_001",
+        "trigger": "monthly_schedule",
+        "requested_by": "scheduler",
+    }
+    with (
+        patch.object(activities, "_log_activity_info"),
+        patch.object(
+            activities,
+            "_evaluation_refresh_artifact_dir",
+            return_value=tmp_path,
+        ),
+        patch.object(
+            activities,
+            "get_dataset_instance_count",
+            new=AsyncMock(return_value=42),
+        ),
+    ):
+        result = _run(activities.evaluation_refresh_activity(payload))
+
+    assert result["stage"] == "evaluation_refresh"
+    assert result["evaluation_refresh_stats"]["dataset_instance_count"] == 42
+    metadata_path = Path(result["artifact_evaluation_refresh_path"])
+    assert metadata_path.exists()
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    assert metadata["dataset_name"] == "swebench"
+    assert metadata["dataset_version"] == "v1"
+    assert metadata["dataset_instance_count"] == 42
+
+
+def test_evaluation_refresh_activity_requires_pinned_dataset() -> None:
+    """Evaluation refresh should fail when no pinned dataset rows exist."""
+    payload = {
+        "dataset_name": "swebench",
+        "dataset_version": "v1",
+        "workflow_id": "evaluation-refresh:swebench:v1:monthly",
+        "job_id": "run_eval_001",
+    }
+    with (
+        patch.object(activities, "_log_activity_info"),
+        patch.object(
+            activities,
+            "get_dataset_instance_count",
+            new=AsyncMock(return_value=0),
+        ),
+        pytest.raises(ValueError, match="No pinned dataset_instances found"),
+    ):
+        _run(activities.evaluation_refresh_activity(payload))
+
+
+def test_baseline_evaluation_activity_happy_path(tmp_path: Path) -> None:
+    """Baseline evaluation should compute and persist fail-to-pass/regression rates."""
+    payload = {
+        "dataset_name": "swebench",
+        "dataset_version": "v1",
+        "workflow_id": "evaluation-refresh:swebench:v1:monthly",
+        "job_id": "run_eval_001",
+        "trigger": "monthly_schedule",
+        "requested_by": "scheduler",
+        "source_event_id": "release-2026-02",
+    }
+    with (
+        patch.object(activities, "_log_activity_info"),
+        patch.object(
+            activities,
+            "_evaluation_refresh_artifact_dir",
+            return_value=tmp_path,
+        ),
+        patch.object(
+            activities,
+            "get_dataset_baseline_counts",
+            new=AsyncMock(return_value=(10, 6, 2)),
+        ),
+        patch.object(
+            activities,
+            "upsert_quality_metrics",
+            new=AsyncMock(return_value=5),
+        ) as mock_upsert,
+    ):
+        result = _run(activities.baseline_evaluation_activity(payload))
+
+    assert result["stage"] == "baseline_evaluation"
+    stats = result["baseline_evaluation_stats"]
+    assert stats["total_instances"] == 10
+    assert stats["fail_to_pass_case_count"] == 6
+    assert stats["regression_case_count"] == 2
+    assert stats["fail_to_pass_rate"] == 0.6
+    assert stats["regression_rate"] == 0.2
+
+    mock_upsert.assert_awaited_once()
+    metric_writes = mock_upsert.await_args.args[0]
+    metric_names = {write.metric_name for write in metric_writes}
+    assert metric_names == {
+        "baseline.total_instances",
+        "baseline.fail_to_pass_case_count",
+        "baseline.regression_case_count",
+        "baseline.fail_to_pass_rate",
+        "baseline.regression_rate",
+    }
+
+    baseline_path = Path(result["artifact_baseline_evaluation_path"])
+    assert baseline_path.exists()
+    baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+    assert baseline["total_instances"] == 10
+    assert baseline["fail_to_pass_rate"] == 0.6
+    assert baseline["regression_rate"] == 0.2
+
+
+def test_baseline_evaluation_activity_requires_pinned_dataset() -> None:
+    """Baseline evaluation should fail when dataset slice is empty."""
+    payload = {
+        "dataset_name": "swebench",
+        "dataset_version": "v1",
+        "workflow_id": "evaluation-refresh:swebench:v1:monthly",
+        "job_id": "run_eval_001",
+    }
+    with (
+        patch.object(activities, "_log_activity_info"),
+        patch.object(
+            activities,
+            "get_dataset_baseline_counts",
+            new=AsyncMock(return_value=(0, 0, 0)),
+        ),
+        pytest.raises(ValueError, match="No pinned dataset_instances found"),
+    ):
+        _run(activities.baseline_evaluation_activity(payload))
+
+
 def test_clean_activity_happy_path(tmp_path: Path) -> None:
     """`clean_activity` should normalize and deduplicate ingest rows."""
     ingest_path = tmp_path / "ingest_files.jsonl"
@@ -688,3 +917,57 @@ def test_persist_progress_activity_validation_failure() -> None:
         pytest.raises(ValueError, match="progress_pct"),
     ):
         _run(activities.persist_runtime_index_progress_activity(payload))
+
+
+def test_persist_pipeline_run_metrics_activity_happy_path() -> None:
+    """Run-metrics persistence activity should map payload into persistence write."""
+    payload = {
+        "job_id": "run_001",
+        "workflow_id": "runtime-index:octo/repo:main",
+        "workflow_type": "RuntimeIndexWorkflow",
+        "status": "READY",
+        "repo_id": "octo/repo",
+        "ref": "main",
+        "records_in": 12,
+        "records_out": 30,
+        "failure_count": 0,
+        "duration_ms": 2100,
+        "started_at": "2026-02-19T00:00:00+00:00",
+        "finished_at": "2026-02-19T00:00:02.100000+00:00",
+    }
+    with (
+        patch.object(activities, "_log_activity_info"),
+        patch.object(
+            activities,
+            "upsert_pipeline_run",
+            new=AsyncMock(),
+        ) as mock_upsert,
+    ):
+        result = _run(activities.persist_pipeline_run_metrics_activity(payload))
+
+    assert result["stage"] == "persist_run_metrics"
+    assert result["job_id"] == "run_001"
+    mock_upsert.assert_awaited_once()
+    write = mock_upsert.await_args.args[0]
+    assert write.run_id == "run_001"
+    assert write.workflow_type == "RuntimeIndexWorkflow"
+    assert write.status == "READY"
+    assert write.records_in == 12
+    assert write.records_out == 30
+    assert write.failure_count == 0
+    assert write.duration_ms == 2100
+
+
+def test_persist_pipeline_run_metrics_activity_validation_failure() -> None:
+    """Run-metrics persistence activity should require started_at timestamp."""
+    payload = {
+        "job_id": "run_001",
+        "workflow_id": "runtime-index:octo/repo:main",
+        "workflow_type": "RuntimeIndexWorkflow",
+        "status": "FAILED",
+    }
+    with (
+        patch.object(activities, "_log_activity_info"),
+        pytest.raises(ValueError, match="started_at"),
+    ):
+        _run(activities.persist_pipeline_run_metrics_activity(payload))

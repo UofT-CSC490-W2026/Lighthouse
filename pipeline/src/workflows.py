@@ -2,7 +2,7 @@
 
 import asyncio
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from temporalio import exceptions as temporal_exceptions
@@ -10,11 +10,14 @@ from temporalio import workflow
 from temporalio.common import RetryPolicy
 
 from .activities import (
+    baseline_evaluation_activity,
     clean_activity,
+    evaluation_refresh_activity,
     ingest_activity,
     mental_model_activity,
     persist_runtime_index_failure_activity,
     persist_runtime_index_progress_activity,
+    persist_pipeline_run_metrics_activity,
     persist_runtime_index_start_activity,
     persist_runtime_index_success_activity,
     store_activity,
@@ -76,6 +79,14 @@ _MENTAL_MODEL_RETRY_POLICY = RetryPolicy(
     maximum_attempts=4,
 )
 
+_EVALUATION_REFRESH_RETRY_POLICY = RetryPolicy(
+    initial_interval=timedelta(seconds=5),
+    backoff_coefficient=2.0,
+    maximum_interval=timedelta(minutes=2),
+    maximum_attempts=3,
+    non_retryable_error_types=["ValueError"],
+)
+
 _FAILURE_CLASS_RETRYABLE = "retryable"
 _FAILURE_CLASS_TERMINAL = "terminal"
 
@@ -105,6 +116,10 @@ class OfflineDatasetParams:
     dataset_name: str
     dataset_version: str | None = None
     dataset_source_path: str = ""
+    watermark_start: str | None = None
+    watermark_end: str | None = None
+    max_records: int | None = None
+    source_cursor: str | None = None
     trigger: str = "manual"
     requested_by: str = "pipeline.offline_trigger"
     source_event_id: str | None = None
@@ -117,6 +132,17 @@ class MentalModelParams:
     repo_id: str
     from_sha: str | None = None
     to_sha: str | None = None
+
+
+@dataclass
+class EvaluationRefreshParams:
+    """Input contract for monthly benchmark evaluation refresh workflow runs."""
+
+    dataset_name: str
+    dataset_version: str
+    trigger: str = "monthly_schedule"
+    requested_by: str = "pipeline.evaluation_refresh_trigger"
+    source_event_id: str | None = None
 
 
 @workflow.defn
@@ -163,6 +189,7 @@ class RuntimeIndexWorkflow:
             ref=params.ref,
             force_reindex=params.force_reindex,
         )
+        run_started_at = _workflow_now_utc()
 
         await workflow.execute_activity(
             persist_runtime_index_start_activity,
@@ -249,19 +276,49 @@ class RuntimeIndexWorkflow:
                     progress_pct=progress_pct,
                 )
         except asyncio.CancelledError as exc:
-            await _persist_runtime_failure(
+            classification = await _persist_runtime_failure(
                 stage_payload=stage_payload,
                 stage=current_stage,
                 progress_pct=current_progress,
                 exc=exc,
             )
+            await _persist_pipeline_run_metrics_best_effort(
+                stage_payload=stage_payload,
+                workflow_type="RuntimeIndexWorkflow",
+                status=IndexStatus.FAILED.value,
+                started_at=run_started_at,
+                finished_at=_workflow_now_utc(),
+                records_in=_extract_runtime_records_in(stage_payload),
+                records_out=_extract_runtime_records_out(stage_payload),
+                failure_count=1,
+                error_code=classification.error_code,
+                error_message=_format_failure_message(
+                    exc=exc,
+                    failure_class=classification.failure_class,
+                ),
+            )
             raise
         except Exception as exc:
-            await _persist_runtime_failure(
+            classification = await _persist_runtime_failure(
                 stage_payload=stage_payload,
                 stage=current_stage,
                 progress_pct=current_progress,
                 exc=exc,
+            )
+            await _persist_pipeline_run_metrics_best_effort(
+                stage_payload=stage_payload,
+                workflow_type="RuntimeIndexWorkflow",
+                status=IndexStatus.FAILED.value,
+                started_at=run_started_at,
+                finished_at=_workflow_now_utc(),
+                records_in=_extract_runtime_records_in(stage_payload),
+                records_out=_extract_runtime_records_out(stage_payload),
+                failure_count=1,
+                error_code=classification.error_code,
+                error_message=_format_failure_message(
+                    exc=exc,
+                    failure_class=classification.failure_class,
+                ),
             )
             raise
 
@@ -281,6 +338,16 @@ class RuntimeIndexWorkflow:
             job_id=current_run_id,
             status=IndexStatus.READY.value,
             snapshot_sha=stage_payload.get("snapshot_sha"),
+        )
+        await _persist_pipeline_run_metrics_best_effort(
+            stage_payload=stage_payload,
+            workflow_type="RuntimeIndexWorkflow",
+            status=IndexStatus.READY.value,
+            started_at=run_started_at,
+            finished_at=_workflow_now_utc(),
+            records_in=_extract_runtime_records_in(stage_payload),
+            records_out=_extract_runtime_records_out(stage_payload),
+            failure_count=0,
         )
 
         return {
@@ -306,6 +373,10 @@ class OfflineDatasetWorkflow:
             "dataset_name": params.dataset_name,
             "dataset_version": params.dataset_version,
             "dataset_source_path": params.dataset_source_path,
+            "watermark_start": params.watermark_start,
+            "watermark_end": params.watermark_end,
+            "max_records": params.max_records,
+            "source_cursor": params.source_cursor,
             "trigger": params.trigger,
             "requested_by": params.requested_by,
             "source_event_id": params.source_event_id,
@@ -317,10 +388,15 @@ class OfflineDatasetWorkflow:
             **correlation,
             dataset_name=params.dataset_name,
             dataset_version=params.dataset_version,
+            watermark_start=params.watermark_start,
+            watermark_end=params.watermark_end,
+            max_records=params.max_records,
+            source_cursor=params.source_cursor,
             trigger=params.trigger,
             requested_by=params.requested_by,
             source_event_id=params.source_event_id,
         )
+        run_started_at = _workflow_now_utc()
         try:
             stage_payload = await workflow.execute_activity(
                 ingest_activity,
@@ -354,6 +430,21 @@ class OfflineDatasetWorkflow:
                 failure_class=classification.failure_class,
                 error_code=classification.error_code,
             )
+            await _persist_pipeline_run_metrics_best_effort(
+                stage_payload=stage_payload,
+                workflow_type="OfflineDatasetWorkflow",
+                status=IndexStatus.FAILED.value,
+                started_at=run_started_at,
+                finished_at=_workflow_now_utc(),
+                records_in=_extract_offline_records_in(stage_payload),
+                records_out=_extract_offline_records_out(stage_payload),
+                failure_count=1,
+                error_code=classification.error_code,
+                error_message=_format_failure_message(
+                    exc=exc,
+                    failure_class=classification.failure_class,
+                ),
+            )
             raise
         except Exception as exc:
             classification = _classify_failure(exc)
@@ -361,6 +452,21 @@ class OfflineDatasetWorkflow:
                 "pipeline.offline.failed",
                 **correlation,
                 failure_class=classification.failure_class,
+                error_code=classification.error_code,
+                error_message=_format_failure_message(
+                    exc=exc,
+                    failure_class=classification.failure_class,
+                ),
+            )
+            await _persist_pipeline_run_metrics_best_effort(
+                stage_payload=stage_payload,
+                workflow_type="OfflineDatasetWorkflow",
+                status=IndexStatus.FAILED.value,
+                started_at=run_started_at,
+                finished_at=_workflow_now_utc(),
+                records_in=_extract_offline_records_in(stage_payload),
+                records_out=_extract_offline_records_out(stage_payload),
+                failure_count=1,
                 error_code=classification.error_code,
                 error_message=_format_failure_message(
                     exc=exc,
@@ -376,6 +482,16 @@ class OfflineDatasetWorkflow:
             records_out=(stage_payload.get("transform_stats") or {}).get(
                 "dataset_instance_count"
             ),
+        )
+        await _persist_pipeline_run_metrics_best_effort(
+            stage_payload=stage_payload,
+            workflow_type="OfflineDatasetWorkflow",
+            status=IndexStatus.READY.value,
+            started_at=run_started_at,
+            finished_at=_workflow_now_utc(),
+            records_in=_extract_offline_records_in(stage_payload),
+            records_out=_extract_offline_records_out(stage_payload),
+            failure_count=_extract_offline_failure_count(stage_payload),
         )
         return {"status": IndexStatus.READY.value}
 
@@ -406,6 +522,7 @@ class MentalModelWorkflow:
             from_sha=params.from_sha,
             to_sha=params.to_sha,
         )
+        run_started_at = _workflow_now_utc()
         try:
             await workflow.execute_activity(
                 mental_model_activity,
@@ -421,6 +538,21 @@ class MentalModelWorkflow:
                 failure_class=classification.failure_class,
                 error_code=classification.error_code,
             )
+            await _persist_pipeline_run_metrics_best_effort(
+                stage_payload=payload,
+                workflow_type="MentalModelWorkflow",
+                status=IndexStatus.FAILED.value,
+                started_at=run_started_at,
+                finished_at=_workflow_now_utc(),
+                records_in=None,
+                records_out=None,
+                failure_count=1,
+                error_code=classification.error_code,
+                error_message=_format_failure_message(
+                    exc=exc,
+                    failure_class=classification.failure_class,
+                ),
+            )
             raise
         except Exception as exc:
             classification = _classify_failure(exc)
@@ -434,11 +566,162 @@ class MentalModelWorkflow:
                     failure_class=classification.failure_class,
                 ),
             )
+            await _persist_pipeline_run_metrics_best_effort(
+                stage_payload=payload,
+                workflow_type="MentalModelWorkflow",
+                status=IndexStatus.FAILED.value,
+                started_at=run_started_at,
+                finished_at=_workflow_now_utc(),
+                records_in=None,
+                records_out=None,
+                failure_count=1,
+                error_code=classification.error_code,
+                error_message=_format_failure_message(
+                    exc=exc,
+                    failure_class=classification.failure_class,
+                ),
+            )
             raise
         _log_workflow_info(
             "pipeline.mental_model.complete",
             **correlation,
             status=IndexStatus.READY.value,
+        )
+        await _persist_pipeline_run_metrics_best_effort(
+            stage_payload=payload,
+            workflow_type="MentalModelWorkflow",
+            status=IndexStatus.READY.value,
+            started_at=run_started_at,
+            finished_at=_workflow_now_utc(),
+            records_in=None,
+            records_out=None,
+            failure_count=0,
+        )
+        return {"status": IndexStatus.READY.value}
+
+
+@workflow.defn
+class EvaluationRefreshWorkflow:
+    """Workflow for periodic evaluation refresh over pinned benchmark snapshots."""
+
+    @workflow.run
+    async def run(self, params: EvaluationRefreshParams) -> dict[str, str]:
+        """Execute monthly evaluation refresh metadata run for pinned dataset slice."""
+        workflow_info = workflow.info()
+        correlation = _workflow_correlation(
+            workflow_id=workflow_info.workflow_id,
+            job_id=workflow_info.run_id,
+        )
+        payload: dict[str, object] = {
+            "dataset_name": params.dataset_name,
+            "dataset_version": params.dataset_version,
+            "trigger": params.trigger,
+            "requested_by": params.requested_by,
+            "source_event_id": params.source_event_id,
+            "workflow_id": workflow_info.workflow_id,
+            "job_id": workflow_info.run_id,
+        }
+        _log_workflow_info(
+            "pipeline.evaluation_refresh.start",
+            **correlation,
+            dataset_name=params.dataset_name,
+            dataset_version=params.dataset_version,
+            trigger=params.trigger,
+            requested_by=params.requested_by,
+            source_event_id=params.source_event_id,
+        )
+        run_started_at = _workflow_now_utc()
+        try:
+            payload = await workflow.execute_activity(
+                evaluation_refresh_activity,
+                payload,
+                start_to_close_timeout=timedelta(minutes=20),
+                retry_policy=_EVALUATION_REFRESH_RETRY_POLICY,
+            )
+            payload = await workflow.execute_activity(
+                baseline_evaluation_activity,
+                payload,
+                start_to_close_timeout=timedelta(minutes=20),
+                retry_policy=_EVALUATION_REFRESH_RETRY_POLICY,
+            )
+        except asyncio.CancelledError as exc:
+            classification = _classify_failure(exc)
+            _log_workflow_warning(
+                "pipeline.evaluation_refresh.cancelled",
+                **correlation,
+                failure_class=classification.failure_class,
+                error_code=classification.error_code,
+            )
+            await _persist_pipeline_run_metrics_best_effort(
+                stage_payload=payload,
+                workflow_type="EvaluationRefreshWorkflow",
+                status=IndexStatus.FAILED.value,
+                started_at=run_started_at,
+                finished_at=_workflow_now_utc(),
+                records_in=None,
+                records_out=None,
+                failure_count=1,
+                error_code=classification.error_code,
+                error_message=_format_failure_message(
+                    exc=exc,
+                    failure_class=classification.failure_class,
+                ),
+            )
+            raise
+        except Exception as exc:
+            classification = _classify_failure(exc)
+            _log_workflow_error(
+                "pipeline.evaluation_refresh.failed",
+                **correlation,
+                failure_class=classification.failure_class,
+                error_code=classification.error_code,
+                error_message=_format_failure_message(
+                    exc=exc,
+                    failure_class=classification.failure_class,
+                ),
+            )
+            await _persist_pipeline_run_metrics_best_effort(
+                stage_payload=payload,
+                workflow_type="EvaluationRefreshWorkflow",
+                status=IndexStatus.FAILED.value,
+                started_at=run_started_at,
+                finished_at=_workflow_now_utc(),
+                records_in=None,
+                records_out=None,
+                failure_count=1,
+                error_code=classification.error_code,
+                error_message=_format_failure_message(
+                    exc=exc,
+                    failure_class=classification.failure_class,
+                ),
+            )
+            raise
+        _log_workflow_info(
+            "pipeline.evaluation_refresh.complete",
+            **correlation,
+            status=IndexStatus.READY.value,
+            dataset_name=params.dataset_name,
+            dataset_version=params.dataset_version,
+            dataset_instance_count=(payload.get("evaluation_refresh_stats") or {}).get(
+                "dataset_instance_count"
+            ),
+            fail_to_pass_rate=(payload.get("baseline_evaluation_stats") or {}).get(
+                "fail_to_pass_rate"
+            ),
+            regression_rate=(payload.get("baseline_evaluation_stats") or {}).get(
+                "regression_rate"
+            ),
+        )
+        evaluation_records = _extract_evaluation_records(payload)
+        await _persist_pipeline_run_metrics_best_effort(
+            stage_payload=payload,
+            workflow_type="EvaluationRefreshWorkflow",
+            status=IndexStatus.READY.value,
+            started_at=run_started_at,
+            finished_at=_workflow_now_utc(),
+            records_in=evaluation_records,
+            records_out=evaluation_records,
+            failure_count=0,
         )
         return {"status": IndexStatus.READY.value}
 
@@ -609,3 +892,143 @@ def _log_workflow_warning(event: str, **fields: Any) -> None:
 def _log_workflow_error(event: str, **fields: Any) -> None:
     """Emit a structured error-level workflow log event."""
     workflow.logger.error(structured_event(event, **fields))
+
+
+async def _persist_pipeline_run_metrics_best_effort(
+    *,
+    stage_payload: dict[str, object],
+    workflow_type: str,
+    status: str,
+    started_at: datetime,
+    finished_at: datetime,
+    records_in: int | None,
+    records_out: int | None,
+    failure_count: int | None,
+    error_code: str | None = None,
+    error_message: str | None = None,
+) -> None:
+    """Persist pipeline run metrics while avoiding workflow failure masking."""
+    payload = {
+        **stage_payload,
+        "workflow_type": workflow_type,
+        "status": status,
+        "started_at": started_at.isoformat(),
+        "finished_at": finished_at.isoformat(),
+        "duration_ms": _duration_ms(started_at=started_at, finished_at=finished_at),
+        "records_in": records_in,
+        "records_out": records_out,
+        "failure_count": failure_count,
+        "error_code": error_code,
+        "error_message": error_message,
+    }
+    correlation = _workflow_correlation(
+        repo_id=_coerce_str(stage_payload.get("repo_id")),
+        workflow_id=_coerce_str(stage_payload.get("workflow_id")),
+        job_id=_coerce_str(stage_payload.get("job_id")),
+    )
+    try:
+        await workflow.execute_activity(
+            persist_pipeline_run_metrics_activity,
+            payload,
+            start_to_close_timeout=timedelta(seconds=30),
+            retry_policy=_PERSIST_RETRY_POLICY,
+            cancellation_type=workflow.ActivityCancellationType.ABANDON,
+        )
+    except Exception as exc:
+        _log_workflow_error(
+            "pipeline.metrics.persist_failed",
+            **correlation,
+            workflow_type=workflow_type,
+            status=status,
+            persist_error=str(exc)[:500],
+        )
+
+
+def _workflow_now_utc() -> datetime:
+    """Return workflow clock time with UTC fallback for unit tests."""
+    try:
+        return workflow.now()
+    except Exception:
+        return datetime.now(timezone.utc)
+
+
+def _duration_ms(*, started_at: datetime, finished_at: datetime) -> int:
+    """Compute non-negative duration in milliseconds between two timestamps."""
+    return max(0, int((finished_at - started_at).total_seconds() * 1000))
+
+
+def _extract_runtime_records_in(payload: dict[str, object]) -> int | None:
+    """Extract runtime ingest record count from stage payload stats."""
+    ingest_stats = payload.get("ingest_stats")
+    if not isinstance(ingest_stats, dict):
+        return None
+    value = ingest_stats.get("file_count")
+    return _coerce_non_negative_int(value)
+
+
+def _extract_runtime_records_out(payload: dict[str, object]) -> int | None:
+    """Extract runtime output record count from stage payload stats."""
+    transform_stats = payload.get("transform_stats")
+    if not isinstance(transform_stats, dict):
+        return None
+    value = transform_stats.get("chunk_count")
+    return _coerce_non_negative_int(value)
+
+
+def _extract_offline_records_in(payload: dict[str, object]) -> int | None:
+    """Extract offline ingest record count from stage payload stats."""
+    ingest_stats = payload.get("ingest_stats")
+    if not isinstance(ingest_stats, dict):
+        return None
+    value = ingest_stats.get("records_in")
+    return _coerce_non_negative_int(value)
+
+
+def _extract_offline_records_out(payload: dict[str, object]) -> int | None:
+    """Extract offline output record count from stage payload stats."""
+    transform_stats = payload.get("transform_stats")
+    if not isinstance(transform_stats, dict):
+        return None
+    value = transform_stats.get("records_out")
+    if value is None:
+        value = transform_stats.get("dataset_instance_count")
+    return _coerce_non_negative_int(value)
+
+
+def _extract_offline_failure_count(payload: dict[str, object]) -> int | None:
+    """Extract offline invalid-row count as pipeline run failure count."""
+    clean_stats = payload.get("clean_stats")
+    if not isinstance(clean_stats, dict):
+        return None
+    value = clean_stats.get("invalid_record_count")
+    return _coerce_non_negative_int(value)
+
+
+def _extract_evaluation_records(payload: dict[str, object]) -> int | None:
+    """Extract evaluation slice cardinality from refresh stats payload."""
+    stats = payload.get("evaluation_refresh_stats")
+    if not isinstance(stats, dict):
+        return None
+    value = stats.get("dataset_instance_count")
+    return _coerce_non_negative_int(value)
+
+
+def _coerce_non_negative_int(value: object) -> int | None:
+    """Convert one scalar into non-negative integer or `None`."""
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value if value >= 0 else None
+    if isinstance(value, float):
+        coerced = int(value)
+        return coerced if coerced >= 0 else None
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return None
+        try:
+            coerced = int(stripped)
+        except ValueError:
+            return None
+        return coerced if coerced >= 0 else None
+    return None

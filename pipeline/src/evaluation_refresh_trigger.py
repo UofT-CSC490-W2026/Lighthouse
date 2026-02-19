@@ -1,104 +1,98 @@
-"""Manual/offline trigger path for offline dataset ingestion workflows."""
+"""Monthly evaluation refresh trigger path for pinned benchmark snapshots."""
 
 from __future__ import annotations
 
 import argparse
 import asyncio
 from dataclasses import dataclass
-from datetime import datetime, timezone
 import json
 import re
-from uuid import uuid4
 
 from temporalio.client import Client
 from temporalio.exceptions import WorkflowAlreadyStartedError
 
 from .config import settings
 
-_OFFLINE_WORKFLOW_PREFIX = "offline-datasets"
+_EVALUATION_REFRESH_WORKFLOW_PREFIX = "evaluation-refresh"
+_DEFAULT_MONTHLY_CRON = "0 0 1 * *"
 _TOKEN_PATTERN = re.compile(r"[^A-Za-z0-9._-]+")
 
 
 @dataclass(frozen=True, slots=True)
-class StartOfflineIngestionRequest:
-    """Input payload for starting one offline dataset ingestion workflow."""
+class StartEvaluationRefreshRequest:
+    """Input payload for scheduling monthly evaluation refresh runs."""
 
     dataset_name: str
     dataset_version: str
-    dataset_source_path: str
-    watermark_start: str | None = None
-    watermark_end: str | None = None
-    max_records: int | None = None
-    source_cursor: str | None = None
-    trigger: str = "manual"
-    requested_by: str = "pipeline.offline_trigger"
+    trigger: str = "monthly_schedule"
+    requested_by: str = "pipeline.evaluation_refresh_trigger"
     source_event_id: str | None = None
-    force_reingest: bool = False
+    cron_schedule: str = _DEFAULT_MONTHLY_CRON
 
 
 @dataclass(frozen=True, slots=True)
-class StartOfflineIngestionResponse:
-    """Result payload returned after requesting offline ingestion start."""
+class StartEvaluationRefreshResponse:
+    """Result payload returned after scheduling evaluation refresh workflow."""
 
     workflow_id: str
     run_id: str | None
     status: str
     reused_existing: bool
+    cron_schedule: str
 
 
-def offline_dataset_workflow_id(*, dataset_name: str, dataset_version: str) -> str:
-    """Build canonical idempotent workflow id for one offline dataset slice."""
+def evaluation_refresh_workflow_id(*, dataset_name: str, dataset_version: str) -> str:
+    """Build canonical workflow id for monthly refresh of a pinned dataset slice."""
     dataset_token = _sanitize_token(dataset_name)
     version_token = _sanitize_token(dataset_version)
     if not dataset_token:
         raise ValueError("dataset_name must be non-empty")
     if not version_token:
         raise ValueError("dataset_version must be non-empty")
-    return f"{_OFFLINE_WORKFLOW_PREFIX}:{dataset_token}:{version_token}"
+    return (
+        f"{_EVALUATION_REFRESH_WORKFLOW_PREFIX}:"
+        f"{dataset_token}:{version_token}:monthly"
+    )
 
 
-class OfflineIngestionTriggerClient:
-    """Temporal client facade for starting offline dataset ingestion runs."""
+class EvaluationRefreshTriggerClient:
+    """Temporal client facade for monthly evaluation refresh workflow scheduling."""
 
     def __init__(self) -> None:
         self._client: Client | None = None
         self._lock = asyncio.Lock()
 
-    async def start(self, request: StartOfflineIngestionRequest) -> StartOfflineIngestionResponse:
-        """Start an offline dataset workflow with canonical idempotency behavior."""
-        client = await self._get_client()
-        workflow_id = offline_dataset_workflow_id(
+    async def start_monthly(
+        self,
+        request: StartEvaluationRefreshRequest,
+    ) -> StartEvaluationRefreshResponse:
+        """Start/ensure monthly evaluation refresh workflow for pinned dataset."""
+        workflow_id = evaluation_refresh_workflow_id(
             dataset_name=request.dataset_name,
             dataset_version=request.dataset_version,
         )
-        if request.force_reingest:
-            suffix = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
-            workflow_id = f"{workflow_id}:force:{suffix}:{uuid4().hex[:8]}"
-
+        client = await self._get_client()
         args = {
             "dataset_name": request.dataset_name,
             "dataset_version": request.dataset_version,
-            "dataset_source_path": request.dataset_source_path,
-            "watermark_start": request.watermark_start,
-            "watermark_end": request.watermark_end,
-            "max_records": request.max_records,
-            "source_cursor": request.source_cursor,
             "trigger": request.trigger,
             "requested_by": request.requested_by,
             "source_event_id": request.source_event_id,
         }
         try:
             handle = await client.start_workflow(
-                "OfflineDatasetWorkflow",
+                "EvaluationRefreshWorkflow",
                 args,
                 id=workflow_id,
                 task_queue=settings.temporal_task_queue_offline,
+                cron_schedule=request.cron_schedule,
             )
-            return StartOfflineIngestionResponse(
+            return StartEvaluationRefreshResponse(
                 workflow_id=workflow_id,
                 run_id=handle.first_execution_run_id,
                 status="PENDING",
                 reused_existing=False,
+                cron_schedule=request.cron_schedule,
             )
         except WorkflowAlreadyStartedError:
             handle = client.get_workflow_handle(workflow_id)
@@ -108,11 +102,12 @@ class OfflineIngestionTriggerClient:
                 run_id = description.run_id
             except Exception:
                 run_id = None
-            return StartOfflineIngestionResponse(
+            return StartEvaluationRefreshResponse(
                 workflow_id=workflow_id,
                 run_id=run_id,
                 status="PENDING",
                 reused_existing=True,
+                cron_schedule=request.cron_schedule,
             )
 
     async def _get_client(self) -> Client:
@@ -136,66 +131,61 @@ def _sanitize_token(value: str) -> str:
 
 
 def _build_arg_parser() -> argparse.ArgumentParser:
-    """Build CLI parser for starting offline dataset ingestion workflows."""
+    """Build CLI parser for monthly evaluation refresh scheduling."""
     parser = argparse.ArgumentParser(
-        description="Start an OfflineDatasetWorkflow offline dataset ingestion run.",
+        description=(
+            "Start or ensure a monthly EvaluationRefreshWorkflow for a pinned "
+            "benchmark snapshot."
+        )
     )
     parser.add_argument("--dataset-name", required=True)
     parser.add_argument("--dataset-version", required=True)
-    parser.add_argument("--dataset-source-path", required=True)
-    parser.add_argument("--watermark-start")
-    parser.add_argument("--watermark-end")
-    parser.add_argument("--max-records", type=int)
-    parser.add_argument("--source-cursor")
-    parser.add_argument("--trigger", default="manual")
+    parser.add_argument("--cron-schedule", default=_DEFAULT_MONTHLY_CRON)
+    parser.add_argument("--trigger", default="monthly_schedule")
     parser.add_argument("--requested-by", default="manual_cli")
     parser.add_argument("--source-event-id")
-    parser.add_argument("--force-reingest", action="store_true")
     return parser
 
 
 async def _run_cli_async() -> int:
-    """Execute CLI workflow-start request and print canonical JSON output."""
+    """Execute CLI scheduling request and print canonical JSON response."""
     parser = _build_arg_parser()
     args = parser.parse_args()
-    request = StartOfflineIngestionRequest(
+    request = StartEvaluationRefreshRequest(
         dataset_name=args.dataset_name,
         dataset_version=args.dataset_version,
-        dataset_source_path=args.dataset_source_path,
-        watermark_start=args.watermark_start,
-        watermark_end=args.watermark_end,
-        max_records=args.max_records,
-        source_cursor=args.source_cursor,
         trigger=args.trigger,
         requested_by=args.requested_by,
         source_event_id=args.source_event_id,
-        force_reingest=args.force_reingest,
+        cron_schedule=args.cron_schedule,
     )
-    client = OfflineIngestionTriggerClient()
-    result = await client.start(request)
-    payload = {
-        "workflow_id": result.workflow_id,
-        "run_id": result.run_id,
-        "status": result.status,
-        "reused_existing": result.reused_existing,
-        "trigger": request.trigger,
-        "requested_by": request.requested_by,
-        "dataset_name": request.dataset_name,
-        "dataset_version": request.dataset_version,
-        "dataset_source_path": request.dataset_source_path,
-        "watermark_start": request.watermark_start,
-        "watermark_end": request.watermark_end,
-        "max_records": request.max_records,
-        "source_cursor": request.source_cursor,
-    }
-    print(json.dumps(payload, indent=2, sort_keys=True))
+    client = EvaluationRefreshTriggerClient()
+    result = await client.start_monthly(request)
+    print(
+        json.dumps(
+            {
+                "workflow_id": result.workflow_id,
+                "run_id": result.run_id,
+                "status": result.status,
+                "reused_existing": result.reused_existing,
+                "cron_schedule": result.cron_schedule,
+                "dataset_name": request.dataset_name,
+                "dataset_version": request.dataset_version,
+                "trigger": request.trigger,
+                "requested_by": request.requested_by,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
     return 0
 
 
 def main() -> int:
-    """Synchronous CLI wrapper for running offline benchmark trigger flow."""
+    """Synchronous CLI wrapper for monthly evaluation refresh scheduling."""
     return asyncio.run(_run_cli_async())
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

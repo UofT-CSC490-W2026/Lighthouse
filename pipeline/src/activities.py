@@ -18,15 +18,26 @@ from temporalio import activity
 from .config import settings
 from .connectors import GitHubConnector, S3Connector
 from .contracts import IndexStage
-from .offline_sources import SwebenchSnapshot, SwebenchSnapshotAdapter
+from .offline_sources import (
+    RollingIssuePrDiffSnapshot,
+    RollingIssuePrDiffAdapter,
+    SwebenchSnapshot,
+    SwebenchSnapshotAdapter,
+)
 from .observability import correlation_from_payload, structured_event
 from .persistence import (
     DatasetInstanceWrite,
+    get_dataset_instance_count,
+    get_dataset_baseline_counts,
+    PipelineRunWrite,
+    QualityMetricWrite,
     record_runtime_index_failed,
     record_runtime_index_progress,
     record_runtime_index_ready,
     record_runtime_index_started,
+    upsert_pipeline_run,
     upsert_dataset_instances,
+    upsert_quality_metrics,
 )
 
 _MAX_ARCHIVE_BYTES = 50 * 1024 * 1024
@@ -36,10 +47,25 @@ _MAX_TOTAL_TEXT_BYTES = 12 * 1024 * 1024
 _CHUNK_SIZE_CHARS = 1200
 _CHUNK_OVERLAP_CHARS = 200
 _MIN_CHUNK_CHARS = 120
-_OFFLINE_SUPPORTED_DATASETS = {"swebench", "swe-bench", "swe_bench"}
+_OFFLINE_BENCHMARK_DATASETS = {"swebench", "swe-bench", "swe_bench"}
+_OFFLINE_ROLLING_DATASETS = {
+    "issue-pr-diff",
+    "issue_pr_diff",
+    "github-issue-pr-diff",
+    "github_issue_pr_diff",
+}
+_OFFLINE_SUPPORTED_DATASETS = _OFFLINE_BENCHMARK_DATASETS | _OFFLINE_ROLLING_DATASETS
 _OFFLINE_SUPPORTED_DATASET_KEYS = frozenset(
     re.sub(r"[-_]+", "", name.strip().lower())
     for name in _OFFLINE_SUPPORTED_DATASETS
+)
+_OFFLINE_BENCHMARK_DATASET_KEYS = frozenset(
+    re.sub(r"[-_]+", "", name.strip().lower())
+    for name in _OFFLINE_BENCHMARK_DATASETS
+)
+_OFFLINE_ROLLING_DATASET_KEYS = frozenset(
+    re.sub(r"[-_]+", "", name.strip().lower())
+    for name in _OFFLINE_ROLLING_DATASETS
 )
 _OFFLINE_SCHEMA_VERSION = "offline-clean-schema/v1"
 _OFFLINE_REPO_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*$")
@@ -107,6 +133,7 @@ _SUPPORTED_FILENAMES = {
 _GITHUB_CONNECTOR = GitHubConnector()
 _S3_CONNECTOR = S3Connector(region_name=settings.aws_region)
 _SWEBENCH_SNAPSHOT_ADAPTER = SwebenchSnapshotAdapter()
+_ROLLING_ISSUE_PR_DIFF_ADAPTER = RollingIssuePrDiffAdapter()
 
 
 @activity.defn(name="ingest_activity")
@@ -397,6 +424,273 @@ async def store_activity(payload: dict[str, Any]) -> dict[str, Any]:
     return {"stage": "store", "ok": True, "payload": payload}
 
 
+@activity.defn(name="evaluation_refresh_activity")
+async def evaluation_refresh_activity(payload: dict[str, Any]) -> dict[str, Any]:
+    """Refresh evaluation metadata against a pinned offline benchmark slice."""
+    correlation = correlation_from_payload(payload)
+    _log_activity_info("pipeline.evaluation_refresh.start", **correlation)
+
+    dataset_name, dataset_key = _validate_offline_dataset_name(payload)
+    dataset_version = _require_str(payload, "dataset_version")
+    trigger = _coerce_optional_str(payload.get("trigger")) or "monthly_schedule"
+    requested_by = (
+        _coerce_optional_str(payload.get("requested_by"))
+        or "pipeline.evaluation_refresh_trigger"
+    )
+    workflow_id = _require_str(payload, "workflow_id")
+    job_id = _require_str(payload, "job_id")
+
+    dataset_instance_count = await get_dataset_instance_count(
+        dataset_name=dataset_name,
+        dataset_version=dataset_version,
+    )
+    if dataset_instance_count <= 0:
+        raise ValueError(
+            "No pinned dataset_instances found for "
+            f"dataset={dataset_name} version={dataset_version}"
+        )
+
+    artifact_dir = _evaluation_refresh_artifact_dir(payload, dataset_key=dataset_key)
+    evaluation_refresh_path = artifact_dir / "evaluation_refresh.json"
+    evaluation_refresh_path.write_text(
+        json.dumps(
+            {
+                "workflow_type": "EvaluationRefreshWorkflow",
+                "status": "READY",
+                "dataset_name": dataset_name,
+                "dataset_version": dataset_version,
+                "workflow_id": workflow_id,
+                "run_id": job_id,
+                "trigger": trigger,
+                "requested_by": requested_by,
+                "created_at_utc": datetime.now(timezone.utc).isoformat(),
+                "dataset_instance_count": dataset_instance_count,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n"
+    )
+
+    result = {
+        **payload,
+        "stage": "evaluation_refresh",
+        "ok": True,
+        "artifact_evaluation_refresh_path": str(evaluation_refresh_path),
+        "evaluation_refresh_stats": {
+            "dataset_name": dataset_name,
+            "dataset_version": dataset_version,
+            "dataset_instance_count": dataset_instance_count,
+        },
+    }
+    _log_activity_info(
+        "pipeline.evaluation_refresh.complete",
+        **correlation,
+        dataset_name=dataset_name,
+        dataset_version=dataset_version,
+        trigger=trigger,
+        requested_by=requested_by,
+        dataset_instance_count=dataset_instance_count,
+    )
+    return result
+
+
+@activity.defn(name="baseline_evaluation_activity")
+async def baseline_evaluation_activity(payload: dict[str, Any]) -> dict[str, Any]:
+    """Compute baseline fail/pass and regression rates for pinned dataset slices."""
+    correlation = correlation_from_payload(payload)
+    _log_activity_info("pipeline.baseline_evaluation.start", **correlation)
+
+    dataset_name, dataset_key = _validate_offline_dataset_name(payload)
+    dataset_version = _require_str(payload, "dataset_version")
+    workflow_id = _require_str(payload, "workflow_id")
+    job_id = _require_str(payload, "job_id")
+    trigger = _coerce_optional_str(payload.get("trigger")) or "monthly_schedule"
+    requested_by = (
+        _coerce_optional_str(payload.get("requested_by"))
+        or "pipeline.evaluation_refresh_trigger"
+    )
+    source_event_id = _coerce_optional_str(payload.get("source_event_id"))
+
+    (
+        total_instances,
+        fail_to_pass_case_count,
+        regression_case_count,
+    ) = await get_dataset_baseline_counts(
+        dataset_name=dataset_name,
+        dataset_version=dataset_version,
+    )
+    if total_instances <= 0:
+        raise ValueError(
+            "No pinned dataset_instances found for baseline evaluation "
+            f"(dataset={dataset_name}, version={dataset_version})"
+        )
+
+    fail_to_pass_rate = fail_to_pass_case_count / float(total_instances)
+    regression_rate = regression_case_count / float(total_instances)
+
+    metric_context = json.dumps(
+        {
+            "dataset_name": dataset_name,
+            "dataset_version": dataset_version,
+            "trigger": trigger,
+            "requested_by": requested_by,
+            "source_event_id": source_event_id,
+            "total_instances": total_instances,
+        },
+        sort_keys=True,
+        ensure_ascii=True,
+    )
+    await upsert_quality_metrics(
+        [
+            QualityMetricWrite(
+                run_id=job_id,
+                metric_name="baseline.total_instances",
+                metric_value=float(total_instances),
+                metric_context=metric_context,
+                workflow_id=workflow_id,
+                dataset_name=dataset_name,
+                dataset_version=dataset_version,
+            ),
+            QualityMetricWrite(
+                run_id=job_id,
+                metric_name="baseline.fail_to_pass_case_count",
+                metric_value=float(fail_to_pass_case_count),
+                metric_context=metric_context,
+                workflow_id=workflow_id,
+                dataset_name=dataset_name,
+                dataset_version=dataset_version,
+            ),
+            QualityMetricWrite(
+                run_id=job_id,
+                metric_name="baseline.regression_case_count",
+                metric_value=float(regression_case_count),
+                metric_context=metric_context,
+                workflow_id=workflow_id,
+                dataset_name=dataset_name,
+                dataset_version=dataset_version,
+            ),
+            QualityMetricWrite(
+                run_id=job_id,
+                metric_name="baseline.fail_to_pass_rate",
+                metric_value=fail_to_pass_rate,
+                metric_context=metric_context,
+                workflow_id=workflow_id,
+                dataset_name=dataset_name,
+                dataset_version=dataset_version,
+            ),
+            QualityMetricWrite(
+                run_id=job_id,
+                metric_name="baseline.regression_rate",
+                metric_value=regression_rate,
+                metric_context=metric_context,
+                workflow_id=workflow_id,
+                dataset_name=dataset_name,
+                dataset_version=dataset_version,
+            ),
+        ]
+    )
+
+    artifact_dir = _evaluation_refresh_artifact_dir(payload, dataset_key=dataset_key)
+    baseline_path = artifact_dir / "baseline_evaluation.json"
+    baseline_path.write_text(
+        json.dumps(
+            {
+                "workflow_type": "BaselineEvaluation",
+                "dataset_name": dataset_name,
+                "dataset_version": dataset_version,
+                "workflow_id": workflow_id,
+                "run_id": job_id,
+                "trigger": trigger,
+                "requested_by": requested_by,
+                "source_event_id": source_event_id,
+                "total_instances": total_instances,
+                "fail_to_pass_case_count": fail_to_pass_case_count,
+                "regression_case_count": regression_case_count,
+                "fail_to_pass_rate": fail_to_pass_rate,
+                "regression_rate": regression_rate,
+                "created_at_utc": datetime.now(timezone.utc).isoformat(),
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n"
+    )
+
+    result = {
+        **payload,
+        "stage": "baseline_evaluation",
+        "ok": True,
+        "artifact_baseline_evaluation_path": str(baseline_path),
+        "baseline_evaluation_stats": {
+            "total_instances": total_instances,
+            "fail_to_pass_case_count": fail_to_pass_case_count,
+            "regression_case_count": regression_case_count,
+            "fail_to_pass_rate": fail_to_pass_rate,
+            "regression_rate": regression_rate,
+        },
+    }
+    _log_activity_info(
+        "pipeline.baseline_evaluation.complete",
+        **correlation,
+        dataset_name=dataset_name,
+        dataset_version=dataset_version,
+        total_instances=total_instances,
+        fail_to_pass_rate=fail_to_pass_rate,
+        regression_rate=regression_rate,
+    )
+    return result
+
+
+@activity.defn(name="persist_pipeline_run_metrics_activity")
+async def persist_pipeline_run_metrics_activity(
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    """Persist one pipeline run metrics record into `pipeline_runs`."""
+    correlation = correlation_from_payload(payload)
+    _log_activity_info("pipeline.persist.run_metrics.start", **correlation)
+
+    started_at = _require_datetime(payload, "started_at")
+    finished_at = _coerce_optional_datetime(payload.get("finished_at"))
+    duration_ms = _coerce_optional_non_negative_int(payload.get("duration_ms"))
+    if duration_ms is None and finished_at is not None:
+        duration_ms = max(
+            0,
+            int((finished_at - started_at).total_seconds() * 1000),
+        )
+
+    write = PipelineRunWrite(
+        run_id=_require_str(payload, "job_id"),
+        workflow_id=_require_str(payload, "workflow_id"),
+        workflow_type=_require_str(payload, "workflow_type"),
+        status=_require_str(payload, "status"),
+        repo_id=_coerce_optional_str(payload.get("repo_id")),
+        ref=_coerce_optional_str(payload.get("ref")),
+        dataset_name=_coerce_optional_str(payload.get("dataset_name")),
+        dataset_version=_coerce_optional_str(payload.get("dataset_version")),
+        trigger=_coerce_optional_str(payload.get("trigger")),
+        requested_by=_coerce_optional_str(payload.get("requested_by")),
+        source_event_id=_coerce_optional_str(payload.get("source_event_id")),
+        records_in=_coerce_optional_non_negative_int(payload.get("records_in")),
+        records_out=_coerce_optional_non_negative_int(payload.get("records_out")),
+        failure_count=_coerce_optional_non_negative_int(payload.get("failure_count")),
+        duration_ms=duration_ms,
+        error_code=_coerce_optional_str(payload.get("error_code")),
+        error_message=_coerce_optional_str(payload.get("error_message")),
+        started_at=started_at,
+        finished_at=finished_at,
+    )
+    await upsert_pipeline_run(write)
+
+    _log_activity_info("pipeline.persist.run_metrics.complete", **correlation)
+    return {
+        "stage": "persist_run_metrics",
+        "ok": True,
+        "job_id": write.run_id,
+        "workflow_type": write.workflow_type,
+    }
+
+
 @activity.defn(name="mental_model_activity")
 async def mental_model_activity(payload: dict[str, Any]) -> dict[str, Any]:
     """Build or refresh mental-model artifacts for a repository scope."""
@@ -565,17 +859,39 @@ def _offline_artifact_dir(payload: dict[str, Any], *, dataset_key: str) -> Path:
     return artifact_dir
 
 
+def _evaluation_refresh_artifact_dir(payload: dict[str, Any], *, dataset_key: str) -> Path:
+    """Build evaluation refresh artifact directory for a pinned dataset run."""
+    job_id = _require_str(payload, "job_id")
+    base_dir = (
+        Path(__file__).resolve().parents[1]
+        / ".artifacts"
+        / "evaluation_refresh"
+        / _sanitize_identifier(dataset_key)
+    )
+    artifact_dir = base_dir / _sanitize_identifier(job_id)
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    return artifact_dir
+
+
 def _ingest_offline_dataset(payload: dict[str, Any]) -> dict[str, Any]:
-    """Load a benchmark dataset source and write canonical ingest artifacts."""
+    """Load an offline dataset source and write canonical ingest artifacts."""
     dataset_name, dataset_key = _validate_offline_dataset_name(payload)
     dataset_version = _require_str(payload, "dataset_version")
     artifact_dir = _offline_artifact_dir(payload, dataset_key=dataset_key)
     ingest_path = artifact_dir / "offline_ingest_records.jsonl"
+    immutable_snapshot = _is_benchmark_dataset_key(dataset_key)
+    source_snapshot: SwebenchSnapshot | RollingIssuePrDiffSnapshot
+    if immutable_snapshot:
+        source_snapshot = _load_swebench_source_snapshot(
+            payload=payload,
+            dataset_version=dataset_version,
+        )
+    else:
+        source_snapshot = _load_rolling_issue_pr_diff_snapshot(
+            payload=payload,
+            dataset_version=dataset_version,
+        )
 
-    source_snapshot = _load_swebench_source_snapshot(
-        payload=payload,
-        dataset_version=dataset_version,
-    )
     source_records = source_snapshot.records
     ingest_records: list[dict[str, Any]] = []
     for idx, source_row in enumerate(source_records):
@@ -609,7 +925,23 @@ def _ingest_offline_dataset(payload: dict[str, Any]) -> dict[str, Any]:
             "source_path": source_snapshot.source_path,
             "snapshot_sha256": source_snapshot.snapshot_sha256,
             "snapshot_size_bytes": source_snapshot.snapshot_size_bytes,
-            "immutable_snapshot": True,
+            "immutable_snapshot": immutable_snapshot,
+            "incremental": not immutable_snapshot,
+            "watermark_start": (
+                source_snapshot.watermark_start
+                if isinstance(source_snapshot, RollingIssuePrDiffSnapshot)
+                else None
+            ),
+            "watermark_end": (
+                source_snapshot.watermark_end
+                if isinstance(source_snapshot, RollingIssuePrDiffSnapshot)
+                else None
+            ),
+            "raw_records_in": (
+                source_snapshot.raw_record_count
+                if isinstance(source_snapshot, RollingIssuePrDiffSnapshot)
+                else len(ingest_records)
+            ),
         },
     }
 
@@ -929,7 +1261,7 @@ def _normalize_offline_dataset_name(dataset_name: str) -> str:
 
 
 def _validate_offline_dataset_name(payload: dict[str, Any]) -> tuple[str, str]:
-    """Validate and normalize supported offline benchmark dataset names."""
+    """Validate and normalize supported offline dataset names."""
     dataset_name = _require_str(payload, "dataset_name")
     dataset_key = _normalize_offline_dataset_name(dataset_name)
     if dataset_key not in _OFFLINE_SUPPORTED_DATASET_KEYS:
@@ -938,6 +1270,11 @@ def _validate_offline_dataset_name(payload: dict[str, Any]) -> tuple[str, str]:
             f"dataset_name '{dataset_name}' is unsupported; expected one of: {supported}"
         )
     return dataset_name, dataset_key
+
+
+def _is_benchmark_dataset_key(dataset_key: str) -> bool:
+    """Return true when one normalized dataset key maps to benchmark ingestion."""
+    return dataset_key in _OFFLINE_BENCHMARK_DATASET_KEYS
 
 
 def _coerce_optional_str(value: Any) -> str | None:
@@ -949,6 +1286,63 @@ def _coerce_optional_str(value: Any) -> str | None:
         normalized = str(value).strip()
         return normalized or None
     return None
+
+
+def _coerce_optional_non_negative_int(value: Any) -> int | None:
+    """Coerce optional scalar values into non-negative integer metrics."""
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        raise ValueError("metric values must not be boolean")
+    if isinstance(value, int):
+        if value < 0:
+            raise ValueError("metric values must be non-negative")
+        return value
+    if isinstance(value, float):
+        coerced = int(value)
+        if coerced < 0:
+            raise ValueError("metric values must be non-negative")
+        return coerced
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return None
+        coerced = int(stripped)
+        if coerced < 0:
+            raise ValueError("metric values must be non-negative")
+        return coerced
+    raise ValueError("metric values must be numeric")
+
+
+def _coerce_optional_datetime(value: Any) -> datetime | None:
+    """Parse optional datetime values from payload scalars."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return _ensure_utc_datetime(value)
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return None
+        parsed = datetime.fromisoformat(stripped)
+        return _ensure_utc_datetime(parsed)
+    raise ValueError("datetime values must be ISO strings or datetime objects")
+
+
+def _require_datetime(payload: dict[str, Any], key: str) -> datetime:
+    """Read and validate one required datetime payload field."""
+    value = payload.get(key)
+    parsed = _coerce_optional_datetime(value)
+    if parsed is None:
+        raise ValueError(f"payload field '{key}' is required")
+    return parsed
+
+
+def _ensure_utc_datetime(value: datetime) -> datetime:
+    """Normalize datetime values to timezone-aware UTC instances."""
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
 
 
 def _coerce_text(value: Any) -> str | None:
@@ -1044,6 +1438,22 @@ def _load_swebench_source_snapshot(
     return _SWEBENCH_SNAPSHOT_ADAPTER.load_snapshot(
         dataset_version=dataset_version,
         dataset_source_path=dataset_source_path,
+    )
+
+
+def _load_rolling_issue_pr_diff_snapshot(
+    *,
+    payload: dict[str, Any],
+    dataset_version: str,
+) -> RollingIssuePrDiffSnapshot:
+    """Load rolling issue->PR->diff snapshot with optional watermark bounds."""
+    dataset_source_path = _require_str(payload, "dataset_source_path")
+    return _ROLLING_ISSUE_PR_DIFF_ADAPTER.load_snapshot(
+        dataset_version=dataset_version,
+        dataset_source_path=dataset_source_path,
+        watermark_start=_coerce_optional_str(payload.get("watermark_start")),
+        watermark_end=_coerce_optional_str(payload.get("watermark_end")),
+        max_records=_coerce_optional_non_negative_int(payload.get("max_records")),
     )
 
 
@@ -1260,23 +1670,30 @@ def _normalize_offline_dataset_row(
     dataset_name: str,
     dataset_version: str | None,
 ) -> dict[str, Any] | None:
-    """Normalize one raw offline record into canonical benchmark fields."""
+    """Normalize one raw offline record into canonical offline fields."""
     task = _normalize_offline_text(
         _coerce_text(raw_record.get("task"))
         or _coerce_text(raw_record.get("problem_statement"))
         or _coerce_text(raw_record.get("issue_text"))
         or _coerce_text(raw_record.get("prompt"))
+        or _build_issue_task(raw_record)
     )
     repo_id = _normalize_repo_id(
         _coerce_optional_str(raw_record.get("repo_id"))
         or _coerce_optional_str(raw_record.get("repo"))
         or _coerce_optional_str(raw_record.get("repository"))
+        or _coerce_optional_str(raw_record.get("repository_full_name"))
+        or _coerce_optional_str(raw_record.get("full_name"))
     )
     corrected_diff_ref = _normalize_offline_text(
         _coerce_text(raw_record.get("corrected_diff_ref"))
         or _coerce_text(raw_record.get("gold_patch"))
         or _coerce_text(raw_record.get("patch"))
         or _coerce_text(raw_record.get("fix_patch"))
+        or _coerce_text(raw_record.get("pr_diff"))
+        or _coerce_text(raw_record.get("pr_patch"))
+        or _coerce_text(raw_record.get("merge_patch"))
+        or _coerce_text(raw_record.get("diff"))
     )
     if task is None or repo_id is None or corrected_diff_ref is None:
         return None
@@ -1294,14 +1711,20 @@ def _normalize_offline_dataset_row(
         or _coerce_text(raw_record.get("test_patch"))
         or _coerce_text(raw_record.get("fail_to_pass"))
         or _coerce_text(raw_record.get("FAIL_TO_PASS"))
+        or _coerce_text(raw_record.get("failing_tests"))
+        or _coerce_text(raw_record.get("failed_tests"))
+        or _coerce_text(raw_record.get("failure_signal"))
     )
     split = _normalize_split(
         _coerce_optional_str(raw_record.get("split"))
         or _coerce_optional_str(raw_record.get("subset"))
+        or _coerce_optional_str(raw_record.get("source_split"))
     )
     explicit_instance_id = _normalize_optional_scalar(
         _coerce_optional_str(raw_record.get("instance_id"))
         or _coerce_optional_str(raw_record.get("id"))
+        or _coerce_optional_str(raw_record.get("chain_id"))
+        or _compose_issue_pr_chain_id(raw_record, repo_id=repo_id)
     )
     instance_id = explicit_instance_id or _normalize_optional_scalar(fallback_record_id)
     instance_id_source = "explicit" if explicit_instance_id else "fallback"
@@ -1323,6 +1746,26 @@ def _normalize_offline_dataset_row(
         "dataset_version": dataset_version,
         "_instance_id_source": instance_id_source,
     }
+
+
+def _build_issue_task(raw_record: dict[str, Any]) -> str | None:
+    """Build one task statement from issue title/body fields."""
+    issue_title = _normalize_offline_text(_coerce_text(raw_record.get("issue_title")))
+    issue_body = _normalize_offline_text(_coerce_text(raw_record.get("issue_body")))
+    if issue_title and issue_body:
+        return f"{issue_title}\n\n{issue_body}"
+    if issue_title:
+        return issue_title
+    return issue_body
+
+
+def _compose_issue_pr_chain_id(raw_record: dict[str, Any], *, repo_id: str) -> str | None:
+    """Build deterministic chain id from repo + issue/pr numbers when present."""
+    issue_number = _coerce_optional_str(raw_record.get("issue_number"))
+    pr_number = _coerce_optional_str(raw_record.get("pr_number"))
+    if issue_number and pr_number:
+        return f"{repo_id}:{issue_number}:{pr_number}"
+    return None
 
 
 def _load_repo_files(

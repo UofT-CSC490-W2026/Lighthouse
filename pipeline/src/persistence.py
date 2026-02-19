@@ -7,7 +7,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from sqlalchemy import func
+from sqlalchemy import func, select
+from sqlalchemy import or_
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -18,7 +19,13 @@ from sqlalchemy.ext.asyncio import (
 
 from .config import settings
 from .contracts import IndexStage, IndexStatus
-from .db_models import DatasetInstance, IndexJob, IndexState
+from .db_models import (
+    DatasetInstance,
+    IndexJob,
+    IndexState,
+    PipelineRun,
+    QualityMetric,
+)
 
 _ENGINE: AsyncEngine | None = None
 _SESSION_FACTORY: async_sessionmaker[AsyncSession] | None = None
@@ -69,6 +76,44 @@ class DatasetInstanceWrite:
     split: str = "unspecified"
     workflow_id: str | None = None
     run_id: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class PipelineRunWrite:
+    """Typed upsert payload for one `pipeline_runs` metrics row."""
+
+    run_id: str
+    workflow_id: str
+    workflow_type: str
+    status: str
+    started_at: datetime
+    finished_at: datetime | None = None
+    repo_id: str | None = None
+    ref: str | None = None
+    dataset_name: str | None = None
+    dataset_version: str | None = None
+    trigger: str | None = None
+    requested_by: str | None = None
+    source_event_id: str | None = None
+    records_in: int | None = None
+    records_out: int | None = None
+    failure_count: int | None = None
+    duration_ms: int | None = None
+    error_code: str | None = None
+    error_message: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class QualityMetricWrite:
+    """Typed upsert payload for one `quality_metrics` point."""
+
+    run_id: str
+    metric_name: str
+    metric_value: float
+    metric_context: str | None = None
+    workflow_id: str | None = None
+    dataset_name: str | None = None
+    dataset_version: str | None = None
 
 
 async def record_runtime_index_started(
@@ -309,6 +354,158 @@ async def upsert_dataset_instances(writes: Sequence[DatasetInstanceWrite]) -> in
             "split": stmt.excluded.split,
             "workflow_id": stmt.excluded.workflow_id,
             "run_id": stmt.excluded.run_id,
+            "updated_at": func.now(),
+        },
+    )
+    await _execute_and_commit(session_factory, stmt)
+    return len(values)
+
+
+async def get_dataset_instance_count(*, dataset_name: str, dataset_version: str) -> int:
+    """Return count of exported `dataset_instances` for one pinned dataset version."""
+    session_factory = await _get_session_factory()
+    stmt = (
+        select(func.count())
+        .select_from(DatasetInstance)
+        .where(
+            DatasetInstance.dataset_name == dataset_name,
+            DatasetInstance.dataset_version == dataset_version,
+        )
+    )
+    async with session_factory() as session:
+        result = await session.execute(stmt)
+        count = result.scalar_one()
+    return int(count or 0)
+
+
+async def get_dataset_baseline_counts(
+    *,
+    dataset_name: str,
+    dataset_version: str,
+) -> tuple[int, int, int]:
+    """Return `(total, fail_to_pass_count, regression_case_count)` for a dataset slice."""
+    session_factory = await _get_session_factory()
+    base_filters = (
+        DatasetInstance.dataset_name == dataset_name,
+        DatasetInstance.dataset_version == dataset_version,
+    )
+    stmt_total = (
+        select(func.count())
+        .select_from(DatasetInstance)
+        .where(*base_filters)
+    )
+    stmt_fail_to_pass = (
+        select(func.count())
+        .select_from(DatasetInstance)
+        .where(
+            *base_filters,
+            DatasetInstance.failure_ref.is_not(None),
+            DatasetInstance.failure_ref.ilike("%FAIL_TO_PASS%"),
+        )
+    )
+    stmt_regression = (
+        select(func.count())
+        .select_from(DatasetInstance)
+        .where(
+            *base_filters,
+            or_(
+                DatasetInstance.failure_type == "regression",
+                DatasetInstance.failure_ref.ilike("%PASS_TO_PASS%"),
+            ),
+        )
+    )
+    async with session_factory() as session:
+        total_result = await session.execute(stmt_total)
+        fail_result = await session.execute(stmt_fail_to_pass)
+        regression_result = await session.execute(stmt_regression)
+
+    return (
+        int(total_result.scalar_one() or 0),
+        int(fail_result.scalar_one() or 0),
+        int(regression_result.scalar_one() or 0),
+    )
+
+
+async def upsert_pipeline_run(write: PipelineRunWrite) -> None:
+    """Insert or update one `pipeline_runs` row with run-level metrics."""
+    session_factory = await _get_session_factory()
+    values = {
+        "run_id": write.run_id,
+        "workflow_id": write.workflow_id,
+        "workflow_type": write.workflow_type,
+        "status": write.status,
+        "repo_id": write.repo_id,
+        "ref": write.ref,
+        "dataset_name": write.dataset_name,
+        "dataset_version": write.dataset_version,
+        "trigger": write.trigger,
+        "requested_by": write.requested_by,
+        "source_event_id": write.source_event_id,
+        "records_in": write.records_in,
+        "records_out": write.records_out,
+        "failure_count": write.failure_count,
+        "duration_ms": write.duration_ms,
+        "error_code": write.error_code,
+        "error_message": write.error_message,
+        "started_at": write.started_at,
+        "finished_at": write.finished_at,
+    }
+    stmt = insert(PipelineRun).values(**values)
+    stmt = stmt.on_conflict_do_update(
+        index_elements=[PipelineRun.run_id],
+        set_={
+            "workflow_id": stmt.excluded.workflow_id,
+            "workflow_type": stmt.excluded.workflow_type,
+            "status": stmt.excluded.status,
+            "repo_id": stmt.excluded.repo_id,
+            "ref": stmt.excluded.ref,
+            "dataset_name": stmt.excluded.dataset_name,
+            "dataset_version": stmt.excluded.dataset_version,
+            "trigger": stmt.excluded.trigger,
+            "requested_by": stmt.excluded.requested_by,
+            "source_event_id": stmt.excluded.source_event_id,
+            "records_in": stmt.excluded.records_in,
+            "records_out": stmt.excluded.records_out,
+            "failure_count": stmt.excluded.failure_count,
+            "duration_ms": stmt.excluded.duration_ms,
+            "error_code": stmt.excluded.error_code,
+            "error_message": stmt.excluded.error_message,
+            "started_at": stmt.excluded.started_at,
+            "finished_at": stmt.excluded.finished_at,
+            "updated_at": func.now(),
+        },
+    )
+    await _execute_and_commit(session_factory, stmt)
+
+
+async def upsert_quality_metrics(writes: Sequence[QualityMetricWrite]) -> int:
+    """Insert or upsert named quality metrics for one workflow run."""
+    if not writes:
+        return 0
+
+    session_factory = await _get_session_factory()
+    values = [
+        {
+            "run_id": write.run_id,
+            "metric_name": write.metric_name,
+            "metric_value": write.metric_value,
+            "metric_context": write.metric_context,
+            "workflow_id": write.workflow_id,
+            "dataset_name": write.dataset_name,
+            "dataset_version": write.dataset_version,
+        }
+        for write in writes
+    ]
+    stmt = insert(QualityMetric).values(values)
+    stmt = stmt.on_conflict_do_update(
+        index_elements=[QualityMetric.run_id, QualityMetric.metric_name],
+        set_={
+            "metric_value": stmt.excluded.metric_value,
+            "metric_context": stmt.excluded.metric_context,
+            "workflow_id": stmt.excluded.workflow_id,
+            "dataset_name": stmt.excluded.dataset_name,
+            "dataset_version": stmt.excluded.dataset_version,
+            "measured_at": func.now(),
             "updated_at": func.now(),
         },
     )

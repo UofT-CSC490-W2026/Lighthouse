@@ -7,9 +7,12 @@ from temporalio.client import Client
 from temporalio.worker import Worker
 
 from .activities import (
+    baseline_evaluation_activity,
     clean_activity,
+    evaluation_refresh_activity,
     ingest_activity,
     mental_model_activity,
+    persist_pipeline_run_metrics_activity,
     persist_runtime_index_failure_activity,
     persist_runtime_index_progress_activity,
     persist_runtime_index_start_activity,
@@ -21,6 +24,7 @@ from .config import settings
 from .connectors import MilvusConnector, PostgresConnector, S3Connector
 from .observability import configure_logging, structured_event
 from .workflows import (
+    EvaluationRefreshWorkflow,
     MentalModelWorkflow,
     OfflineDatasetWorkflow,
     RuntimeIndexWorkflow,
@@ -127,6 +131,7 @@ async def _run_runtime_worker(client: Client) -> None:
             clean_activity,
             transform_activity,
             store_activity,
+            persist_pipeline_run_metrics_activity,
             persist_runtime_index_start_activity,
             persist_runtime_index_progress_activity,
             persist_runtime_index_success_activity,
@@ -141,12 +146,15 @@ async def _run_offline_worker(client: Client) -> None:
     worker = Worker(
         client,
         task_queue=settings.temporal_task_queue_offline,
-        workflows=[OfflineDatasetWorkflow],
+        workflows=[OfflineDatasetWorkflow, EvaluationRefreshWorkflow],
         activities=[
             ingest_activity,
             clean_activity,
             transform_activity,
             store_activity,
+            evaluation_refresh_activity,
+            baseline_evaluation_activity,
+            persist_pipeline_run_metrics_activity,
         ],
     )
     await worker.run()
@@ -158,7 +166,7 @@ async def _run_mental_model_worker(client: Client) -> None:
         client,
         task_queue=settings.temporal_task_queue_mental_model,
         workflows=[MentalModelWorkflow],
-        activities=[mental_model_activity],
+        activities=[mental_model_activity, persist_pipeline_run_metrics_activity],
     )
     await worker.run()
 

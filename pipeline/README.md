@@ -30,7 +30,7 @@ alembic -c alembic.ini upgrade head
 python -m src.worker
 ```
 
-## Trigger offline benchmark ingestion (manual)
+## Trigger offline ingestion (manual)
 
 Start one `OfflineDatasetWorkflow` run for a pinned benchmark snapshot:
 
@@ -46,10 +46,51 @@ python -m src.offline_trigger \
   --requested-by operator_cli
 ```
 
+Start one incremental rolling issue->PR->diff ingestion run:
+
+```bash
+set -a
+source .env
+set +a
+python -m src.offline_trigger \
+  --dataset-name issue_pr_diff \
+  --dataset-version rolling-live \
+  --dataset-source-path /absolute/path/to/issue_pr_diff.jsonl \
+  --watermark-start 2026-02-01T00:00:00Z \
+  --watermark-end 2026-02-02T00:00:00Z \
+  --max-records 5000 \
+  --source-cursor gharchive:2026-02-02 \
+  --trigger daily_schedule \
+  --requested-by operator_cli
+```
+
 Optional:
 
 - `--force-reingest` to bypass canonical idempotency and start a unique rerun.
 - `--source-event-id <id>` when the trigger is from an external release event.
+- `--watermark-start`, `--watermark-end`, `--max-records`, and `--source-cursor` to bound incremental rolling scraped runs.
+
+## Schedule monthly evaluation refresh
+
+Create or reuse a monthly `EvaluationRefreshWorkflow` for a pinned benchmark snapshot:
+
+```bash
+set -a
+source .env
+set +a
+python -m src.evaluation_refresh_trigger \
+  --dataset-name swebench \
+  --dataset-version v1 \
+  --cron-schedule "0 0 1 * *" \
+  --trigger monthly_schedule \
+  --requested-by operator_cli
+```
+
+Notes:
+
+- Workflow id is canonical per dataset/version (`evaluation-refresh:{dataset}:{version}:monthly`).
+- Re-running the command reuses existing schedule wiring instead of duplicating it.
+- Each monthly run computes baseline fail-to-pass and regression rates and persists metrics in `quality_metrics`.
 
 ## Docker
 
