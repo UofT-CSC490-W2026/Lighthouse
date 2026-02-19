@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 
 from temporalio import workflow
+from temporalio.common import RetryPolicy
 
 from .activities import (
     clean_activity,
@@ -18,6 +19,58 @@ from .activities import (
 )
 from .contracts import runtime_index_workflow_id, should_reuse_runtime_workflow
 from .state import IndexStage, IndexStatus
+
+_PERSIST_RETRY_POLICY = RetryPolicy(
+    initial_interval=timedelta(seconds=1),
+    backoff_coefficient=2.0,
+    maximum_interval=timedelta(seconds=15),
+    maximum_attempts=5,
+)
+
+_RUNTIME_INGEST_RETRY_POLICY = RetryPolicy(
+    initial_interval=timedelta(seconds=2),
+    backoff_coefficient=2.0,
+    maximum_interval=timedelta(seconds=30),
+    maximum_attempts=4,
+)
+
+_RUNTIME_CLEAN_RETRY_POLICY = RetryPolicy(
+    initial_interval=timedelta(seconds=2),
+    backoff_coefficient=2.0,
+    maximum_interval=timedelta(seconds=20),
+    maximum_attempts=3,
+    non_retryable_error_types=["ValueError"],
+)
+
+_RUNTIME_TRANSFORM_RETRY_POLICY = RetryPolicy(
+    initial_interval=timedelta(seconds=2),
+    backoff_coefficient=2.0,
+    maximum_interval=timedelta(seconds=20),
+    maximum_attempts=3,
+    non_retryable_error_types=["ValueError"],
+)
+
+_RUNTIME_STORE_RETRY_POLICY = RetryPolicy(
+    initial_interval=timedelta(seconds=3),
+    backoff_coefficient=2.0,
+    maximum_interval=timedelta(seconds=45),
+    maximum_attempts=4,
+)
+
+_OFFLINE_RETRY_POLICY = RetryPolicy(
+    initial_interval=timedelta(seconds=5),
+    backoff_coefficient=2.0,
+    maximum_interval=timedelta(minutes=2),
+    maximum_attempts=3,
+    non_retryable_error_types=["ValueError"],
+)
+
+_MENTAL_MODEL_RETRY_POLICY = RetryPolicy(
+    initial_interval=timedelta(seconds=3),
+    backoff_coefficient=2.0,
+    maximum_interval=timedelta(seconds=45),
+    maximum_attempts=4,
+)
 
 
 @dataclass
@@ -87,6 +140,7 @@ class RuntimeIndexWorkflow:
             persist_runtime_index_start_activity,
             payload,
             start_to_close_timeout=timedelta(seconds=30),
+            retry_policy=_PERSIST_RETRY_POLICY,
         )
 
         current_stage = IndexStage.INGEST
@@ -94,13 +148,43 @@ class RuntimeIndexWorkflow:
         stage_payload: dict[str, object] = dict(payload)
         try:
             stage_plan = [
-                (IndexStage.INGEST, 10, ingest_activity, timedelta(minutes=10)),
-                (IndexStage.CLEAN, 35, clean_activity, timedelta(minutes=10)),
-                (IndexStage.TRANSFORM, 70, transform_activity, timedelta(minutes=20)),
-                (IndexStage.STORE, 90, store_activity, timedelta(minutes=10)),
+                (
+                    IndexStage.INGEST,
+                    10,
+                    ingest_activity,
+                    timedelta(minutes=10),
+                    _RUNTIME_INGEST_RETRY_POLICY,
+                ),
+                (
+                    IndexStage.CLEAN,
+                    35,
+                    clean_activity,
+                    timedelta(minutes=10),
+                    _RUNTIME_CLEAN_RETRY_POLICY,
+                ),
+                (
+                    IndexStage.TRANSFORM,
+                    70,
+                    transform_activity,
+                    timedelta(minutes=20),
+                    _RUNTIME_TRANSFORM_RETRY_POLICY,
+                ),
+                (
+                    IndexStage.STORE,
+                    90,
+                    store_activity,
+                    timedelta(minutes=10),
+                    _RUNTIME_STORE_RETRY_POLICY,
+                ),
             ]
 
-            for stage, progress_pct, stage_activity, timeout in stage_plan:
+            for (
+                stage,
+                progress_pct,
+                stage_activity,
+                timeout,
+                retry_policy,
+            ) in stage_plan:
                 current_stage = stage
                 current_progress = progress_pct
                 await workflow.execute_activity(
@@ -111,11 +195,13 @@ class RuntimeIndexWorkflow:
                         "progress_pct": progress_pct,
                     },
                     start_to_close_timeout=timedelta(seconds=30),
+                    retry_policy=_PERSIST_RETRY_POLICY,
                 )
                 stage_payload = await workflow.execute_activity(
                     stage_activity,
                     stage_payload,
                     start_to_close_timeout=timeout,
+                    retry_policy=retry_policy,
                 )
         except Exception as exc:
             await workflow.execute_activity(
@@ -128,6 +214,7 @@ class RuntimeIndexWorkflow:
                     "error_message": str(exc)[:2000],
                 },
                 start_to_close_timeout=timedelta(seconds=30),
+                retry_policy=_PERSIST_RETRY_POLICY,
             )
             raise
 
@@ -138,6 +225,7 @@ class RuntimeIndexWorkflow:
                 "snapshot_sha": stage_payload.get("snapshot_sha"),
             },
             start_to_close_timeout=timedelta(seconds=30),
+            retry_policy=_PERSIST_RETRY_POLICY,
         )
 
         return {
@@ -162,21 +250,25 @@ class OfflineDatasetWorkflow:
             ingest_activity,
             payload,
             start_to_close_timeout=timedelta(minutes=30),
+            retry_policy=_OFFLINE_RETRY_POLICY,
         )
         await workflow.execute_activity(
             clean_activity,
             payload,
             start_to_close_timeout=timedelta(minutes=20),
+            retry_policy=_OFFLINE_RETRY_POLICY,
         )
         await workflow.execute_activity(
             transform_activity,
             payload,
             start_to_close_timeout=timedelta(minutes=30),
+            retry_policy=_OFFLINE_RETRY_POLICY,
         )
         await workflow.execute_activity(
             store_activity,
             payload,
             start_to_close_timeout=timedelta(minutes=20),
+            retry_policy=_OFFLINE_RETRY_POLICY,
         )
         return {"status": IndexStatus.READY.value}
 
@@ -197,5 +289,6 @@ class MentalModelWorkflow:
             mental_model_activity,
             payload,
             start_to_close_timeout=timedelta(minutes=20),
+            retry_policy=_MENTAL_MODEL_RETRY_POLICY,
         )
         return {"status": IndexStatus.READY.value}
