@@ -9,7 +9,8 @@ It is responsible for:
 - Running Temporal workers continuously
 - Executing indexing workflows/activities
 - Populating storage systems used by MCP (S3, Postgres, Milvus)
-- Emitting indexing status and job progress (to be implemented)
+- Emitting indexing status and job progress
+- Exposing HTTP liveness/readiness endpoints for orchestration health checks
 
 ## Current implementation layout
 
@@ -17,6 +18,7 @@ It is responsible for:
 pipeline/
   src/
     config.py
+    server.py
     state.py
     activities.py
     workflows.py
@@ -72,6 +74,12 @@ pipeline/
 
 Workers are designed to run as long-lived processes and poll Temporal task queues.
 
+Deployment entrypoint uses `uvicorn` with a lightweight FastAPI app (`src.server:app`) that:
+
+- exposes `/health` and `/ready` for ECS/service health checks
+- starts worker loops in-process during app lifespan startup
+- keeps execution semantics queue-driven through Temporal workers
+
 This aligns with:
 
 - durable execution
@@ -81,18 +89,19 @@ This aligns with:
 ## Current status
 
 - Workflow/activity/worker skeletons are implemented.
-- Activities are placeholders and do not yet perform real ingestion/indexing work.
-- Persistence for `index_jobs` and `index_states` is not implemented yet.
-- Connectors for GitHub/S3/Postgres/Milvus are not implemented yet.
+- Runtime and offline activity implementations are in place for iteration-1 scope.
+- Persistence for `index_jobs` and `index_states` is implemented.
+- Connectors for GitHub/S3/Postgres/Milvus are implemented.
+- Monthly evaluation refresh workflow wiring is implemented for pinned benchmark snapshots.
+- Per-run metrics persistence is implemented via `pipeline_runs` (`records_in`, `records_out`, `failure_count`, `duration_ms`).
+- Baseline evaluation wiring is implemented for fail-to-pass and regression-rate tracking (`quality_metrics`).
+- Rolling issue->PR->diff offline ingestion is implemented with incremental controls (`watermark_start`, `watermark_end`, `max_records`, `source_cursor`) and deterministic chain dedupe.
 
 ## Next implementation items (Pipeline side)
 
-- Replace activity stubs with real stage execution.
-- Add data connectors and persistence repositories.
-- Record stage transitions, progress, and failures per job.
-- Implement benchmark snapshot ingestion mode (manual/on-release trigger path).
-- Implement evaluation refresh wiring for pinned benchmark snapshots.
-- Define deferred trigger paths for rolling scraped ingestion, synthetic refresh, and targeted reprocessing.
-- Implement retry policies and failure classification.
-- Add unit tests for activities/workflows.
-- Add startup checks for required dependencies/config.
+- Add synthetic dataset refresh workflow schedule and generator version tracking.
+- Define targeted reprocessing policy and trigger paths for schema/correction events.
+- Add mental-model refresh scheduling and artifact persistence wiring.
+- Add `context_labels` export pipeline with confidence metadata.
+- Train and integrate learned retrieval-ranking over gold datasets.
+- Add data quality scorecards, drift alerts, and freshness SLO gating.

@@ -56,9 +56,15 @@ Request:
   "ref": "main",
   "trigger": "mcp_auto",
   "requested_by": "get_context_for_change",
+  "github_token": null,
   "force_reindex": false
 }
 ```
+
+Notes:
+
+- `github_token` is optional and is primarily populated from MCP request headers (`Authorization: Bearer ...` or `X-GitHub-Token`) when present.
+- Public-repository indexing remains valid without `github_token`.
 
 Response (`202`):
 

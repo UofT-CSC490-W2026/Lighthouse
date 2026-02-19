@@ -12,6 +12,7 @@ This document is aligned with:
 - `docs/ARCHITECTURE.md`
 - `docs/indexing-contract.md`
 - `docs/pipeline-service.md`
+- `docs/dataset-storage-conventions.md`
 - `docs/ideal-datasets.md`
 
 ## Scope and Operating Model
@@ -26,10 +27,11 @@ This document is aligned with:
 
 ### Storage layers
 
-- Data lake: S3 + Parquet, organized as medallion zones:
+- Data lake: S3 + versioned JSON/JSONL artifacts, organized as medallion zones:
   - `bronze`: raw ingested artifacts and source snapshots.
   - `silver`: cleaned/normalized entities with stable schemas.
   - `gold`: training/evaluation datasets and retrieval features.
+  - Canonical object-key conventions and run manifest schema are defined in `docs/dataset-storage-conventions.md`.
 - Warehouse/serving metadata: Postgres:
   - indexing/job state (`index_jobs`, `index_states`)
   - dataset run metadata, manifests, and quality metrics
@@ -39,8 +41,8 @@ This document is aligned with:
 ### Processing/tooling (open source)
 
 - Orchestration: Temporal
-- Dataframes/ETL: Polars + PyArrow
-- Schema validation: Pandera (or Great Expectations)
+- ETL/transforms: Python-native streaming transforms over JSONL artifacts
+- Validation: deterministic schema/normalization checks in pipeline activities
 - API/data models: Pydantic
 
 ## Canonical Data Schemas (v0)
@@ -54,12 +56,12 @@ Reference contract: `docs/indexing-contract.md`.
 
 ### Dataset schemas (offline)
 
-- `repo_snapshots(repo_id, ref, snapshot_sha, source, captured_at)`
 - `dataset_instances(instance_id, task, repo_id, snapshot_sha, failure_type, failure_ref, corrected_diff_ref, split, created_at)`
 - `pipeline_runs(run_id, workflow_type, source_name, status, started_at, finished_at, records_in, records_out, error_code)`
 - `quality_metrics(run_id, metric_name, metric_value, metric_context, measured_at)`
 
 For iteration 1, `context_labels` is intentionally deferred to post-iteration work.
+For iteration 1, dedicated `repo_snapshots` table materialization is intentionally deferred; equivalent provenance is captured in indexed state, run metadata, and offline manifests.
 
 ## Pipeline Workflows
 
@@ -87,6 +89,13 @@ Outputs:
 Trigger:
 
 - manual run or new benchmark snapshot release.
+- manual trigger path implementation: `python -m src.offline_trigger --dataset-name ... --dataset-version ... --dataset-source-path ...`
+
+Adapter input contract (iteration 1):
+
+- `dataset_name`: `swebench` (or alias)
+- `dataset_version`: required explicit pin (for example `v1`)
+- `dataset_source_path`: required local path to a versioned `.jsonl`/`.json` snapshot file (or versioned directory containing one)
 
 Stages:
 
@@ -101,16 +110,31 @@ Outputs:
 - pinned gold benchmark evaluation dataset
 - run metadata and quality metrics in Postgres
 
-### Deferred offline workflows (post-iteration 1)
+Deterministic clean/dedupe policy (iteration 1):
 
-- Rolling scraped offline ingestion (incremental issue->PR->diff chains).
-- Synthetic offline refresh (mutation-repair and related generated datasets).
+- Normalize text fields (newline normalization, trailing-space trim, blank-line collapse).
+- Normalize IDs/labels:
+  - `repo_id` to lowercase canonical `owner/repo` form where possible.
+  - `split` and `failure_type` to stable lowercase token format.
+- Validate cleaned rows against `offline-clean-schema/v1`:
+  - required non-empty strings (`instance_id`, `task`, `repo_id`, `corrected_diff_ref`, `split`, `failure_type`, dataset identifiers)
+  - `repo_id` format check (`owner/repo`)
+  - optional `snapshot_sha` check (7-64 lowercase hex chars when present)
+- Primary dedupe key: `instance_id`.
+  - Deterministic winner selection: explicit `instance_id` source first, then higher completeness score, then longer `corrected_diff_ref`, then lexicographic tie-break.
+- Secondary dedupe key: content fingerprint over canonical fields (`repo_id`, `snapshot_sha`, `task`, `corrected_diff_ref`, `failure_ref`, `split`, dataset identifiers).
+- Dropped duplicates are emitted to quarantine with explicit reasons and winner references.
+
+### Post-Iteration Updates
+
+- Rolling scraped offline ingestion (incremental issue->PR->diff chains) is implemented.
+- Synthetic offline refresh (mutation-repair and related generated datasets) remains deferred.
 
 ### Offline recompute policy
 
 - Iteration 1 benchmark snapshots are ingested once, version-pinned, and treated as immutable.
 - Full historical recompute is reserved for schema-breaking changes or explicit correction events.
-- Post-iteration 1, rolling scraped sources should run incremental append/upsert and synthetic datasets should refresh on cadence.
+- Post-iteration update: rolling scraped sources now run incremental append/upsert; synthetic refresh remains deferred.
 
 ## Pipeline Diagrams
 
@@ -119,8 +143,8 @@ Outputs:
 ```mermaid
 flowchart LR
   A["Benchmark snapshots (e.g., SWE-bench release)"] --> B["Temporal OfflineDatasetWorkflow (benchmark mode)"]
-  B --> C["Bronze S3 (Parquet raw)"]
-  C --> D["Clean/Validate (Polars + Pandera)"]
+  B --> C["Bronze S3 (JSONL raw)"]
+  C --> D["Clean/Validate (pipeline schema gates)"]
   D --> E["Silver S3 (normalized)"]
   E --> F["Transform to benchmark evaluation tuples"]
   F --> G["Gold S3 (benchmark evaluation set)"]
@@ -141,13 +165,19 @@ flowchart LR
 
 ## Scheduling Plan and Use Cases
 
-Iteration 1 only includes one offline workflow: benchmark snapshot ingestion.
+Current implementation includes benchmark snapshot ingestion and rolling scraped ingestion.
 
 | Workflow | Cadence | Primary use case |
 | --- | --- | --- |
 | RuntimeIndexWorkflow | Event-driven (on demand) | Ensure MCP can serve current context for active repos |
 | OfflineDatasetWorkflow (benchmark snapshots) | Manual or on new benchmark release | Import and normalize immutable benchmark snapshots for reproducible baselines |
+| OfflineDatasetWorkflow (rolling issue->PR->diff) | Daily (or manually bounded) | Incrementally ingest new issue/PR/diff chains with watermark and upsert controls |
 | Evaluation refresh jobs | Monthly or on snapshot update | Recompute fail-to-pass and regression trends on pinned benchmark data |
+
+Monthly evaluation refresh trigger path implementation:
+
+- `python -m src.evaluation_refresh_trigger --dataset-name ... --dataset-version ... --cron-schedule "0 0 1 * *"`
+- Baseline metrics emitted per run: `baseline.fail_to_pass_rate`, `baseline.regression_rate` (stored in `quality_metrics`).
 
 ## Initial Implementation TODO (v0)
 
@@ -167,7 +197,6 @@ Iteration 1 only includes one offline workflow: benchmark snapshot ingestion.
 
 ## Non-v0 Features (Roadmap)
 
-- Rolling scraped offline ingestion (incremental issue->PR->diff pipeline).
 - Synthetic mutation-repair dataset generation at scale.
 - High-confidence `missing_context` label generation pipeline (beyond weak labels).
 - Learned retrieval ranking model trained on offline gold datasets.
@@ -180,5 +209,5 @@ Iteration 1 only includes one offline workflow: benchmark snapshot ingestion.
 Based on `docs/ideal-datasets.md` reality check:
 
 - Iteration 1 prioritizes SWE-bench benchmark snapshots for reproducible baseline evaluation.
-- Rolling GitHub issue/PR mining and synthetic pipelines are deferred to post-iteration work.
+- Rolling GitHub issue/PR mining ingestion is now supported; synthetic pipelines remain deferred.
 - Treat very large ecosystem datasets as targeted inputs, not full-ingestion v0 scope.
