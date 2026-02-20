@@ -194,17 +194,12 @@ resource "aws_ecs_task_definition" "mcp" {
         { containerPort = var.mcp_container_port, hostPort = var.mcp_container_port, protocol = "tcp" }
       ]
       environment = [
-        { name = "DB_HOST", value = var.db_endpoint },
-        { name = "DB_NAME", value = var.db_name },
-        { name = "DB_USER", value = var.db_username },
-        { name = "DB_PASSWORD", value = var.db_password },
+        { name = "APP_ENV", value = var.environment },
+        { name = "DEBUG", value = "false" },
+        { name = "POSTGRES_DSN", value = "postgresql://${var.db_username}:${var.db_password}@${var.db_endpoint}/${var.db_name}" },
         { name = "S3_BUCKET", value = var.s3_bucket_name },
-
-        # You’ll set these to your Temporal/Milvus endpoints (private IPs for MVP)
-        { name = "TEMPORAL_HOST", value = aws_instance.temporal.private_ip },
-        { name = "TEMPORAL_PORT", value = "7233" },
-        { name = "MILVUS_HOST", value = aws_instance.milvus.private_ip },
-        { name = "MILVUS_PORT", value = "19530" }
+        { name = "TEMPORAL_TARGET_HOST", value = "${aws_instance.temporal.private_ip}:7233" },
+        { name = "MILVUS_URI", value = "http://${aws_instance.milvus.private_ip}:19530" }
       ]
       logConfiguration = {
         logDriver = "awslogs"
@@ -233,16 +228,12 @@ resource "aws_ecs_task_definition" "worker" {
       image     = var.worker_image
       essential = true
       environment = [
-        { name = "DB_HOST", value = var.db_endpoint },
-        { name = "DB_NAME", value = var.db_name },
-        { name = "DB_USER", value = var.db_username },
-        { name = "DB_PASSWORD", value = var.db_password },
+        { name = "APP_ENV", value = var.environment },
+        { name = "DEBUG", value = "false" },
+        { name = "POSTGRES_DSN", value = "postgresql://${var.db_username}:${var.db_password}@${var.db_endpoint}/${var.db_name}" },
         { name = "S3_BUCKET", value = var.s3_bucket_name },
-
-        { name = "TEMPORAL_HOST", value = aws_instance.temporal.private_ip },
-        { name = "TEMPORAL_PORT", value = "7233" },
-        { name = "MILVUS_HOST", value = aws_instance.milvus.private_ip },
-        { name = "MILVUS_PORT", value = "19530" }
+        { name = "TEMPORAL_TARGET_HOST", value = "${aws_instance.temporal.private_ip}:7233" },
+        { name = "MILVUS_URI", value = "http://${aws_instance.milvus.private_ip}:19530" }
       ]
       logConfiguration = {
         logDriver = "awslogs"
