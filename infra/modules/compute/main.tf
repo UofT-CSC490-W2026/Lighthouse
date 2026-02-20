@@ -1,6 +1,12 @@
 data "aws_region" "current" {}
 data "aws_caller_identity" "current" {}
 
+locals {
+  project_root     = "${path.root}/.."
+  mcp_image_uri    = "${aws_ecr_repository.mcp_service.repository_url}:latest"
+  worker_image_uri = "${aws_ecr_repository.pipeline_worker.repository_url}:latest"
+}
+
 # --- ECS Cluster
 resource "aws_ecs_cluster" "main" {
   name = "${var.project_name}-${var.environment}-cluster"
@@ -24,6 +30,32 @@ resource "aws_ecr_repository" "pipeline_worker" {
   image_tag_mutability = "MUTABLE"
   force_delete         = true
   image_scanning_configuration { scan_on_push = true }
+}
+
+# --- Build and push Docker images to ECR
+resource "null_resource" "docker_build_push" {
+  triggers = {
+    mcp_repo    = aws_ecr_repository.mcp_service.repository_url
+    worker_repo = aws_ecr_repository.pipeline_worker.repository_url
+  }
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      aws ecr get-login-password --region ${data.aws_region.current.name} | \
+        docker login --username AWS --password-stdin ${data.aws_caller_identity.current.account_id}.dkr.ecr.${data.aws_region.current.name}.amazonaws.com
+
+      docker build -t ${local.mcp_image_uri} -f ${local.project_root}/mcp/Dockerfile ${local.project_root}
+      docker push ${local.mcp_image_uri}
+
+      docker build -t ${local.worker_image_uri} -f ${local.project_root}/pipeline/Dockerfile ${local.project_root}
+      docker push ${local.worker_image_uri}
+    EOT
+  }
+
+  depends_on = [
+    aws_ecr_repository.mcp_service,
+    aws_ecr_repository.pipeline_worker,
+  ]
 }
 
 # --- CloudWatch logs
@@ -190,7 +222,7 @@ resource "aws_ecs_task_definition" "mcp" {
   container_definitions = jsonencode([
     {
       name      = "mcp"
-      image     = var.mcp_image
+      image     = local.mcp_image_uri
       essential = true
       portMappings = [
         { containerPort = var.mcp_container_port, hostPort = var.mcp_container_port, protocol = "tcp" }
@@ -213,6 +245,8 @@ resource "aws_ecs_task_definition" "mcp" {
       }
     }
   ])
+
+  depends_on = [null_resource.docker_build_push]
 }
 
 resource "aws_ecs_task_definition" "worker" {
@@ -227,7 +261,7 @@ resource "aws_ecs_task_definition" "worker" {
   container_definitions = jsonencode([
     {
       name      = "worker"
-      image     = var.worker_image
+      image     = local.worker_image_uri
       essential = true
       environment = [
         { name = "APP_ENV", value = var.environment },
@@ -247,6 +281,8 @@ resource "aws_ecs_task_definition" "worker" {
       }
     }
   ])
+
+  depends_on = [null_resource.docker_build_push]
 }
 
 # --- ECS services (private subnets, no public IP)

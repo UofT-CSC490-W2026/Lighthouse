@@ -46,15 +46,6 @@ variable "db_password" {
   sensitive = true
 }
 
-# ECS images (full image URI, e.g. <acct>.dkr.ecr.<region>.amazonaws.com/repo:tag)
-variable "mcp_image" {
-  type = string
-}
-
-variable "worker_image" {
-  type = string
-}
-
 variable "mcp_container_port" {
   type    = number
   default = 8000

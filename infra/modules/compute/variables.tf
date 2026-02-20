@@ -15,8 +15,6 @@ variable "db_password" {
 }
 variable "s3_bucket_name" { type = string }
 
-variable "mcp_image" { type = string }
-variable "worker_image" { type = string }
 variable "mcp_container_port" {
   type    = number
   default = 8000

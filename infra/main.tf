@@ -4,6 +4,10 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
+    null = {
+      source  = "hashicorp/null"
+      version = "~> 3.0"
+    }
   }
   required_version = ">= 1.5.0"
 }
@@ -73,10 +77,6 @@ module "compute" {
   db_username    = var.db_username
   db_password    = var.db_password
   s3_bucket_name = module.storage.bucket_name
-
-  # Images (you build/push and set these)
-  mcp_image    = var.mcp_image
-  worker_image = var.worker_image
 
   mcp_container_port = var.mcp_container_port
 
