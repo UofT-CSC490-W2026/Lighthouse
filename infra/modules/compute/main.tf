@@ -39,7 +39,10 @@ resource "aws_cloudwatch_log_group" "worker" {
 data "aws_iam_policy_document" "ecs_task_assume" {
   statement {
     actions = ["sts:AssumeRole"]
-    principals { type = "Service", identifiers = ["ecs-tasks.amazonaws.com"] }
+    principals {
+      type        = "Service"
+      identifiers = ["ecs-tasks.amazonaws.com"]
+    }
   }
 }
 
