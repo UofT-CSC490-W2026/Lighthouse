@@ -79,6 +79,5 @@ variable "ec2_key_name" {
 
 variable "admin_ssh_cidr" {
   type        = string
-  description = "CIDR allowed to SSH into Temporal/Milvus instances (e.g. your IP /32)."
-  default     = "0.0.0.0/0"
+  description = "CIDR allowed to SSH into Temporal/Milvus instances (e.g. your IP /32). Required when ec2_key_name is set."
 }

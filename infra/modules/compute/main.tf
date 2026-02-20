@@ -15,12 +15,14 @@ resource "aws_ecs_cluster" "main" {
 resource "aws_ecr_repository" "mcp_service" {
   name                 = "${var.project_name}-${var.environment}-mcp-service"
   image_tag_mutability = "MUTABLE"
+  force_delete         = true
   image_scanning_configuration { scan_on_push = true }
 }
 
 resource "aws_ecr_repository" "pipeline_worker" {
   name                 = "${var.project_name}-${var.environment}-pipeline-worker"
   image_tag_mutability = "MUTABLE"
+  force_delete         = true
   image_scanning_configuration { scan_on_push = true }
 }
 
@@ -39,7 +41,10 @@ resource "aws_cloudwatch_log_group" "worker" {
 data "aws_iam_policy_document" "ecs_task_assume" {
   statement {
     actions = ["sts:AssumeRole"]
-    principals { type = "Service", identifiers = ["ecs-tasks.amazonaws.com"] }
+    principals {
+      type        = "Service"
+      identifiers = ["ecs-tasks.amazonaws.com"]
+    }
   }
 }
 
@@ -191,17 +196,12 @@ resource "aws_ecs_task_definition" "mcp" {
         { containerPort = var.mcp_container_port, hostPort = var.mcp_container_port, protocol = "tcp" }
       ]
       environment = [
-        { name = "DB_HOST", value = var.db_endpoint },
-        { name = "DB_NAME", value = var.db_name },
-        { name = "DB_USER", value = var.db_username },
-        { name = "DB_PASSWORD", value = var.db_password },
+        { name = "APP_ENV", value = var.environment },
+        { name = "DEBUG", value = "false" },
+        { name = "POSTGRES_DSN", value = "postgresql://${var.db_username}:${var.db_password}@${var.db_endpoint}/${var.db_name}" },
         { name = "S3_BUCKET", value = var.s3_bucket_name },
-
-        # You’ll set these to your Temporal/Milvus endpoints (private IPs for MVP)
-        { name = "TEMPORAL_HOST", value = aws_instance.temporal.private_ip },
-        { name = "TEMPORAL_PORT", value = "7233" },
-        { name = "MILVUS_HOST", value = aws_instance.milvus.private_ip },
-        { name = "MILVUS_PORT", value = "19530" }
+        { name = "TEMPORAL_TARGET_HOST", value = "${aws_instance.temporal.private_ip}:7233" },
+        { name = "MILVUS_URI", value = "http://${aws_instance.milvus.private_ip}:19530" }
       ]
       logConfiguration = {
         logDriver = "awslogs"
@@ -230,16 +230,12 @@ resource "aws_ecs_task_definition" "worker" {
       image     = var.worker_image
       essential = true
       environment = [
-        { name = "DB_HOST", value = var.db_endpoint },
-        { name = "DB_NAME", value = var.db_name },
-        { name = "DB_USER", value = var.db_username },
-        { name = "DB_PASSWORD", value = var.db_password },
+        { name = "APP_ENV", value = var.environment },
+        { name = "DEBUG", value = "false" },
+        { name = "POSTGRES_DSN", value = "postgresql://${var.db_username}:${var.db_password}@${var.db_endpoint}/${var.db_name}" },
         { name = "S3_BUCKET", value = var.s3_bucket_name },
-
-        { name = "TEMPORAL_HOST", value = aws_instance.temporal.private_ip },
-        { name = "TEMPORAL_PORT", value = "7233" },
-        { name = "MILVUS_HOST", value = aws_instance.milvus.private_ip },
-        { name = "MILVUS_PORT", value = "19530" }
+        { name = "TEMPORAL_TARGET_HOST", value = "${aws_instance.temporal.private_ip}:7233" },
+        { name = "MILVUS_URI", value = "http://${aws_instance.milvus.private_ip}:19530" }
       ]
       logConfiguration = {
         logDriver = "awslogs"
@@ -322,7 +318,7 @@ resource "aws_security_group" "stateful_ec2" {
     from_port   = 7233
     to_port     = 7233
     protocol    = "tcp"
-    cidr_blocks = ["10.0.0.0/8"] # MVP-safe fallback; replace with VPC CIDR if you pass it in
+    cidr_blocks = [var.vpc_cidr]
   }
 
   # Milvus port (from within VPC)
@@ -330,7 +326,7 @@ resource "aws_security_group" "stateful_ec2" {
     from_port   = 19530
     to_port     = 19530
     protocol    = "tcp"
-    cidr_blocks = ["10.0.0.0/8"]
+    cidr_blocks = [var.vpc_cidr]
   }
 
   # Optional: Milvus health/metrics, etc. Add later if needed.
@@ -350,7 +346,7 @@ locals {
     set -euxo pipefail
 
     dnf update -y
-    dnf install -y docker
+    dnf install -y docker docker-compose-plugin
     systemctl enable docker
     systemctl start docker
 
@@ -359,7 +355,7 @@ locals {
     version: "3.8"
     services:
       postgres:
-        image: postgres:15
+        image: postgres:17
         environment:
           POSTGRES_PASSWORD: temporal
           POSTGRES_USER: temporal
@@ -404,7 +400,7 @@ locals {
     set -euxo pipefail
 
     dnf update -y
-    dnf install -y docker
+    dnf install -y docker docker-compose-plugin
     systemctl enable docker
     systemctl start docker
 
@@ -480,7 +476,7 @@ resource "aws_instance" "temporal" {
 resource "aws_instance" "milvus" {
   ami                    = data.aws_ami.al2023.id
   instance_type          = var.milvus_instance_type
-  subnet_id              = var.private_subnet_ids[1]
+  subnet_id              = element(var.private_subnet_ids, 1)
   vpc_security_group_ids = [aws_security_group.stateful_ec2.id]
   key_name               = var.ec2_key_name != "" ? var.ec2_key_name : null
   user_data              = local.milvus_user_data
