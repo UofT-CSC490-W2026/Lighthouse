@@ -42,7 +42,6 @@ module "database" {
 
   vpc_id             = module.networking.vpc_id
   private_subnet_ids = module.networking.private_subnet_ids
-  vpc_cidr           = var.vpc_cidr
 
   project_name  = var.project_name
   environment   = var.environment
@@ -51,14 +50,15 @@ module "database" {
   db_username = var.db_username
   db_password = var.db_password
 
-  # Only allow DB access from ECS tasks SG (created in compute)
-  allowed_security_group_ids = [module.compute.ecs_tasks_sg_id]
+  # Only allow DB access from ECS tasks SGs (created in compute)
+  allowed_security_group_ids = [module.compute.ecs_tasks_sg_id, module.compute.worker_tasks_sg_id]
 }
 
 module "compute" {
   source = "./modules/compute"
 
   vpc_id             = module.networking.vpc_id
+  vpc_cidr           = var.vpc_cidr
   public_subnet_ids  = module.networking.public_subnet_ids
   private_subnet_ids = module.networking.private_subnet_ids
 

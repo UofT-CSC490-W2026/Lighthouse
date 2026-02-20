@@ -322,7 +322,7 @@ resource "aws_security_group" "stateful_ec2" {
     from_port   = 7233
     to_port     = 7233
     protocol    = "tcp"
-    cidr_blocks = ["10.0.0.0/8"] # MVP-safe fallback; replace with VPC CIDR if you pass it in
+    cidr_blocks = [var.vpc_cidr]
   }
 
   # Milvus port (from within VPC)
@@ -330,7 +330,7 @@ resource "aws_security_group" "stateful_ec2" {
     from_port   = 19530
     to_port     = 19530
     protocol    = "tcp"
-    cidr_blocks = ["10.0.0.0/8"]
+    cidr_blocks = [var.vpc_cidr]
   }
 
   # Optional: Milvus health/metrics, etc. Add later if needed.
@@ -350,7 +350,7 @@ locals {
     set -euxo pipefail
 
     dnf update -y
-    dnf install -y docker
+    dnf install -y docker docker-compose-plugin
     systemctl enable docker
     systemctl start docker
 
@@ -404,7 +404,7 @@ locals {
     set -euxo pipefail
 
     dnf update -y
-    dnf install -y docker
+    dnf install -y docker docker-compose-plugin
     systemctl enable docker
     systemctl start docker
 
@@ -480,7 +480,7 @@ resource "aws_instance" "temporal" {
 resource "aws_instance" "milvus" {
   ami                    = data.aws_ami.al2023.id
   instance_type          = var.milvus_instance_type
-  subnet_id              = var.private_subnet_ids[1]
+  subnet_id              = element(var.private_subnet_ids, 1)
   vpc_security_group_ids = [aws_security_group.stateful_ec2.id]
   key_name               = var.ec2_key_name != "" ? var.ec2_key_name : null
   user_data              = local.milvus_user_data
