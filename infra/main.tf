@@ -34,7 +34,9 @@ module "storage" {
 
   project_name = var.project_name
   environment  = var.environment
-  force_destroy = var.environment != "prod"
+
+  # var.environment != "prod" in reality but for now true for demo purposes
+  force_destroy = true
 }
 
 module "database" {
