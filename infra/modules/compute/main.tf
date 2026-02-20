@@ -15,12 +15,14 @@ resource "aws_ecs_cluster" "main" {
 resource "aws_ecr_repository" "mcp_service" {
   name                 = "${var.project_name}-${var.environment}-mcp-service"
   image_tag_mutability = "MUTABLE"
+  force_delete         = true
   image_scanning_configuration { scan_on_push = true }
 }
 
 resource "aws_ecr_repository" "pipeline_worker" {
   name                 = "${var.project_name}-${var.environment}-pipeline-worker"
   image_tag_mutability = "MUTABLE"
+  force_delete         = true
   image_scanning_configuration { scan_on_push = true }
 }
 
