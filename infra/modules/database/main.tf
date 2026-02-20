@@ -35,14 +35,14 @@ resource "aws_db_instance" "postgres" {
   allocated_storage       = 20
   storage_type            = "gp3"
   engine                  = "postgres"
-  engine_version          = "15.4"
+  engine_version          = "17.7"
   instance_class          = "db.t3.micro"
 
   db_name                 = var.db_name
   username                = var.db_username
   password                = var.db_password
 
-  parameter_group_name    = "default.postgres15"
+  parameter_group_name    = "default.postgres17"
   skip_final_snapshot     = true
   publicly_accessible     = false
   deletion_protection     = var.environment == "prod"

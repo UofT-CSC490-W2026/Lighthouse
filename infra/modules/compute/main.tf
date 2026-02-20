@@ -362,7 +362,7 @@ locals {
     version: "3.8"
     services:
       postgres:
-        image: postgres:15
+        image: postgres:17
         environment:
           POSTGRES_PASSWORD: temporal
           POSTGRES_USER: temporal
