@@ -87,7 +87,7 @@ resource "aws_iam_role" "ecs_execution_role" {
 
 resource "aws_iam_role_policy_attachment" "ecs_exec_attach" {
   role       = aws_iam_role.ecs_execution_role.name
-  policy_arn  = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
 # Task role (app permissions: S3 access etc.)
@@ -114,7 +114,7 @@ resource "aws_iam_policy" "ecs_task_policy" {
 }
 
 resource "aws_iam_role_policy_attachment" "ecs_task_attach" {
-  role      = aws_iam_role.ecs_task_role.name
+  role       = aws_iam_role.ecs_task_role.name
   policy_arn = aws_iam_policy.ecs_task_policy.arn
 }
 

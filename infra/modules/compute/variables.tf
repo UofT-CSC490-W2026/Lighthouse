@@ -4,7 +4,7 @@ variable "public_subnet_ids" { type = list(string) }
 variable "private_subnet_ids" { type = list(string) }
 
 variable "project_name" { type = string }
-variable "environment"  { type = string }
+variable "environment" { type = string }
 
 variable "db_endpoint" { type = string }
 variable "db_name" { type = string }
@@ -21,7 +21,7 @@ variable "mcp_container_port" {
 }
 
 variable "temporal_instance_type" { type = string }
-variable "milvus_instance_type"   { type = string }
+variable "milvus_instance_type" { type = string }
 
 variable "ec2_key_name" {
   type    = string

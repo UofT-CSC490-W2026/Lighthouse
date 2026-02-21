@@ -46,6 +46,12 @@ variable "db_password" {
   sensitive = true
 }
 
+variable "db_deletion_protection" {
+  type        = bool
+  description = "Enable RDS deletion protection. Set false for planned teardown demos."
+  default     = true
+}
+
 variable "mcp_container_port" {
   type    = number
   default = 8000

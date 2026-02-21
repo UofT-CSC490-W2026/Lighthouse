@@ -59,4 +59,4 @@ COPY mcp/src/ /app/mcp/src/
 EXPOSE 8000
 
 ENV WORKERS=1
-CMD ["sh", "-c", "gunicorn src.server:app --workers ${WORKERS} --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000"]
+CMD ["sh", "-c", "uvicorn src.server:app --host 0.0.0.0 --port 8000 --workers ${WORKERS}"]

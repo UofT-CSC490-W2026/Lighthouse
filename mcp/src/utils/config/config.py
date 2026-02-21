@@ -1,10 +1,12 @@
 """MCP runtime settings model and bootstrap."""
 
+import json
 from functools import lru_cache
+from typing import Annotated
 
 from config_provider import bootstrap_runtime_config
 from pydantic import AliasChoices, Field, SecretStr, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 from retrieval_vectors import DEFAULT_VECTOR_DIMENSIONS
 from runtime_retrieval import RUNTIME_CHUNK_COLLECTION
 
@@ -22,7 +24,7 @@ class Settings(BaseSettings):
     service_name: str = "Lighthouse MCP Context Service"
     app_env: str = "local"
     debug: bool = True
-    cors_allow_origins: list[str] = Field(
+    cors_allow_origins: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: [
             "http://localhost:6274",
             "http://127.0.0.1:6274",
@@ -71,8 +73,13 @@ class Settings(BaseSettings):
     @field_validator("cors_allow_origins", mode="before")
     @classmethod
     def _parse_cors_allow_origins(cls, value: str | list[str]) -> list[str]:
-        """Accept comma-delimited CORS origins or a pre-parsed list."""
+        """Accept comma-delimited, JSON array, or pre-parsed CORS origins."""
         if isinstance(value, str):
+            stripped = value.strip()
+            if stripped.startswith("["):
+                parsed = json.loads(stripped)
+                if isinstance(parsed, list):
+                    return [str(origin).strip() for origin in parsed if str(origin).strip()]
             return [origin.strip() for origin in value.split(",") if origin.strip()]
         return value
 

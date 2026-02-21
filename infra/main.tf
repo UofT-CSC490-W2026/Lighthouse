@@ -30,7 +30,7 @@ module "networking" {
   enable_vpc_endpoints = true
 
   # for SSH to EC2 (Temporal/Milvus)
-  admin_ssh_cidr       = var.admin_ssh_cidr
+  admin_ssh_cidr = var.admin_ssh_cidr
 }
 
 module "storage" {
@@ -49,12 +49,13 @@ module "database" {
   vpc_id             = module.networking.vpc_id
   private_subnet_ids = module.networking.private_subnet_ids
 
-  project_name  = var.project_name
-  environment   = var.environment
+  project_name = var.project_name
+  environment  = var.environment
 
-  db_name     = var.db_name
-  db_username = var.db_username
-  db_password = var.db_password
+  db_name             = var.db_name
+  db_username         = var.db_username
+  db_password         = var.db_password
+  deletion_protection = var.db_deletion_protection
 
   # Only allow DB access from ECS tasks SGs (created in compute)
   allowed_security_group_ids = [module.compute.ecs_tasks_sg_id, module.compute.worker_tasks_sg_id]

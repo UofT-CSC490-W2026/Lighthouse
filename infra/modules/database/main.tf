@@ -31,25 +31,25 @@ resource "aws_security_group" "rds" {
 }
 
 resource "aws_db_instance" "postgres" {
-  identifier              = "${var.project_name}-${var.environment}-db"
-  allocated_storage       = 20
-  storage_type            = "gp3"
-  engine                  = "postgres"
-  engine_version          = "17.7"
-  instance_class          = "db.t3.micro"
+  identifier        = "${var.project_name}-${var.environment}-db"
+  allocated_storage = 20
+  storage_type      = "gp3"
+  engine            = "postgres"
+  engine_version    = "17.7"
+  instance_class    = "db.t3.micro"
 
-  db_name                 = var.db_name
-  username                = var.db_username
-  password                = var.db_password
+  db_name  = var.db_name
+  username = var.db_username
+  password = var.db_password
 
   parameter_group_name    = "default.postgres17"
   skip_final_snapshot     = true
   publicly_accessible     = false
-  deletion_protection     = var.environment == "prod"
+  deletion_protection     = var.deletion_protection
   backup_retention_period = var.environment == "prod" ? 7 : 1
 
-  vpc_security_group_ids  = [aws_security_group.rds.id]
-  db_subnet_group_name    = aws_db_subnet_group.default.name
+  vpc_security_group_ids = [aws_security_group.rds.id]
+  db_subnet_group_name   = aws_db_subnet_group.default.name
 
   tags = { Name = "${var.project_name}-${var.environment}-db" }
 }
