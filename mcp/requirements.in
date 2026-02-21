@@ -1,0 +1,15 @@
+../shared
+uvicorn[standard]
+black
+pydantic
+pydantic-settings
+temporalio
+asyncpg
+pymilvus
+boto3
+fastapi
+fastapi-mcp
+mcp_proxy
+mcp[cli]
+langgraph
+pytest

@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "shared"
+version = "0.1.0"
+description = "Shared contracts and runtime config bootstrap for Lighthouse services"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "pydantic>=2.12.0",
+]
+
+[project.optional-dependencies]
+aws = ["boto3>=1.34.0"]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+py-modules = [
+  "config_provider",
+  "indexing",
+  "retrieval_vectors",
+  "runtime_retrieval",
+]
