@@ -1,1 +1,0 @@
-"""Lighthouse MCP service package."""

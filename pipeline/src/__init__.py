@@ -1,1 +1,0 @@
-"""Lighthouse pipeline worker package."""
