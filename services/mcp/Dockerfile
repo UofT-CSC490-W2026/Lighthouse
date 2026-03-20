@@ -6,14 +6,15 @@ WORKDIR /app
 
 # Install dependencies (cached layer — only re-runs when lockfile or pyproject changes)
 COPY pyproject.toml uv.lock ./
+COPY packages/ packages/
 COPY services/mcp/pyproject.toml services/mcp/pyproject.toml
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --package mcp --frozen --no-dev --no-install-project
 
-# Copy source
+# Copy source and do final install
 COPY services/mcp/src services/mcp/src
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --package mcp --frozen --no-dev
+    uv sync --package mcp --frozen --no-dev --no-editable
 
 
 FROM python:3.11-slim-bookworm
@@ -21,10 +22,8 @@ FROM python:3.11-slim-bookworm
 WORKDIR /app
 
 COPY --from=builder /app/.venv /app/.venv
-COPY --from=builder /app/services/mcp/src /app/services/mcp/src
 
 ENV PATH="/app/.venv/bin:$PATH"
-ENV PYTHONPATH="/app/services/mcp/src"
 
 EXPOSE 8000
 
