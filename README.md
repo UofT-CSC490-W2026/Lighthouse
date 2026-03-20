@@ -32,4 +32,13 @@ monorepo/
 
 ### Setup Instructions
 
-### Development Guidelines
+1. Install [Docker Desktop](https://docs.docker.com/desktop/)
+2. Install [Temporal CLI](https://temporal.io/setup/install-temporal-cli) for running temporal locally.
+3. Install [`uv`](https://docs.astral.sh/uv/getting-started/installation/) for Python package management.
+4. Run `uv sync` to install dependencies for the entire monorepo.
+
+### Running the Services
+
+1. Run `docker compose up -d` to start Postgres and Milvus.
+2. Run `temporal server start-dev` to start the Temporal server.
+3. For running a `service`, use `uv run --package <service> ...`.
