@@ -54,3 +54,6 @@ infra/terraform.tfstate.backup
 infra/.terraform.lock.hcl
 infra/.terraform.tfstate.lock.info
 
+# Linting
+.ruff_cache/
+

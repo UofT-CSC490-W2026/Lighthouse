@@ -1,0 +1,25 @@
+[project]
+name = "lighthouse"
+version = "0.1.0"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.uv.workspace]
+members = [
+  "services/ingestion",
+  "services/search",
+  "services/mcp",
+  "packages/shared",
+  "packages/vectordb",
+  "packages/db",
+]
+
+[dependency-groups]
+dev = ["pytest>=9.0.2", "ruff>=0.15.7", "ty>=0.0.24"]
+
+[tool.ruff]
+extend-exclude = ["assignments", "infra", "docs"]
+
+[tool.ty.src]
+exclude = ["assignments", "infra", "docs"]
