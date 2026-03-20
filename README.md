@@ -29,3 +29,7 @@ monorepo/
 ├── pyproject.toml          # Root: dev tools only (ruff, mypy, pytest)
 └── uv.lock                 # Single lockfile for the whole repo
 ```
+
+### Setup Instructions
+
+### Development Guidelines
