@@ -79,6 +79,32 @@ services:
       retries: 3
       start_period: 90s
 
+  mcp:
+    build:
+      context: .
+      dockerfile: services/mcp/Dockerfile
+    ports:
+      - "8000:8000"
+    env_file:
+      - services/mcp/.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build: services/web
+    ports:
+      - "3000:3000"
+    environment:
+      VITE_MCP_URL: http://localhost:8000
+    depends_on:
+      - mcp
+
 volumes:
   postgres_data:
   etcd_data:
