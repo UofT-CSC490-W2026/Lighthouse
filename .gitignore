@@ -57,3 +57,5 @@ infra/.terraform.tfstate.lock.info
 # Linting
 .ruff_cache/
 
+node_modules/
+dist/
