@@ -76,8 +76,7 @@ async def upsert_user(
             github_login = EXCLUDED.github_login,
             display_name = EXCLUDED.display_name,
             avatar_url   = EXCLUDED.avatar_url,
-            email        = EXCLUDED.email,
-            updated_at   = NOW()
+            email        = EXCLUDED.email
         RETURNING id, github_id, github_login, display_name, avatar_url, email
         """,
         str(uuid.uuid4()),
