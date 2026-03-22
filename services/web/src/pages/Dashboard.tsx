@@ -1,0 +1,38 @@
+import { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { apiFetch, type User } from "@/lib/api";
+import { Navbar } from "@/components/Navbar";
+import { RepoList } from "@/components/RepoList";
+
+export default function Dashboard() {
+  const navigate = useNavigate();
+  const [user, setUser] = useState<User | null>(null);
+
+  useEffect(() => {
+    apiFetch<User>("/v1/auth/me").then(setUser).catch(() => navigate("/login"));
+  }, [navigate]);
+
+  if (!user) return null;
+
+  return (
+    <>
+      <Navbar user={user} />
+      <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <h1 className="text-xl font-semibold text-gray-900">
+              Repositories
+            </h1>
+            <Link
+              to="/dashboard/add-repo"
+              className="inline-flex items-center rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-blue-700"
+            >
+              + Add Repository
+            </Link>
+          </div>
+          <RepoList />
+        </div>
+      </main>
+    </>
+  );
+}
