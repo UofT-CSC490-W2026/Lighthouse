@@ -220,7 +220,9 @@ def test_hiding_a_public_repo_only_hides_it_for_the_requesting_user(
         assert removed.status_code == 200
         assert removed.json() == {"repo_id": "openai/openai-python", "hidden": True}
 
-    hidden_for_user_one = app.engine.user._list_user_repos_sync(authenticated_user.id, set())
+    hidden_for_user_one = app.engine.user._list_user_repos_sync(
+        authenticated_user.id, set()
+    )
     visible_for_user_two = app.engine.user._list_user_repos_sync("user-2", set())
 
     assert hidden_for_user_one == []
@@ -325,7 +327,9 @@ def test_mcp_token_http_lifecycle(
         assert fetched.json()["token"] == generated_token
         assert fetched.json()["has_token"] is True
 
-        resolved_auth = asyncio.run(app.authenticator.authenticate_bearer_token(generated_token))
+        resolved_auth = asyncio.run(
+            app.authenticator.authenticate_bearer_token(generated_token)
+        )
         assert resolved_auth.id == authenticated_user.id
         assert resolved_auth.authenticated_via == "mcp"
 

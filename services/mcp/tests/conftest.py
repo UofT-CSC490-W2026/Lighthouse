@@ -151,11 +151,15 @@ def install_fake_auth(
                 raise AuthorizationError("Missing Authorization header")
             return authenticated_user
 
-        async def fake_fetch_github_repository(repo_id: str, *, user_id: str | None = None):
+        async def fake_fetch_github_repository(
+            repo_id: str, *, user_id: str | None = None
+        ):
             """Return deterministic repository metadata without calling GitHub."""
             normalized_repo_id = repo_id.lower()
             owner_login, _, repo_name = normalized_repo_id.partition("/")
-            github_repo_id = int(hashlib.sha1(normalized_repo_id.encode()).hexdigest()[:12], 16)
+            github_repo_id = int(
+                hashlib.sha1(normalized_repo_id.encode()).hexdigest()[:12], 16
+            )
             return GitHubRepository(
                 github_repo_id=github_repo_id,
                 repo_id=normalized_repo_id,

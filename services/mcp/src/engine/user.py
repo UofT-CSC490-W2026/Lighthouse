@@ -61,10 +61,14 @@ class UserEngine:
         "list_user_repos",
         description="List repositories visible to the current user.",
     )
-    async def list_user_repos(self, auth: AuthenticatedUser) -> list["UserRepoResponse"]:
+    async def list_user_repos(
+        self, auth: AuthenticatedUser
+    ) -> list["UserRepoResponse"]:
         """Return public repositories plus private repositories the user can currently access."""
         visible_private_repo_ids = (
-            await self.engine.app.authenticator.list_visible_private_repository_ids(auth.id)
+            await self.engine.app.authenticator.list_visible_private_repository_ids(
+                auth.id
+            )
         )
         repos = await asyncio.to_thread(
             self._list_user_repos_sync,
@@ -94,7 +98,9 @@ class UserEngine:
             normalized_repo_id,
             user_id=auth.id,
         )
-        repo = await asyncio.to_thread(self._upsert_user_repo_sync, github_repo, auth.id)
+        repo = await asyncio.to_thread(
+            self._upsert_user_repo_sync, github_repo, auth.id
+        )
         return self._to_user_repo_response(repo)
 
     @httproute(
@@ -181,7 +187,9 @@ class UserEngine:
             ).where(UserHiddenRepository.user == user_id)
             query = (
                 Repository.select()
-                .where((visibility_clause) & ~(Repository.id.in_(hidden_repository_ids)))
+                .where(
+                    (visibility_clause) & ~(Repository.id.in_(hidden_repository_ids))
+                )
                 .order_by(Repository.added_at.desc())
             )
             return list(query)

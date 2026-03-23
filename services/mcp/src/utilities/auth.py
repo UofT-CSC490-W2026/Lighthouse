@@ -173,7 +173,9 @@ class Authenticator:
         """Fetch repository metadata, using the user's GitHub token when available."""
         access_token = None
         if user_id is not None:
-            access_token = await asyncio.to_thread(self._get_github_access_token_sync, user_id)
+            access_token = await asyncio.to_thread(
+                self._get_github_access_token_sync, user_id
+            )
 
         headers = {"Accept": "application/vnd.github+json"}
         if access_token:
@@ -200,7 +202,9 @@ class Authenticator:
 
     async def list_visible_private_repository_ids(self, user_id: str) -> set[str]:
         """Return the private repositories the given user can currently access."""
-        access_token = await asyncio.to_thread(self._get_github_access_token_sync, user_id)
+        access_token = await asyncio.to_thread(
+            self._get_github_access_token_sync, user_id
+        )
         if not access_token:
             return set()
 
@@ -332,7 +336,8 @@ class Authenticator:
         token_hash = self.hash_token(token)
         with self.app.database.connection_context():
             user = User.get_or_none(
-                (User.api_token_hash == token_hash) | (User.mcp_token_hash == token_hash)
+                (User.api_token_hash == token_hash)
+                | (User.mcp_token_hash == token_hash)
             )
             if user is None:
                 raise AuthorizationError("Invalid or revoked token")
@@ -382,7 +387,9 @@ class Authenticator:
 
         return self._to_authenticated_user(user), api_token
 
-    def _upsert_github_session_sync(self, user_id: str, github_access_token: str) -> None:
+    def _upsert_github_session_sync(
+        self, user_id: str, github_access_token: str
+    ) -> None:
         """Persist the latest GitHub access token for query-time permission checks."""
         session = (
             Session.select()
