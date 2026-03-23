@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import TYPE_CHECKING, Annotated
 
 from fastapi import Query, Request, Response
 from fastapi.responses import RedirectResponse
+from pydantic import BaseModel
 
 from ..utilities import AuthenticatedUser, get_logger, httproute
 
@@ -11,11 +13,11 @@ if TYPE_CHECKING:
     from .engine import Engine
 
 
-class AuthService:
+class AuthEngine:
     """Handle OAuth bootstrap and bearer-token lifecycle routes."""
 
     def __init__(self, engine: Engine) -> None:
-        """Bind the auth service to the shared engine."""
+        """Bind the auth engine to the shared engine."""
         self.engine = engine
         self.log = get_logger(__name__)
 
@@ -74,7 +76,8 @@ class AuthService:
             )
             _, api_token = (
                 await self.engine.app.authenticator.upsert_github_user_and_issue_token(
-                    github_user
+                    github_user,
+                    access_token,
                 )
             )
         except Exception:
@@ -101,5 +104,57 @@ class AuthService:
     )
     async def logout(self, auth: AuthenticatedUser) -> Response:
         """Revoke the caller's current Lighthouse bearer token."""
-        await self.engine.app.authenticator.revoke_token(auth.id)
+        if auth.authenticated_via == "mcp":
+            await self.engine.app.authenticator.revoke_mcp_token(auth.id)
+        else:
+            await self.engine.app.authenticator.revoke_token(auth.id)
         return Response(status_code=204)
+
+    @httproute(
+        "GET",
+        "/v1/auth/mcp-token",
+        name="get_mcp_token",
+        description="Return the current long-lived MCP token for the authenticated user.",
+    )
+    async def get_mcp_token(self, auth: AuthenticatedUser) -> "MCPTokenResponse":
+        """Return the user's current long-lived MCP token and issuance metadata."""
+        token = await self.engine.app.authenticator.get_mcp_token(auth.id)
+        return MCPTokenResponse(
+            token=token.token,
+            issued_at=token.issued_at,
+            has_token=token.token is not None,
+        )
+
+    @httproute(
+        "POST",
+        "/v1/auth/mcp-token",
+        name="rotate_mcp_token",
+        description="Generate or rotate the user's long-lived MCP token.",
+    )
+    async def rotate_mcp_token(self, auth: AuthenticatedUser) -> "MCPTokenResponse":
+        """Generate a new long-lived MCP token for the user."""
+        token = await self.engine.app.authenticator.rotate_mcp_token(auth.id)
+        return MCPTokenResponse(
+            token=token.token,
+            issued_at=token.issued_at,
+            has_token=token.token is not None,
+        )
+
+    @httproute(
+        "DELETE",
+        "/v1/auth/mcp-token",
+        name="revoke_mcp_token",
+        description="Revoke the user's long-lived MCP token.",
+    )
+    async def revoke_mcp_token(self, auth: AuthenticatedUser) -> Response:
+        """Remove the user's long-lived MCP token without affecting the web session."""
+        await self.engine.app.authenticator.revoke_mcp_token(auth.id)
+        return Response(status_code=204)
+
+
+class MCPTokenResponse(BaseModel):
+    """Serialize the user's long-lived MCP token state."""
+
+    token: str | None
+    issued_at: datetime | None
+    has_token: bool

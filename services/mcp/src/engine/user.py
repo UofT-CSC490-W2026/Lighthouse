@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Annotated
 from urllib.parse import urlparse
@@ -9,25 +8,22 @@ from urllib.parse import urlparse
 from fastapi import Body
 from pydantic import BaseModel
 
-from ..models import UserRepo
-from ..utilities import AuthenticatedUser, RequestError, get_logger, httproute, toolcall
+from ..models import Repository
+from ..utilities import (
+    AuthenticatedUser,
+    GitHubRepository,
+    RequestError,
+    get_logger,
+    httproute,
+    toolcall,
+)
 
 if TYPE_CHECKING:
     from .engine import Engine
 
 
-@dataclass(frozen=True, slots=True)
-class NormalizedUserRepo:
-    """Hold a normalized repository identifier and display fields."""
-
-    repo_id: str
-    repo_url: str
-    display_name: str
-    ref: str
-
-
-class UserService:
-    """Handle authenticated user profile and repository-management operations."""
+class UserEngine:
+    """Handle authenticated user profile and indexed-repository operations."""
 
     def __init__(self, engine: Engine) -> None:
         """Bind the user service to the shared engine."""
@@ -56,104 +52,137 @@ class UserService:
         )
 
     @httproute(
+        "GET",
+        "/v1/user/repos",
+        name="list_user_repos",
+        description="List repositories visible to the current user.",
+    )
+    @toolcall(
+        "list_user_repos",
+        description="List repositories visible to the current user.",
+    )
+    async def list_user_repos(self, auth: AuthenticatedUser) -> list["UserRepoResponse"]:
+        """Return public repositories plus private repositories the user can currently access."""
+        visible_private_repo_ids = (
+            await self.engine.app.authenticator.list_visible_private_repository_ids(auth.id)
+        )
+        repos = await asyncio.to_thread(
+            self._list_user_repos_sync,
+            visible_private_repo_ids,
+        )
+        return [self._to_user_repo_response(repo) for repo in repos]
+
+    @httproute(
         "POST",
         "/v1/user/repos",
         name="add_user_repo",
-        description="Add or restore a repository for the current user.",
+        description="Add or restore a repository in the shared Lighthouse index.",
     )
     @toolcall(
         "add_user_repo",
-        description="Add or restore a repository for the current user.",
+        description="Add or restore a repository in the shared Lighthouse index.",
     )
     async def add_user_repo(
         self,
         auth: AuthenticatedUser,
-        repo_url: Annotated[str, Body(...)],
-        ref: Annotated[str, Body()] = "main",
+        repo_url: Annotated[str, Body(..., embed=True)],
     ) -> "UserRepoResponse":
-        """Create or restore a repository record for the authenticated user."""
-        normalized = self._normalize_repo(repo_url, ref)
-        repo = await asyncio.to_thread(self._upsert_user_repo_sync, auth.id, normalized)
+        """Validate and create or restore an indexed repository record."""
+        normalized_repo_id = self._normalize_repo_id(repo_url)
+        github_repo = await self.engine.app.authenticator.fetch_github_repository(
+            normalized_repo_id,
+            user_id=auth.id,
+        )
+        repo = await asyncio.to_thread(self._upsert_user_repo_sync, github_repo)
         return self._to_user_repo_response(repo)
 
     @httproute(
         "DELETE",
         "/v1/user/repos/{repo_id:path}",
         name="remove_user_repo",
-        description="Soft-delete a repository for the current user.",
+        description="Soft-delete a repository from the shared Lighthouse index.",
     )
     @toolcall(
         "remove_user_repo",
-        description="Soft-delete a repository for the current user.",
+        description="Soft-delete a repository from the shared Lighthouse index.",
     )
     async def remove_user_repo(
         self,
         auth: AuthenticatedUser,
         repo_id: str,
     ) -> "RemoveUserRepoResponse":
-        """Soft-delete a repository record for the authenticated user."""
+        """Soft-delete an indexed repository record."""
         normalized_repo_id = self._normalize_repo_id(repo_id)
         deleted = await asyncio.to_thread(
             self._soft_delete_user_repo_sync,
-            auth.id,
             normalized_repo_id,
         )
         return RemoveUserRepoResponse(repo_id=normalized_repo_id, deleted=deleted)
 
     def _upsert_user_repo_sync(
         self,
-        user_id: str,
-        normalized: NormalizedUserRepo,
-    ) -> UserRepo:
-        """Insert or update a repository row within a database connection context."""
+        github_repo: GitHubRepository,
+    ) -> Repository:
+        """Insert or update a globally indexed repository row."""
         with self.engine.app.database.connection_context():
-            repo = UserRepo.get_or_none(
-                (UserRepo.user_id == user_id) & (UserRepo.repo_id == normalized.repo_id)
+            repo = Repository.get_or_none(
+                (Repository.github_repo_id == github_repo.github_repo_id)
+                | (Repository.repo_id == github_repo.repo_id)
             )
             created = repo is None
             if repo is None:
-                repo = UserRepo(
-                    user_id=user_id,
-                    repo_id=normalized.repo_id,
-                    repo_url=normalized.repo_url,
-                    display_name=normalized.display_name,
-                    ref=normalized.ref,
+                repo = Repository(
+                    github_repo_id=github_repo.github_repo_id,
+                    repo_id=github_repo.repo_id,
+                    repo_url=github_repo.repo_url,
+                    display_name=github_repo.display_name,
+                    owner_login=github_repo.owner_login,
+                    owner_type=github_repo.owner_type,
+                    is_private=github_repo.is_private,
                     deleted_at=None,
                 )
             else:
-                repo.repo_url = normalized.repo_url
-                repo.display_name = normalized.display_name
-                repo.ref = normalized.ref
+                repo.github_repo_id = github_repo.github_repo_id
+                repo.repo_id = github_repo.repo_id
+                repo.repo_url = github_repo.repo_url
+                repo.display_name = github_repo.display_name
+                repo.owner_login = github_repo.owner_login
+                repo.owner_type = github_repo.owner_type
+                repo.is_private = github_repo.is_private
                 repo.deleted_at = None
 
             repo.save(force_insert=created)
             return repo
 
-    def _soft_delete_user_repo_sync(self, user_id: str, repo_id: str) -> bool:
+    def _list_user_repos_sync(self, visible_private_repo_ids: set[str]) -> list[Repository]:
+        """Load visible repositories in newest-first order."""
+        with self.engine.app.database.connection_context():
+            visibility_clause = ~Repository.is_private
+            if visible_private_repo_ids:
+                visibility_clause = visibility_clause | Repository.repo_id.in_(
+                    sorted(visible_private_repo_ids)
+                )
+
+            query = (
+                Repository.select()
+                .where(Repository.deleted_at.is_null(True) & (visibility_clause))
+                .order_by(Repository.added_at.desc())
+            )
+            return list(query)
+
+    def _soft_delete_user_repo_sync(self, repo_id: str) -> bool:
         """Mark an existing repository row as deleted without removing it."""
         with self.engine.app.database.connection_context():
-            repo = UserRepo.get_or_none(
-                (UserRepo.user_id == user_id)
-                & (UserRepo.repo_id == repo_id)
-                & UserRepo.deleted_at.is_null(True)
+            repo = Repository.get_or_none(
+                (Repository.repo_id == repo_id)
+                & Repository.deleted_at.is_null(True)
             )
             if repo is None:
                 return False
 
             repo.deleted_at = datetime.now(timezone.utc)
-            repo.save(only=[UserRepo.deleted_at])
+            repo.save(only=[Repository.deleted_at])
             return True
-
-    def _normalize_repo(self, repo_url: str, ref: str) -> NormalizedUserRepo:
-        """Normalize user input into canonical repository metadata."""
-        repo_id = self._normalize_repo_id(repo_url)
-        normalized_ref = ref.strip() or "main"
-        return NormalizedUserRepo(
-            repo_id=repo_id,
-            repo_url=f"https://github.com/{repo_id}",
-            display_name=repo_id,
-            ref=normalized_ref,
-        )
 
     def _normalize_repo_id(self, repo: str) -> str:
         """Normalize a GitHub repository reference into `owner/repo` form."""
@@ -188,14 +217,13 @@ class UserService:
 
         return f"{owner.lower()}/{repo_name.lower()}"
 
-    def _to_user_repo_response(self, repo: UserRepo) -> "UserRepoResponse":
+    def _to_user_repo_response(self, repo: Repository) -> "UserRepoResponse":
         """Convert a repository model into the API response shape."""
         return UserRepoResponse(
             id=repo.id,
             repo_id=repo.repo_id,
             repo_url=repo.repo_url,
             display_name=repo.display_name,
-            ref=repo.ref,
             added_at=repo.added_at,
             index_status=None,
         )
@@ -213,13 +241,12 @@ class UserResponse(BaseModel):
 
 
 class UserRepoResponse(BaseModel):
-    """Serialize a repository owned by the authenticated user."""
+    """Serialize an indexed repository visible to the authenticated user."""
 
     id: str
     repo_id: str
     repo_url: str
     display_name: str
-    ref: str
     added_at: datetime
     index_status: str | None = None
 

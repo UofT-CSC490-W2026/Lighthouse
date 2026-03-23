@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from .engine import Engine
 
 
-class SearchService:
+class SearchEngine:
     """Expose coding-context retrieval entrypoints for agents."""
 
     log: Logger
