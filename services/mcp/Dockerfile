@@ -9,12 +9,12 @@ COPY pyproject.toml uv.lock ./
 COPY packages/ packages/
 COPY services/mcp/pyproject.toml services/mcp/pyproject.toml
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --package mcp --frozen --no-dev --no-install-project
+    uv sync --package lighthouse-mcp --frozen --no-dev --no-install-project
 
 # Copy source and do final install
 COPY services/mcp/src services/mcp/src
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --package mcp --frozen --no-dev --no-editable
+    uv sync --package lighthouse-mcp --frozen --no-dev --no-editable
 
 
 FROM python:3.11-slim-bookworm
@@ -27,4 +27,4 @@ ENV PATH="/app/.venv/bin:$PATH"
 
 EXPOSE 8000
 
-CMD ["uvicorn", "mcp.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
