@@ -89,9 +89,9 @@ During the app lifespan it:
 
 `services/mcp/src/engine/engine.py` is the composition root for service logic. It exposes:
 
-- `auth: AuthService`
-- `user: UserService`
-- `search: SearchService`
+- `auth: AuthEngine`
+- `user: UserEngine`
+- `search: SearchEngine`
 
 `Engine.registries()` returns the objects that should be scanned for decorated HTTP routes and MCP tools.
 
