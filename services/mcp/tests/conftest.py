@@ -72,7 +72,7 @@ def _install_fastmcp_stub() -> None:
 _install_fastmcp_stub()
 
 
-from src.models import Repository, Session, User  # noqa: E402
+from src.models import Repository, Session, User, UserHiddenRepository  # noqa: E402
 from src.utilities import (  # noqa: E402
     AuthenticatedUser,
     AuthorizationError,
@@ -115,7 +115,9 @@ def app_factory(tmp_path):
             db_path = tmp_path / f"{uuid.uuid4()}.db"
             app.database.configure(f"sqlite:///{db_path}")
             app.database.connect()
-            app.database.database.create_tables([User, Session, Repository])
+            app.database.database.create_tables(
+                [User, Session, Repository, UserHiddenRepository]
+            )
         created_apps.append(app)
         return app
 

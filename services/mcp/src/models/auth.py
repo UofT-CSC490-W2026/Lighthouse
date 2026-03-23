@@ -82,9 +82,35 @@ class Repository(BaseModel):
     owner_type = CharField()
     is_private = BooleanField(default=False)
     added_at = DateTimeField(default=_utcnow)
-    deleted_at = DateTimeField(null=True, index=True)
 
     class Meta:
         """Configure the Peewee table name for indexed repositories."""
 
         table_name = "repositories"
+
+
+class UserHiddenRepository(BaseModel):
+    """Track repositories hidden by a specific user without deleting the global record."""
+
+    id = CharField(primary_key=True, default=_uuid_text)
+    user = ForeignKeyField(
+        User,
+        backref="hidden_repositories",
+        column_name="user_id",
+        on_delete="CASCADE",
+        index=True,
+    )
+    repository = ForeignKeyField(
+        Repository,
+        backref="hidden_by_users",
+        column_name="repository_id",
+        on_delete="CASCADE",
+        index=True,
+    )
+    hidden_at = DateTimeField(default=_utcnow)
+
+    class Meta:
+        """Configure the Peewee table name and uniqueness for user hidden repositories."""
+
+        table_name = "user_hidden_repositories"
+        indexes = ((("user", "repository"), True),)

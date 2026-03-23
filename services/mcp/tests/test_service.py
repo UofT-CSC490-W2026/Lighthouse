@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi.testclient import TestClient
 
-from src.models import Repository, User
+from src.models import Repository, User, UserHiddenRepository
 from src.routers.mcp.handler import MCPToolHandler
 from src.utilities import collect_toolcalls
 
@@ -106,7 +106,7 @@ def test_user_repo_http_lifecycle(
     auth_headers,
     authenticated_user,
 ) -> None:
-    """Add, soft-delete, and restore a user repository through the HTTP API."""
+    """Add, hide, and re-add a repository without duplicating the global record."""
     app = install_fake_auth(app_factory(with_db=True))
     with app.database.connection_context():
         User.create(
@@ -147,7 +147,7 @@ def test_user_repo_http_lifecycle(
             headers=auth_headers,
         )
         assert removed.status_code == 200
-        assert removed.json() == {"repo_id": "openai/openai-python", "deleted": True}
+        assert removed.json() == {"repo_id": "openai/openai-python", "hidden": True}
 
         listed_after_delete = client.get("/v1/user/repos", headers=auth_headers)
         assert listed_after_delete.status_code == 200
@@ -161,6 +161,7 @@ def test_user_repo_http_lifecycle(
             },
         )
         assert restored.status_code == 200
+        assert restored.json()["id"] == created.json()["id"]
         assert restored.json()["repo_id"] == "openai/openai-python"
 
         listed_after_restore = client.get("/v1/user/repos", headers=auth_headers)
@@ -173,7 +174,63 @@ def test_user_repo_http_lifecycle(
         assert len(repos) == 1
         repo = repos[0]
         assert repo.repo_id == "openai/openai-python"
-        assert repo.deleted_at is None
+        hidden_repos = list(UserHiddenRepository.select())
+        assert hidden_repos == []
+
+
+def test_hiding_a_public_repo_only_hides_it_for_the_requesting_user(
+    app_factory,
+    install_fake_auth,
+    auth_headers,
+    authenticated_user,
+) -> None:
+    """Hide operations should affect only the requesting user, not the global repository."""
+    app = install_fake_auth(app_factory(with_db=True))
+
+    with app.database.connection_context():
+        User.create(
+            id=authenticated_user.id,
+            github_id=authenticated_user.github_id,
+            github_login=authenticated_user.github_login,
+            display_name=authenticated_user.display_name,
+            avatar_url=authenticated_user.avatar_url,
+            email=authenticated_user.email,
+        )
+        User.create(
+            id="user-2",
+            github_id=456,
+            github_login="second-octocat",
+            display_name="Second Octocat",
+            avatar_url=None,
+            email="second@example.com",
+        )
+
+    with TestClient(app) as client:
+        created = client.post(
+            "/v1/user/repos",
+            headers=auth_headers,
+            json={"repo_url": "https://github.com/OpenAI/openai-python"},
+        )
+        assert created.status_code == 200
+
+        removed = client.delete(
+            "/v1/user/repos/openai/openai-python",
+            headers=auth_headers,
+        )
+        assert removed.status_code == 200
+        assert removed.json() == {"repo_id": "openai/openai-python", "hidden": True}
+
+    hidden_for_user_one = app.engine.user._list_user_repos_sync(authenticated_user.id, set())
+    visible_for_user_two = app.engine.user._list_user_repos_sync("user-2", set())
+
+    assert hidden_for_user_one == []
+    assert [repo.repo_id for repo in visible_for_user_two] == ["openai/openai-python"]
+
+    with app.database.connection_context():
+        assert Repository.select().count() == 1
+        hidden = list(UserHiddenRepository.select())
+        assert len(hidden) == 1
+        assert hidden[0].user_id == authenticated_user.id
 
 
 def test_list_user_repos_filters_private_visibility(

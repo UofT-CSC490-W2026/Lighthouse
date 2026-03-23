@@ -152,7 +152,7 @@ Flow:
 5. the service exchanges the GitHub code for a GitHub access token
 6. the service fetches the GitHub user profile
 7. the service upserts the Lighthouse user
-8. the service generates a Lighthouse bearer token
+8. the service generates a Lighthouse web bearer token
 9. the service redirects the caller to the web client with the token in the URL fragment
 
 ### Bearer Token Storage
@@ -162,6 +162,9 @@ Bearer-token state is stored on the `users` row:
 - `api_token_hash`
 - `api_token_encrypted`
 - `api_token_issued_at`
+- `mcp_token_hash`
+- `mcp_token_encrypted`
+- `mcp_token_issued_at`
 
 The plaintext token is:
 
@@ -231,7 +234,7 @@ Intended future use:
 
 ## User Repository Management
 
-`UserService` owns lightweight repository registration for a user.
+`UserService` owns lightweight repository registration and user-specific visibility preferences.
 
 Exposed operations:
 
@@ -244,9 +247,12 @@ Behavior:
 
 - repository references are normalized to `owner/repo`
 - GitHub URLs and `owner/repo` input forms are accepted
-- create is idempotent for existing records
-- deleting a repository is a soft delete via `deleted_at`
-- re-adding a soft-deleted repo restores it
+- repositories are stored once globally in `repositories`
+- public repositories are visible to everyone unless they hide them
+- private repositories are visible only to users who currently have GitHub access
+- create is idempotent for an existing repository record
+- removing a repository hides it only for the requesting user
+- re-adding a hidden repository clears that user's hide without creating a duplicate global row
 
 This is currently metadata management only. It does not yet trigger retrieval or indexing logic.
 
@@ -292,19 +298,30 @@ Fields include:
 - bearer-token fields
 - timestamps
 
-### `UserRepo`
+### `Repository`
+
+Fields include:
+
+- `github_repo_id`
+- `repo_id`
+- `repo_url`
+- `display_name`
+- `owner_login`
+- `owner_type`
+- `is_private`
+- `added_at`
+
+Repositories are global and unique. User-specific hiding is tracked separately.
+
+### `UserHiddenRepository`
 
 Fields include:
 
 - `user_id`
-- `repo_id`
-- `repo_url`
-- `display_name`
-- `ref`
-- `added_at`
-- `deleted_at`
+- `repository_id`
+- `hidden_at`
 
-Soft deletion is implemented through `deleted_at`.
+This table tracks which repositories a specific user has chosen to hide without removing the shared repository row.
 
 ### `Session`
 

@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import TYPE_CHECKING, Annotated
 from urllib.parse import urlparse
 
 from fastapi import Body
 from pydantic import BaseModel
 
-from ..models import Repository
+from ..models import Repository, UserHiddenRepository
 from ..utilities import (
     AuthenticatedUser,
     GitHubRepository,
@@ -68,6 +68,7 @@ class UserEngine:
         )
         repos = await asyncio.to_thread(
             self._list_user_repos_sync,
+            auth.id,
             visible_private_repo_ids,
         )
         return [self._to_user_repo_response(repo) for repo in repos]
@@ -76,54 +77,56 @@ class UserEngine:
         "POST",
         "/v1/user/repos",
         name="add_user_repo",
-        description="Add or restore a repository in the shared Lighthouse index.",
+        description="Add a repository to the shared Lighthouse index or unhide it for the current user.",
     )
     @toolcall(
         "add_user_repo",
-        description="Add or restore a repository in the shared Lighthouse index.",
+        description="Add a repository to the shared Lighthouse index or unhide it for the current user.",
     )
     async def add_user_repo(
         self,
         auth: AuthenticatedUser,
         repo_url: Annotated[str, Body(..., embed=True)],
     ) -> "UserRepoResponse":
-        """Validate and create or restore an indexed repository record."""
+        """Validate and create or unhide an indexed repository for the current user."""
         normalized_repo_id = self._normalize_repo_id(repo_url)
         github_repo = await self.engine.app.authenticator.fetch_github_repository(
             normalized_repo_id,
             user_id=auth.id,
         )
-        repo = await asyncio.to_thread(self._upsert_user_repo_sync, github_repo)
+        repo = await asyncio.to_thread(self._upsert_user_repo_sync, github_repo, auth.id)
         return self._to_user_repo_response(repo)
 
     @httproute(
         "DELETE",
         "/v1/user/repos/{repo_id:path}",
         name="remove_user_repo",
-        description="Soft-delete a repository from the shared Lighthouse index.",
+        description="Hide a repository from the current user without deleting it globally.",
     )
     @toolcall(
         "remove_user_repo",
-        description="Soft-delete a repository from the shared Lighthouse index.",
+        description="Hide a repository from the current user without deleting it globally.",
     )
     async def remove_user_repo(
         self,
         auth: AuthenticatedUser,
         repo_id: str,
-    ) -> "RemoveUserRepoResponse":
-        """Soft-delete an indexed repository record."""
+    ) -> "HideUserRepoResponse":
+        """Hide an indexed repository for the current user."""
         normalized_repo_id = self._normalize_repo_id(repo_id)
-        deleted = await asyncio.to_thread(
-            self._soft_delete_user_repo_sync,
+        hidden = await asyncio.to_thread(
+            self._hide_user_repo_sync,
+            auth.id,
             normalized_repo_id,
         )
-        return RemoveUserRepoResponse(repo_id=normalized_repo_id, deleted=deleted)
+        return HideUserRepoResponse(repo_id=normalized_repo_id, hidden=hidden)
 
     def _upsert_user_repo_sync(
         self,
         github_repo: GitHubRepository,
+        user_id: str,
     ) -> Repository:
-        """Insert or update a globally indexed repository row."""
+        """Insert or update a globally indexed repository row and clear any user hide."""
         with self.engine.app.database.connection_context():
             repo = Repository.get_or_none(
                 (Repository.github_repo_id == github_repo.github_repo_id)
@@ -139,7 +142,6 @@ class UserEngine:
                     owner_login=github_repo.owner_login,
                     owner_type=github_repo.owner_type,
                     is_private=github_repo.is_private,
-                    deleted_at=None,
                 )
             else:
                 repo.github_repo_id = github_repo.github_repo_id
@@ -149,12 +151,23 @@ class UserEngine:
                 repo.owner_login = github_repo.owner_login
                 repo.owner_type = github_repo.owner_type
                 repo.is_private = github_repo.is_private
-                repo.deleted_at = None
 
             repo.save(force_insert=created)
+            (
+                UserHiddenRepository.delete()
+                .where(
+                    (UserHiddenRepository.user == user_id)
+                    & (UserHiddenRepository.repository == repo)
+                )
+                .execute()
+            )
             return repo
 
-    def _list_user_repos_sync(self, visible_private_repo_ids: set[str]) -> list[Repository]:
+    def _list_user_repos_sync(
+        self,
+        user_id: str,
+        visible_private_repo_ids: set[str],
+    ) -> list[Repository]:
         """Load visible repositories in newest-first order."""
         with self.engine.app.database.connection_context():
             visibility_clause = ~Repository.is_private
@@ -163,25 +176,31 @@ class UserEngine:
                     sorted(visible_private_repo_ids)
                 )
 
+            hidden_repository_ids = UserHiddenRepository.select(
+                UserHiddenRepository.repository
+            ).where(UserHiddenRepository.user == user_id)
             query = (
                 Repository.select()
-                .where(Repository.deleted_at.is_null(True) & (visibility_clause))
+                .where((visibility_clause) & ~(Repository.id.in_(hidden_repository_ids)))
                 .order_by(Repository.added_at.desc())
             )
             return list(query)
 
-    def _soft_delete_user_repo_sync(self, repo_id: str) -> bool:
-        """Mark an existing repository row as deleted without removing it."""
+    def _hide_user_repo_sync(self, user_id: str, repo_id: str) -> bool:
+        """Hide an existing repository for a single user without deleting it globally."""
         with self.engine.app.database.connection_context():
-            repo = Repository.get_or_none(
-                (Repository.repo_id == repo_id)
-                & Repository.deleted_at.is_null(True)
-            )
+            repo = Repository.get_or_none(Repository.repo_id == repo_id)
             if repo is None:
                 return False
 
-            repo.deleted_at = datetime.now(timezone.utc)
-            repo.save(only=[Repository.deleted_at])
+            hidden_repo = UserHiddenRepository.get_or_none(
+                (UserHiddenRepository.user == user_id)
+                & (UserHiddenRepository.repository == repo)
+            )
+            if hidden_repo is not None:
+                return False
+
+            UserHiddenRepository.create(user=user_id, repository=repo)
             return True
 
     def _normalize_repo_id(self, repo: str) -> str:
@@ -251,8 +270,11 @@ class UserRepoResponse(BaseModel):
     index_status: str | None = None
 
 
-class RemoveUserRepoResponse(BaseModel):
-    """Report whether a repository soft-delete was applied."""
+class HideUserRepoResponse(BaseModel):
+    """Report whether a repository hide operation was applied."""
 
     repo_id: str
-    deleted: bool
+    hidden: bool
+
+
+UserRepoResponse.model_rebuild()

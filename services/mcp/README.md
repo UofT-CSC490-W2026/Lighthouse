@@ -160,8 +160,9 @@ Behavior:
 
 - repository input can be either `owner/repo` or a GitHub URL
 - repositories are normalized to canonical `owner/repo` form
-- deletion is a soft delete through `deleted_at`
-- re-adding a deleted repository restores it
+- repositories are stored globally and uniquely
+- removing a repository hides it only for the requesting user
+- re-adding a hidden repository unhides it for that user without creating a duplicate record
 
 This is metadata management only for now. It does not yet trigger search indexing or retrieval.
 

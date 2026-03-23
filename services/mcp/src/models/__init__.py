@@ -1,4 +1,4 @@
-from .auth import Repository, Session, User
+from .auth import Repository, Session, User, UserHiddenRepository
 from .database import BaseModel, MCPDatabase
 
 __all__ = [
@@ -7,4 +7,5 @@ __all__ = [
     "Repository",
     "Session",
     "User",
+    "UserHiddenRepository",
 ]
