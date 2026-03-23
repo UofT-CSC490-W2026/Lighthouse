@@ -3,7 +3,14 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import uuid
 
-from peewee import BigIntegerField, CharField, DateTimeField, ForeignKeyField, TextField
+from peewee import (
+    BigIntegerField,
+    BooleanField,
+    CharField,
+    DateTimeField,
+    ForeignKeyField,
+    TextField,
+)
 
 from .database import BaseModel
 
@@ -30,6 +37,9 @@ class User(BaseModel):
     api_token_encrypted = TextField(null=True)
     api_token_hash = CharField(null=True, unique=True)
     api_token_issued_at = DateTimeField(null=True)
+    mcp_token_encrypted = TextField(null=True)
+    mcp_token_hash = CharField(null=True, unique=True)
+    mcp_token_issued_at = DateTimeField(null=True)
     created_at = DateTimeField(default=_utcnow)
     updated_at = DateTimeField(default=_utcnow)
 
@@ -40,7 +50,7 @@ class User(BaseModel):
 
 
 class Session(BaseModel):
-    """Store legacy GitHub session data while the schema still carries it."""
+    """Store the latest encrypted GitHub access token for a user."""
 
     id = CharField(primary_key=True, default=_uuid_text)
     user = ForeignKeyField(
@@ -60,26 +70,21 @@ class Session(BaseModel):
         table_name = "sessions"
 
 
-class UserRepo(BaseModel):
-    """Store repositories linked to a user, including soft-delete state."""
+class Repository(BaseModel):
+    """Store globally indexed repositories independently from local user records."""
 
     id = CharField(primary_key=True, default=_uuid_text)
-    user = ForeignKeyField(
-        User,
-        backref="repos",
-        column_name="user_id",
-        on_delete="CASCADE",
-        index=True,
-    )
-    repo_id = CharField()
+    github_repo_id = BigIntegerField(null=True, unique=True)
+    repo_id = CharField(unique=True)
     repo_url = CharField()
     display_name = CharField()
-    ref = CharField(default="main")
+    owner_login = CharField()
+    owner_type = CharField()
+    is_private = BooleanField(default=False)
     added_at = DateTimeField(default=_utcnow)
     deleted_at = DateTimeField(null=True, index=True)
 
     class Meta:
-        """Configure the Peewee table name and uniqueness constraints for user repos."""
+        """Configure the Peewee table name for indexed repositories."""
 
-        table_name = "user_repos"
-        indexes = ((("user", "repo_id"), True),)
+        table_name = "repositories"
