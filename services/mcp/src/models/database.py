@@ -43,7 +43,9 @@ class MCPDatabase:
     def initialize(self) -> Database:
         """Instantiate and proxy-bind the configured Peewee database."""
         if not self.database_url:
-            raise RuntimeError("POSTGRES_DSN must be configured before initializing the database.")
+            raise RuntimeError(
+                "POSTGRES_DSN must be configured before initializing the database."
+            )
 
         if self._database is None:
             self._database = connect_database_url(self.database_url, autoconnect=False)

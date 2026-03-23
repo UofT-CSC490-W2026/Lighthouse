@@ -70,7 +70,10 @@ class HTTPRouteHandler:
             owner = type(bound.owner).__name__
             desc = bound.meta.description or ""
             pp(f"  {bound.meta.method:<{col_method}}  ", Colour.bold_green)
-            pp(f"{('yes' if bound.meta.auth_required else 'no'):<{col_auth}}  ", Colour.reset)
+            pp(
+                f"{('yes' if bound.meta.auth_required else 'no'):<{col_auth}}  ",
+                Colour.reset,
+            )
             pp(f"{bound.meta.path:<{col_path}}  ", Colour.reset)
             pp(f"{desc:<{col_desc}}  ", Colour.reset)
             pp(owner + "\n", Colour.dim_grey)
@@ -119,11 +122,15 @@ class HTTPRouteHandler:
             if meta.auth_required:
                 request = call_kwargs.get("request")
                 if request is None:
-                    raise RuntimeError("Authenticated HTTP routes require a Request object.")
+                    raise RuntimeError(
+                        "Authenticated HTTP routes require a Request object."
+                    )
                 try:
                     auth = await self.app.authenticator.require_http_request(request)
                 except RequestError as exc:
-                    raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+                    raise HTTPException(
+                        status_code=exc.status_code, detail=exc.detail
+                    ) from exc
                 request.state.authenticated_user = auth
                 if expects_auth:
                     call_kwargs["auth"] = auth
@@ -134,12 +141,16 @@ class HTTPRouteHandler:
             try:
                 result = method(**call_kwargs)
             except RequestError as exc:
-                raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+                raise HTTPException(
+                    status_code=exc.status_code, detail=exc.detail
+                ) from exc
             if asyncio.iscoroutine(result):
                 try:
                     result = await result
                 except RequestError as exc:
-                    raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+                    raise HTTPException(
+                        status_code=exc.status_code, detail=exc.detail
+                    ) from exc
             return result
 
         route_fn.__name__ = meta.name or getattr(method, "__name__", "route_fn")

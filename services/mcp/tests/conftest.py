@@ -125,7 +125,9 @@ def app_factory(tmp_path):
 
 
 @pytest.fixture
-def install_fake_auth(authenticated_user: AuthenticatedUser, auth_headers: dict[str, str]):
+def install_fake_auth(
+    authenticated_user: AuthenticatedUser, auth_headers: dict[str, str]
+):
     """Attach deterministic auth resolvers to an app for transport tests."""
 
     def installer(app):

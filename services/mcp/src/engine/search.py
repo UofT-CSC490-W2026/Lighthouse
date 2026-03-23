@@ -65,7 +65,9 @@ class SearchService:
         if end_line is not None and end_line < 1:
             raise RequestError("end_line must be greater than 0.", status_code=422)
         if start_line is None and end_line is not None:
-            raise RequestError("start_line is required when end_line is provided.", status_code=422)
+            raise RequestError(
+                "start_line is required when end_line is provided.", status_code=422
+            )
         if start_line is not None and end_line is not None and end_line < start_line:
             raise RequestError(
                 "end_line must be greater than or equal to start_line.", status_code=422

@@ -29,7 +29,9 @@ OAUTH_SCOPES = "read:user read:org repo"
 class AuthorizationError(RequestError):
     """Represent an authentication or authorization failure."""
 
-    def __init__(self, detail: str = "Not authenticated", status_code: int = 401) -> None:
+    def __init__(
+        self, detail: str = "Not authenticated", status_code: int = 401
+    ) -> None:
         """Create an auth error with a default unauthorized status."""
         super().__init__(detail=detail, status_code=status_code)
 

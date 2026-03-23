@@ -95,7 +95,9 @@ def test_get_code_context_rejects_invalid_line_ranges(
         )
 
     assert response.status_code == 422
-    assert response.json() == {"detail": "start_line is required when end_line is provided."}
+    assert response.json() == {
+        "detail": "start_line is required when end_line is provided."
+    }
 
 
 def test_user_repo_http_lifecycle(
@@ -163,7 +165,9 @@ def test_get_code_context_mcp_tool_uses_injected_auth(
     """Verify the MCP wrapper injects auth before invoking the search tool."""
     app = install_fake_auth(app_factory())
     handler = MCPToolHandler(app)
-    tool = handler._make_tool_fn(collect_toolcalls(*app.engine.registries())["get_code_context"])
+    tool = handler._make_tool_fn(
+        collect_toolcalls(*app.engine.registries())["get_code_context"]
+    )
     ctx = SimpleNamespace(
         request_context=SimpleNamespace(
             request=SimpleNamespace(headers={"Authorization": "Bearer test-token"})
@@ -192,8 +196,12 @@ def test_mcp_tool_requires_bearer_auth(app_factory) -> None:
     """Reject unauthenticated MCP calls before the handler method is invoked."""
     app = app_factory()
     handler = MCPToolHandler(app)
-    tool = handler._make_tool_fn(collect_toolcalls(*app.engine.registries())["get_code_context"])
-    ctx = SimpleNamespace(request_context=SimpleNamespace(request=SimpleNamespace(headers={})))
+    tool = handler._make_tool_fn(
+        collect_toolcalls(*app.engine.registries())["get_code_context"]
+    )
+    ctx = SimpleNamespace(
+        request_context=SimpleNamespace(request=SimpleNamespace(headers={}))
+    )
 
     with pytest.raises(PermissionError, match="Missing Authorization header"):
         asyncio.run(

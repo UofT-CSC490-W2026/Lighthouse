@@ -59,20 +59,30 @@ class AuthService:
         expected_state = request.cookies.get("oauth_state")
         if not expected_state or state != expected_state:
             return RedirectResponse(
-                url=self.engine.app.authenticator.build_oauth_error_redirect("invalid_state"),
+                url=self.engine.app.authenticator.build_oauth_error_redirect(
+                    "invalid_state"
+                ),
                 status_code=302,
             )
 
         try:
-            access_token = await self.engine.app.authenticator.exchange_code_for_token(code)
-            github_user = await self.engine.app.authenticator.fetch_github_user(access_token)
-            _, api_token = await self.engine.app.authenticator.upsert_github_user_and_issue_token(
-                github_user
+            access_token = await self.engine.app.authenticator.exchange_code_for_token(
+                code
+            )
+            github_user = await self.engine.app.authenticator.fetch_github_user(
+                access_token
+            )
+            _, api_token = (
+                await self.engine.app.authenticator.upsert_github_user_and_issue_token(
+                    github_user
+                )
             )
         except Exception:
             self.log.exception("OAuth callback failed")
             return RedirectResponse(
-                url=self.engine.app.authenticator.build_oauth_error_redirect("oauth_failed"),
+                url=self.engine.app.authenticator.build_oauth_error_redirect(
+                    "oauth_failed"
+                ),
                 status_code=302,
             )
 

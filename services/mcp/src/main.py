@@ -54,7 +54,9 @@ class App(FastAPI):
                 db_started = True
                 self.log.info("Database connection initialized")
             else:
-                self.log.warning("POSTGRES_DSN is not configured; database startup skipped")
+                self.log.warning(
+                    "POSTGRES_DSN is not configured; database startup skipped"
+                )
 
             self.include_router(http_handler.as_router())
             self.mount("/mcp", mcp_handler)

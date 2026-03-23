@@ -107,7 +107,10 @@ class MCPToolHandler:
             owner = type(bound.owner).__name__
             desc = bound.meta.description or ""
             pp(f"  {name:<{col_name}}  ", Colour.bold_green)
-            pp(f"{('yes' if bound.meta.auth_required else 'no'):<{col_auth}}  ", Colour.reset)
+            pp(
+                f"{('yes' if bound.meta.auth_required else 'no'):<{col_auth}}  ",
+                Colour.reset,
+            )
             pp(f"{desc:<{col_desc}}  ", Colour.reset)
             pp(owner + "\n", Colour.dim_grey)
         pp("\n")
@@ -142,7 +145,9 @@ class MCPToolHandler:
             new_params.append(p.replace(annotation=resolved_annotation))
 
         return_annotation = resolved_hints.get("return", orig_sig.return_annotation)
-        new_sig = orig_sig.replace(parameters=new_params, return_annotation=return_annotation)
+        new_sig = orig_sig.replace(
+            parameters=new_params, return_annotation=return_annotation
+        )
         new_annotations = {param.name: param.annotation for param in new_params}
         if return_annotation is not inspect.Signature.empty:
             new_annotations["return"] = return_annotation

@@ -7,7 +7,11 @@ from typing import Any
 
 from pydantic import AliasChoices, Field
 from pydantic.fields import FieldInfo
-from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
+from pydantic_settings import (
+    BaseSettings,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+)
 
 SSM_PARAMETER_ENV_VAR = "LIGHTHOUSE_MCP_SETTINGS_SSM_PARAMETER"
 
@@ -77,7 +81,9 @@ def _get_parameter_value(parameter_name: str, region_name: str | None = None) ->
 
     value = response["Parameter"]["Value"]
     if not isinstance(value, str):
-        raise RuntimeError(f"Expected SSM parameter {parameter_name!r} to contain a string value.")
+        raise RuntimeError(
+            f"Expected SSM parameter {parameter_name!r} to contain a string value."
+        )
     return value
 
 
@@ -99,10 +105,14 @@ def _load_parameter_payload(
     try:
         payload = json.loads(raw_value)
     except json.JSONDecodeError as exc:
-        raise RuntimeError(f"SSM parameter {parameter_name!r} must contain a JSON object.") from exc
+        raise RuntimeError(
+            f"SSM parameter {parameter_name!r} must contain a JSON object."
+        ) from exc
 
     if not isinstance(payload, dict):
-        raise RuntimeError(f"SSM parameter {parameter_name!r} must decode to a JSON object.")
+        raise RuntimeError(
+            f"SSM parameter {parameter_name!r} must decode to a JSON object."
+        )
     return payload
 
 
