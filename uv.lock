@@ -569,7 +569,7 @@ wheels = [
 [[package]]
 name = "ingestion"
 version = "0.1.0"
-source = { virtual = "services/ingestion" }
+source = { editable = "services/ingestion" }
 dependencies = [
     { name = "fastapi", extra = ["standard"] },
     { name = "shared" },
@@ -726,7 +726,7 @@ wheels = [
 [[package]]
 name = "mcp"
 version = "0.1.0"
-source = { virtual = "services/mcp" }
+source = { editable = "services/mcp" }
 
 [[package]]
 name = "mdurl"
@@ -1427,7 +1427,7 @@ wheels = [
 [[package]]
 name = "search"
 version = "0.1.0"
-source = { virtual = "services/search" }
+source = { editable = "services/search" }
 dependencies = [
     { name = "fastapi", extra = ["standard"] },
     { name = "shared" },
