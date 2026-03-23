@@ -1,10 +1,23 @@
-import { useSearchParams } from "react-router-dom";
+import { Navigate, useSearchParams } from "react-router-dom";
+import { getApiToken } from "@/lib/auth";
 
 const MCP_URL = import.meta.env.VITE_MCP_URL || "";
 
 export default function Login() {
   const [params] = useSearchParams();
   const error = params.get("error");
+  const apiToken = getApiToken();
+
+  if (apiToken) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  const errorMessage =
+    error === "missing_token"
+      ? "Authentication completed, but no Lighthouse API token was returned."
+      : error
+        ? "Authentication failed. Please try again."
+        : null;
 
   return (
     <div className="flex min-h-screen items-center justify-center">
@@ -16,9 +29,9 @@ export default function Login() {
           </p>
         </div>
 
-        {error && (
+        {errorMessage && (
           <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">
-            Authentication failed. Please try again.
+            {errorMessage}
           </div>
         )}
 

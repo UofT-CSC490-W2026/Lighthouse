@@ -1,21 +1,63 @@
+import { clearApiToken, getApiToken } from "@/lib/auth";
+
 const API_BASE = import.meta.env.VITE_MCP_URL || "";
+
+export class ApiError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
+async function getErrorDetail(res: Response): Promise<string> {
+  const contentType = res.headers.get("content-type") || "";
+
+  if (contentType.includes("application/json")) {
+    try {
+      const body = (await res.json()) as { detail?: unknown };
+      if (typeof body.detail === "string" && body.detail.trim()) {
+        return body.detail;
+      }
+      return JSON.stringify(body);
+    } catch {
+      /* fall through */
+    }
+  }
+
+  const text = await res.text();
+  return text || res.statusText || "Request failed";
+}
 
 export async function apiFetch<T>(
   path: string,
   options: { method?: string; body?: unknown } = {}
 ): Promise<T> {
   const { method = "GET", body } = options;
+  const headers = new Headers();
+  const apiToken = getApiToken();
+
+  if (body) {
+    headers.set("Content-Type", "application/json");
+  }
+  if (apiToken) {
+    headers.set("Authorization", `Bearer ${apiToken}`);
+  }
 
   const res = await fetch(`${API_BASE}${path}`, {
     method,
-    headers: body ? { "Content-Type": "application/json" } : undefined,
+    headers,
     body: body ? JSON.stringify(body) : undefined,
-    credentials: "include",
   });
 
   if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`${method} ${path} failed (${res.status}): ${text}`);
+    if (res.status === 401) {
+      clearApiToken();
+    }
+    const detail = await getErrorDetail(res);
+    throw new ApiError(`${method} ${path} failed (${res.status}): ${detail}`, res.status);
   }
 
   if (res.status === 204) return undefined as T;
@@ -36,7 +78,12 @@ export interface UserRepo {
   repo_id: string;
   repo_url: string;
   display_name: string;
-  ref: string;
   added_at: string;
   index_status: string | null;
+}
+
+export interface MCPTokenState {
+  token: string | null;
+  issued_at: string | null;
+  has_token: boolean;
 }

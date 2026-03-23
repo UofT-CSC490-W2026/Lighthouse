@@ -55,7 +55,6 @@ export function RepoList() {
           key={repo.id}
           repoId={repo.repo_id}
           repoUrl={repo.repo_url}
-          branch={repo.ref}
           indexStatus={repo.index_status}
           addedAt={repo.added_at}
           onRemove={handleRemove}
