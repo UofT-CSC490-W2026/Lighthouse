@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi.testclient import TestClient
 
-from src.models import User, UserRepo
+from src.models import Repository, User
 from src.routers.mcp.handler import MCPToolHandler
 from src.utilities import collect_toolcalls
 
@@ -124,11 +124,23 @@ def test_user_repo_http_lifecycle(
             headers=auth_headers,
             json={
                 "repo_url": "https://github.com/OpenAI/openai-python.git",
-                "ref": "main",
             },
         )
         assert created.status_code == 200
         assert created.json()["repo_id"] == "openai/openai-python"
+
+        listed = client.get("/v1/user/repos", headers=auth_headers)
+        assert listed.status_code == 200
+        assert listed.json() == [
+            {
+                "id": created.json()["id"],
+                "repo_id": "openai/openai-python",
+                "repo_url": "https://github.com/openai/openai-python",
+                "display_name": "openai/openai-python",
+                "added_at": created.json()["added_at"],
+                "index_status": None,
+            }
+        ]
 
         removed = client.delete(
             "/v1/user/repos/openai/openai-python",
@@ -137,25 +149,139 @@ def test_user_repo_http_lifecycle(
         assert removed.status_code == 200
         assert removed.json() == {"repo_id": "openai/openai-python", "deleted": True}
 
+        listed_after_delete = client.get("/v1/user/repos", headers=auth_headers)
+        assert listed_after_delete.status_code == 200
+        assert listed_after_delete.json() == []
+
         restored = client.post(
             "/v1/user/repos",
             headers=auth_headers,
             json={
                 "repo_url": "OpenAI/openai-python",
-                "ref": "develop",
             },
         )
         assert restored.status_code == 200
         assert restored.json()["repo_id"] == "openai/openai-python"
-        assert restored.json()["ref"] == "develop"
+
+        listed_after_restore = client.get("/v1/user/repos", headers=auth_headers)
+        assert listed_after_restore.status_code == 200
+        assert len(listed_after_restore.json()) == 1
+        assert listed_after_restore.json()[0]["repo_id"] == "openai/openai-python"
 
     with app.database.connection_context():
-        repos = list(UserRepo.select())
+        repos = list(Repository.select())
         assert len(repos) == 1
         repo = repos[0]
         assert repo.repo_id == "openai/openai-python"
-        assert repo.ref == "develop"
         assert repo.deleted_at is None
+
+
+def test_list_user_repos_filters_private_visibility(
+    app_factory,
+    install_fake_auth,
+    auth_headers,
+) -> None:
+    """List all public repositories and only the private repositories the user can access."""
+    app = install_fake_auth(app_factory(with_db=True))
+
+    async def visible_private_repo_ids(user_id: str) -> set[str]:
+        return {"acme/private-visible"}
+
+    app.authenticator.list_visible_private_repository_ids = visible_private_repo_ids
+
+    with app.database.connection_context():
+        Repository.create(
+            github_repo_id=1001,
+            repo_id="openai/openai-python",
+            repo_url="https://github.com/openai/openai-python",
+            display_name="openai/openai-python",
+            owner_login="openai",
+            owner_type="Organization",
+            is_private=False,
+        )
+        Repository.create(
+            github_repo_id=1002,
+            repo_id="acme/private-visible",
+            repo_url="https://github.com/acme/private-visible",
+            display_name="acme/private-visible",
+            owner_login="acme",
+            owner_type="Organization",
+            is_private=True,
+        )
+        Repository.create(
+            github_repo_id=1003,
+            repo_id="acme/private-hidden",
+            repo_url="https://github.com/acme/private-hidden",
+            display_name="acme/private-hidden",
+            owner_login="acme",
+            owner_type="Organization",
+            is_private=True,
+        )
+
+    with TestClient(app) as client:
+        response = client.get("/v1/user/repos", headers=auth_headers)
+
+    assert response.status_code == 200
+    assert [repo["repo_id"] for repo in response.json()] == [
+        "acme/private-visible",
+        "openai/openai-python",
+    ]
+
+
+def test_mcp_token_http_lifecycle(
+    app_factory,
+    install_fake_auth,
+    auth_headers,
+    authenticated_user,
+) -> None:
+    """Generate, read, authenticate with, and revoke a dedicated MCP token."""
+    app = install_fake_auth(app_factory(with_db=True))
+
+    with app.database.connection_context():
+        User.create(
+            id=authenticated_user.id,
+            github_id=authenticated_user.github_id,
+            github_login=authenticated_user.github_login,
+            display_name=authenticated_user.display_name,
+            avatar_url=authenticated_user.avatar_url,
+            email=authenticated_user.email,
+        )
+
+    with TestClient(app) as client:
+        initial = client.get("/v1/auth/mcp-token", headers=auth_headers)
+        assert initial.status_code == 200
+        assert initial.json() == {
+            "token": None,
+            "issued_at": None,
+            "has_token": False,
+        }
+
+        generated = client.post("/v1/auth/mcp-token", headers=auth_headers)
+        assert generated.status_code == 200
+        generated_token = generated.json()["token"]
+        assert isinstance(generated_token, str)
+        assert generated.json()["has_token"] is True
+        assert generated.json()["issued_at"] is not None
+
+        fetched = client.get("/v1/auth/mcp-token", headers=auth_headers)
+        assert fetched.status_code == 200
+        assert fetched.json()["token"] == generated_token
+        assert fetched.json()["has_token"] is True
+
+        resolved_auth = asyncio.run(app.authenticator.authenticate_bearer_token(generated_token))
+        assert resolved_auth.id == authenticated_user.id
+        assert resolved_auth.authenticated_via == "mcp"
+
+        revoked = client.delete("/v1/auth/mcp-token", headers=auth_headers)
+        assert revoked.status_code == 204
+
+        fetched_after_revoke = client.get("/v1/auth/mcp-token", headers=auth_headers)
+        assert fetched_after_revoke.status_code == 200
+        assert fetched_after_revoke.json() == {
+            "token": None,
+            "issued_at": None,
+            "has_token": False,
+        }
 
 
 def test_get_code_context_mcp_tool_uses_injected_auth(

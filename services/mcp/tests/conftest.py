@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import hashlib
 import sys
 import types
 import uuid
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import pytest
+from cryptography.fernet import Fernet
 
 
 SERVICE_DIR = Path(__file__).resolve().parents[1]
@@ -20,32 +23,31 @@ def _install_fastmcp_stub() -> None:
     class Context:
         """Placeholder MCP context type for local tests."""
 
-    class _DummySessionManager:
-        """Provide the async context-manager hooks used by the app lifespan."""
+    class _DummyHTTPApp:
+        """Expose the minimal ASGI and lifespan hooks used by the MCP handler."""
 
-        def run(self):
-            """Return an inert async context manager."""
+        @property
+        def lifespan(self):
+            """Return an inert async lifespan context factory."""
 
-            class _ContextManager:
-                """Implement the async context-manager protocol for tests."""
+            @asynccontextmanager
+            async def noop_lifespan(app):
+                """Yield control without managing any extra startup state."""
+                yield None
 
-                async def __aenter__(self):
-                    """Enter the no-op async context."""
-                    return None
+            return noop_lifespan
 
-                async def __aexit__(self, exc_type, exc, tb):
-                    """Exit the no-op async context."""
-                    return False
-
-            return _ContextManager()
+        async def __call__(self, scope, receive, send):
+            """Ignore incoming ASGI calls in the test stub."""
+            return None
 
     class FastMCP:
         """Minimal FastMCP test double used for handler registration."""
 
         def __init__(self, *args, **kwargs):
-            """Track registered tools and expose a dummy session manager."""
-            self.session_manager = _DummySessionManager()
+            """Track registered tools and expose a dummy HTTP app."""
             self.registered_tools = []
+            self._http_app = _DummyHTTPApp()
 
         def tool(self):
             """Return a decorator that records the registered tool function."""
@@ -57,14 +59,9 @@ def _install_fastmcp_stub() -> None:
 
             return decorator
 
-        def streamable_http_app(self):
-            """Return an inert ASGI application for tests."""
-
-            async def app(scope, receive, send):
-                """Ignore incoming ASGI calls in the test stub."""
-                return None
-
-            return app
+        def http_app(self, *args, **kwargs):
+            """Return an inert HTTP app for the mounted MCP handler."""
+            return self._http_app
 
     fastmcp_module.Context = Context
     fastmcp_module.FastMCP = FastMCP
@@ -75,8 +72,12 @@ def _install_fastmcp_stub() -> None:
 _install_fastmcp_stub()
 
 
-from src.models import User, UserRepo  # noqa: E402
-from src.utilities import AuthenticatedUser, AuthorizationError  # noqa: E402
+from src.models import Repository, Session, User  # noqa: E402
+from src.utilities import (  # noqa: E402
+    AuthenticatedUser,
+    AuthorizationError,
+    GitHubRepository,
+)
 
 
 @pytest.fixture
@@ -109,11 +110,12 @@ def app_factory(tmp_path):
     def factory(*, with_db: bool = False):
         """Build an app instance and optionally configure a sqlite database."""
         app = App()
+        app.settings.session_encryption_key = Fernet.generate_key().decode()
         if with_db:
             db_path = tmp_path / f"{uuid.uuid4()}.db"
             app.database.configure(f"sqlite:///{db_path}")
             app.database.connect()
-            app.database.database.create_tables([User, UserRepo])
+            app.database.database.create_tables([User, Session, Repository])
         created_apps.append(app)
         return app
 
@@ -147,8 +149,31 @@ def install_fake_auth(
                 raise AuthorizationError("Missing Authorization header")
             return authenticated_user
 
+        async def fake_fetch_github_repository(repo_id: str, *, user_id: str | None = None):
+            """Return deterministic repository metadata without calling GitHub."""
+            normalized_repo_id = repo_id.lower()
+            owner_login, _, repo_name = normalized_repo_id.partition("/")
+            github_repo_id = int(hashlib.sha1(normalized_repo_id.encode()).hexdigest()[:12], 16)
+            return GitHubRepository(
+                github_repo_id=github_repo_id,
+                repo_id=normalized_repo_id,
+                repo_url=f"https://github.com/{normalized_repo_id}",
+                display_name=normalized_repo_id,
+                owner_login=owner_login,
+                owner_type="User",
+                is_private=False,
+            )
+
+        async def fake_list_visible_private_repository_ids(user_id: str):
+            """Return no visible private repositories unless a test overrides it."""
+            return set()
+
         app.authenticator.require_http_request = fake_http_auth
         app.authenticator.require_mcp_context = fake_mcp_auth
+        app.authenticator.fetch_github_repository = fake_fetch_github_repository
+        app.authenticator.list_visible_private_repository_ids = (
+            fake_list_visible_private_repository_ids
+        )
         return app
 
     return installer
