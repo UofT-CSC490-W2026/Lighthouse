@@ -1,4 +1,11 @@
-from .auth import AuthenticatedUser, Authenticator, AuthorizationError, GitHubUser
+from .auth import (
+    AuthenticatedUser,
+    Authenticator,
+    AuthorizationError,
+    GitHubRepository,
+    GitHubUser,
+    ManagedToken,
+)
 from .config import (
     DEBUG,
     SSM_PARAMETER_ENV_VAR,
@@ -29,7 +36,9 @@ __all__ = [
     "BoundRoute",
     "BoundToolCall",
     "Colour",
+    "GitHubRepository",
     "GitHubUser",
+    "ManagedToken",
     "RequestError",
     "RouteMeta",
     "DEBUG",
