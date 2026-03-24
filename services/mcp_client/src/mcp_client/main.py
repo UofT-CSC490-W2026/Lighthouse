@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from logging import Logger
 
-from .models import MCPDatabase
+from db import MCPDatabase
 from .utilities import Authenticator, DEBUG, get_logger, get_settings
 from .engine import Engine
 from .routers.http import HTTPRouteHandler

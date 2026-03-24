@@ -488,12 +488,16 @@ version = "0.1.0"
 source = { editable = "packages/db" }
 dependencies = [
     { name = "alembic" },
+    { name = "peewee" },
+    { name = "psycopg2-binary" },
     { name = "sqlalchemy" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "alembic", specifier = ">=1.13" },
+    { name = "peewee", specifier = ">=3.17" },
+    { name = "psycopg2-binary", specifier = ">=2.9" },
     { name = "sqlalchemy", specifier = ">=2.0" },
 ]
 
@@ -1333,11 +1337,10 @@ dependencies = [
     { name = "asyncpg" },
     { name = "boto3" },
     { name = "cryptography" },
+    { name = "db" },
     { name = "fastapi", extra = ["standard"] },
     { name = "fastmcp" },
     { name = "httpx" },
-    { name = "peewee" },
-    { name = "psycopg2-binary" },
     { name = "pydantic-settings" },
 ]
 
@@ -1352,11 +1355,10 @@ requires-dist = [
     { name = "asyncpg", specifier = ">=0.29" },
     { name = "boto3", specifier = ">=1.35" },
     { name = "cryptography", specifier = ">=42.0" },
+    { name = "db", editable = "packages/db" },
     { name = "fastapi", extras = ["standard"], specifier = ">=0.115" },
     { name = "fastmcp", specifier = "<3" },
     { name = "httpx", specifier = ">=0.27" },
-    { name = "peewee", specifier = ">=3.17" },
-    { name = "psycopg2-binary", specifier = ">=2.9" },
     { name = "pydantic-settings", specifier = ">=2.0" },
 ]
 

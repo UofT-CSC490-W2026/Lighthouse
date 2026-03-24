@@ -13,7 +13,7 @@ from cryptography.fernet import Fernet
 from fastmcp import Context
 from fastapi import Request
 
-from ..models import Session, User
+from db import Session, User
 from .errors import RequestError
 
 if TYPE_CHECKING:

@@ -73,7 +73,7 @@ def _install_fastmcp_stub() -> None:
 _install_fastmcp_stub()
 
 
-from mcp_client.models import Repository, Session, User, UserHiddenRepository  # noqa: E402
+from db import Repository, Session, User, UserHiddenRepository  # noqa: E402
 from mcp_client.utilities import (  # noqa: E402
     AuthenticatedUser,
     AuthorizationError,

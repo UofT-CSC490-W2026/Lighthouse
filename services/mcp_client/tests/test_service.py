@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi.testclient import TestClient
 
-from mcp_client.models import Repository, User, UserHiddenRepository
+from db import Repository, User, UserHiddenRepository
 from mcp_client.routers.mcp.handler import MCPToolHandler
 from mcp_client.utilities import collect_toolcalls
 

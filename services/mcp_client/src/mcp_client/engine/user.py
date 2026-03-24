@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 from fastapi import Body
 from pydantic import BaseModel
 
-from ..models import Repository, UserHiddenRepository
+from db import Repository, UserHiddenRepository
 from ..utilities import (
     AuthenticatedUser,
     GitHubRepository,

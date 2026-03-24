@@ -1,5 +1,5 @@
 {
-  "extraPaths": ["packages/shared/src"],
+  "extraPaths": ["packages/db/src", "packages/shared/src", "services/mcp_client/src"],
   "venvPath": ".",
   "venv": ".venv"
 }
