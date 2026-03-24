@@ -144,6 +144,21 @@ services:
       timeout: 5s
       retries: 5
 
+  web:
+    build:
+      context: .
+      dockerfile: services/web/Dockerfile
+    ports:
+      - "3000:80"
+    depends_on:
+      mcp_server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 volumes:
   postgres_data:
   etcd_data:
