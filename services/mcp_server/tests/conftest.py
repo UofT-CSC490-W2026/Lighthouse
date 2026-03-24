@@ -74,7 +74,7 @@ _install_fastmcp_stub()
 
 
 from db import Repository, Session, User, UserHiddenRepository  # noqa: E402
-from mcp_client.utilities import (  # noqa: E402
+from mcp_server.utilities import (  # noqa: E402
     AuthenticatedUser,
     AuthorizationError,
     GitHubRepository,
@@ -104,7 +104,7 @@ def auth_headers() -> dict[str, str]:
 @pytest.fixture
 def app_factory(tmp_path):
     """Create isolated app instances with optional sqlite-backed test storage."""
-    from mcp_client.main import App
+    from mcp_server.main import App
 
     created_apps = []
 

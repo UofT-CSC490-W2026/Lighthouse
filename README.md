@@ -11,7 +11,7 @@ monorepo/
 ├── services/
 │   ├── ingestion/          # Data ingestion service
 │   ├── search/             # Search layer service
-│   ├── mcp_client/         # MCP client (agent-facing API)
+│   ├── mcp_server/         # MCP server (agent-facing API)
 │   └── web/                # Web service
 │
 ├── packages/               # Shared internal libraries

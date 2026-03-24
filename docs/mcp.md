@@ -30,10 +30,10 @@ Important current limitation:
 
 ## Source Layout
 
-The current MCP service package lives under `services/mcp_client/src/mcp_client`:
+The current MCP service package lives under `services/mcp_server/src/mcp_server`:
 
 ```text
-services/mcp_client/src/mcp_client/
+services/mcp_server/src/mcp_server/
   main.py
   engine/
     engine.py
@@ -69,7 +69,7 @@ High-level responsibility split:
 
 ### `App`
 
-`services/mcp_client/src/mcp_client/main.py` defines `App`, a `FastAPI` subclass that owns:
+`services/mcp_server/src/mcp_server/main.py` defines `App`, a `FastAPI` subclass that owns:
 
 - `settings`
 - `database`
@@ -87,7 +87,7 @@ During the app lifespan it:
 
 ### `Engine`
 
-`services/mcp_client/src/mcp_client/engine/engine.py` is the composition root for service logic. It exposes:
+`services/mcp_server/src/mcp_server/engine/engine.py` is the composition root for service logic. It exposes:
 
 - `auth: AuthEngine`
 - `user: UserEngine`
@@ -97,7 +97,7 @@ During the app lifespan it:
 
 ### Decorator-Driven Exposure
 
-The service uses shared metadata decorators from `services/mcp_client/src/mcp_client/utilities/decorators.py`:
+The service uses shared metadata decorators from `services/mcp_server/src/mcp_server/utilities/decorators.py`:
 
 - `@httproute(method, path, ...)`
 - `@toolcall(name, ...)`
@@ -112,7 +112,7 @@ This gives the codebase one consistent pattern:
 
 ### HTTP Handler
 
-`services/mcp_client/src/mcp_client/routers/http/handler.py`:
+`services/mcp_server/src/mcp_server/routers/http/handler.py`:
 
 - discovers all decorated HTTP routes from `engine.registries()`
 - builds a FastAPI endpoint wrapper for each route
@@ -122,7 +122,7 @@ This gives the codebase one consistent pattern:
 
 ### MCP Handler
 
-`services/mcp_client/src/mcp_client/routers/mcp/handler.py`:
+`services/mcp_server/src/mcp_server/routers/mcp/handler.py`:
 
 - discovers all decorated MCP tools from `engine.registries()`
 - builds a FastMCP wrapper for each tool
@@ -179,7 +179,7 @@ For normal protected calls, both HTTP and MCP use:
 Authorization: Bearer <token>
 ```
 
-The central auth logic lives in `services/mcp_client/src/mcp_client/utilities/auth.py`.
+The central auth logic lives in `services/mcp_server/src/mcp_server/utilities/auth.py`.
 
 For HTTP:
 
@@ -196,7 +196,7 @@ This means handlers do not perform repeated auth checks themselves.
 
 ## Search and Retrieval Model
 
-The search surface is owned by `SearchService` in `services/mcp_client/src/mcp_client/engine/search.py`.
+The search surface is owned by `SearchService` in `services/mcp_server/src/mcp_server/engine/search.py`.
 
 ### Main Entry Point: `get_code_context`
 
@@ -287,7 +287,7 @@ All current MCP tools require authorization.
 
 ## Data Model
 
-The Peewee models live in `services/mcp_client/src/mcp_client/models/auth.py`.
+The Peewee models live in `services/mcp_server/src/mcp_server/models/auth.py`.
 
 ### `User`
 
@@ -348,7 +348,7 @@ Important implementation detail:
 
 ## Configuration
 
-The MCP service uses a typed settings model in `services/mcp_client/src/mcp_client/utilities/config/env.py`.
+The MCP service uses a typed settings model in `services/mcp_server/src/mcp_server/utilities/config/env.py`.
 
 ### Load Order
 
@@ -364,14 +364,14 @@ That means environment variables override the SSM payload field-by-field.
 
 ### SSM Support
 
-If `MCP_CLIENT_SETTINGS_SSM_PARAMETER` (or legacy `LIGHTHOUSE_MCP_SETTINGS_SSM_PARAMETER`) is set, the service attempts to load one JSON object from AWS Systems Manager Parameter Store and use it as a settings source.
+If `MCP_SERVER_SETTINGS_SSM_PARAMETER` is set, the service attempts to load one JSON object from AWS Systems Manager Parameter Store and use it as a settings source.
 
 ### Important Settings
 
 - `DEBUG`
 - `CORS_ALLOW_ORIGINS`
 - `POSTGRES_DSN`
-- `MCP_CLIENT_SETTINGS_SSM_PARAMETER` (legacy: `LIGHTHOUSE_MCP_SETTINGS_SSM_PARAMETER`)
+- `MCP_SERVER_SETTINGS_SSM_PARAMETER`
 - `AWS_REGION`
 - `GITHUB_OAUTH_CLIENT_ID`
 - `GITHUB_OAUTH_CLIENT_SECRET`
@@ -394,7 +394,7 @@ Purpose:
 
 ## Logging and Runtime Introspection
 
-The service uses shared logging helpers from `services/mcp_client/src/mcp_client/utilities/logging`.
+The service uses shared logging helpers from `services/mcp_server/src/mcp_server/utilities/logging`.
 
 At startup:
 
@@ -405,7 +405,7 @@ This makes it easy to confirm which decorated handlers were actually discovered.
 
 ## Local Development
 
-Current local setup from `services/mcp_client/README.md`:
+Current local setup from `services/mcp_server/README.md`:
 
 1. create a virtual environment
 2. install dependencies
@@ -413,7 +413,7 @@ Current local setup from `services/mcp_client/README.md`:
 4. run:
 
 ```shell
-uvicorn mcp_client.main:app --reload --host 0.0.0.0 --port 8000 --env-file .env
+uvicorn mcp_server.main:app --reload --host 0.0.0.0 --port 8000 --env-file .env
 ```
 
 ## Current Limitations and Follow-Up Work

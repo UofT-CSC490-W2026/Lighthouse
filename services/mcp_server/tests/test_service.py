@@ -7,8 +7,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from db import Repository, User, UserHiddenRepository
-from mcp_client.routers.mcp.handler import MCPToolHandler
-from mcp_client.utilities import collect_toolcalls
+from mcp_server.routers.mcp.handler import MCPToolHandler
+from mcp_server.utilities import collect_toolcalls
 
 
 def test_health_is_public_and_current_user_requires_auth(app_factory) -> None:

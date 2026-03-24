@@ -18,7 +18,7 @@ members = [
     "db",
     "ingestion",
     "lighthouse",
-    "mcp-client",
+    "mcp-server",
     "search",
     "shared",
     "vectordb",
@@ -1458,9 +1458,9 @@ wheels = [
 ]
 
 [[package]]
-name = "mcp-client"
+name = "mcp-server"
 version = "0.1.0"
-source = { editable = "services/mcp_client" }
+source = { editable = "services/mcp_server" }
 dependencies = [
     { name = "asyncpg" },
     { name = "boto3" },

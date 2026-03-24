@@ -22,9 +22,9 @@ From the repository root:
    ```
 3. Copy the MCP env template:
    ```shell
-   cp services/mcp_client/.env.example services/mcp_client/.env
+   cp services/mcp_server/.env.example services/mcp_server/.env
    ```
-4. Fill in the required settings in `services/mcp_client/.env`.
+4. Fill in the required settings in `services/mcp_server/.env`.
 
 If you are running locally with the current auth flow, you will usually want:
 
@@ -40,7 +40,7 @@ The main environment variables are:
 - `DEBUG`
 - `CORS_ALLOW_ORIGINS`
 - `POSTGRES_DSN`
-- `MCP_CLIENT_SETTINGS_SSM_PARAMETER` (legacy: `LIGHTHOUSE_MCP_SETTINGS_SSM_PARAMETER`)
+- `MCP_SERVER_SETTINGS_SSM_PARAMETER`
 - `AWS_REGION`
 - `GITHUB_OAUTH_CLIENT_ID`
 - `GITHUB_OAUTH_CLIENT_SECRET`
@@ -51,21 +51,21 @@ The main environment variables are:
 Configuration behavior:
 
 - explicit environment variables override SSM values
-- if `MCP_CLIENT_SETTINGS_SSM_PARAMETER` (or legacy `LIGHTHOUSE_MCP_SETTINGS_SSM_PARAMETER`) is set, the service loads one JSON settings object from AWS SSM Parameter Store
+- if `MCP_SERVER_SETTINGS_SSM_PARAMETER` is set, the service loads one JSON settings object from AWS SSM Parameter Store
 - `POSTGRES_DSN` controls whether the database is started during app lifespan
 
 ## Running the Service
 
-From `services/mcp_client/`:
+From `services/mcp_server/`:
 
 ```shell
-uv run uvicorn mcp_client.main:app --reload --host 0.0.0.0 --port 8000 --env-file .env
+uv run uvicorn mcp_server.main:app --reload --host 0.0.0.0 --port 8000 --env-file .env
 ```
 
 Or from the repository root:
 
 ```shell
-uv run --directory services/mcp_client uvicorn mcp_client.main:app --reload --host 0.0.0.0 --port 8000 --env-file .env
+uv run --directory services/mcp_server uvicorn mcp_server.main:app --reload --host 0.0.0.0 --port 8000 --env-file .env
 ```
 
 The service exposes:
