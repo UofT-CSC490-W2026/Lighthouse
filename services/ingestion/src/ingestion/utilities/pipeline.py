@@ -9,9 +9,10 @@ from db import CodeChunk, DatabaseManager, IndexedBranch, Repository
 from shared.config import EMBEDDING_DIMENSION, MILVUS_COLLECTION_NAME
 from vectordb import MilvusClient
 
-from .chunking import SlidingWindowChunker
+from ..chunking import SlidingWindowChunker
+from ..embedding import OpenAIEmbeddingProvider
+
 from .config import IngestionSettings
-from .embedding import OpenAIEmbeddingProvider
 from .git_ops import GitOperations
 
 logger = logging.getLogger(__name__)

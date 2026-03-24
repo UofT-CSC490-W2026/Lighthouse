@@ -5,8 +5,7 @@ from dataclasses import dataclass
 
 from temporalio import activity
 
-from .config import IngestionSettings
-from .pipeline import IndexingPipeline
+from ..utilities import IngestionSettings, IndexingPipeline
 
 logger = logging.getLogger(__name__)
 

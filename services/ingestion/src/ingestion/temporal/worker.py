@@ -1,6 +1,6 @@
 """Temporal worker for ingestion activities.
 
-Run with: uv run --package ingestion python -m ingestion.worker
+Run with: uv run --package ingestion python -m ingestion.temporal.worker
 """
 
 from __future__ import annotations
@@ -11,8 +11,9 @@ import logging
 from temporalio.client import Client
 from temporalio.worker import Worker
 
+from ..utilities import IngestionSettings
+
 from .activities import incremental_index_activity, index_repository_activity
-from .config import IngestionSettings
 from .workflows import IncrementalIndexWorkflow, IndexRepositoryWorkflow
 
 logging.basicConfig(level=logging.INFO)

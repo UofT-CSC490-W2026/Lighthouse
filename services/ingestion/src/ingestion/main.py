@@ -10,9 +10,13 @@ from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
 from temporalio.client import Client
 
-from .activities import IncrementalIndexInput, IndexRepoInput
-from .config import IngestionSettings
-from .workflows import IncrementalIndexWorkflow, IndexRepositoryWorkflow
+from .utilities import IngestionSettings
+from .temporal import (
+    IncrementalIndexInput,
+    IncrementalIndexWorkflow,
+    IndexRepoInput,
+    IndexRepositoryWorkflow,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
