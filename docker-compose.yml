@@ -79,14 +79,14 @@ services:
       retries: 3
       start_period: 90s
 
-  mcp:
+  mcp_client:
     build:
       context: .
-      dockerfile: services/mcp/Dockerfile
+      dockerfile: services/mcp_client/Dockerfile
     ports:
       - "8000:8000"
     env_file:
-      - services/mcp/.env
+      - services/mcp_client/.env
     depends_on:
       postgres:
         condition: service_healthy

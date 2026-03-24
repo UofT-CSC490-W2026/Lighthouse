@@ -13,7 +13,17 @@ from pydantic_settings import (
     SettingsConfigDict,
 )
 
-SSM_PARAMETER_ENV_VAR = "LIGHTHOUSE_MCP_SETTINGS_SSM_PARAMETER"
+SSM_PARAMETER_ENV_VAR = "MCP_CLIENT_SETTINGS_SSM_PARAMETER"
+LEGACY_SSM_PARAMETER_ENV_VAR = "LIGHTHOUSE_MCP_SETTINGS_SSM_PARAMETER"
+
+
+def _ssm_parameter_name_from_env() -> str:
+    """Resolve the SSM parameter name pointer from env (new name first, then legacy)."""
+    for key in (SSM_PARAMETER_ENV_VAR, LEGACY_SSM_PARAMETER_ENV_VAR):
+        value = os.getenv(key, "").strip()
+        if value:
+            return value
+    return ""
 
 
 def _dedupe(values: list[str]) -> list[str]:
@@ -129,7 +139,7 @@ class SSMSettingsSource(PydanticBaseSettingsSource):
 
     def __call__(self) -> dict[str, Any]:
         """Load and map SSM payload fields onto the settings model."""
-        parameter_name = os.getenv(SSM_PARAMETER_ENV_VAR, "").strip()
+        parameter_name = _ssm_parameter_name_from_env()
         if not parameter_name:
             return {}
 
@@ -208,10 +218,12 @@ class Settings(BaseSettings):
         default=168,
         validation_alias=AliasChoices("SESSION_TTL_HOURS", "session_ttl_hours"),
     )
-    lighthouse_mcp_settings_ssm_parameter: str | None = Field(
+    mcp_client_settings_ssm_parameter: str | None = Field(
         default=None,
         validation_alias=AliasChoices(
             SSM_PARAMETER_ENV_VAR,
+            LEGACY_SSM_PARAMETER_ENV_VAR,
+            "mcp_client_settings_ssm_parameter",
             "lighthouse_mcp_settings_ssm_parameter",
         ),
     )

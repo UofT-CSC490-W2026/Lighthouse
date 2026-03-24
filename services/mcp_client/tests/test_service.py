@@ -6,9 +6,9 @@ from types import SimpleNamespace
 import pytest
 from fastapi.testclient import TestClient
 
-from src.models import Repository, User, UserHiddenRepository
-from src.routers.mcp.handler import MCPToolHandler
-from src.utilities import collect_toolcalls
+from mcp_client.models import Repository, User, UserHiddenRepository
+from mcp_client.routers.mcp.handler import MCPToolHandler
+from mcp_client.utilities import collect_toolcalls
 
 
 def test_health_is_public_and_current_user_requires_auth(app_factory) -> None:

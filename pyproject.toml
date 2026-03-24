@@ -9,7 +9,7 @@ dependencies = []
 members = [
   "services/ingestion",
   "services/search",
-  "services/mcp",
+  "services/mcp_client",
   "packages/shared",
   "packages/vectordb",
   "packages/db",

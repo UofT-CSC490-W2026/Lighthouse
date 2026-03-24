@@ -12,8 +12,9 @@ from cryptography.fernet import Fernet
 
 
 SERVICE_DIR = Path(__file__).resolve().parents[1]
-if str(SERVICE_DIR) not in sys.path:
-    sys.path.insert(0, str(SERVICE_DIR))
+SRC_DIR = SERVICE_DIR / "src"
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
 
 
 def _install_fastmcp_stub() -> None:
@@ -72,8 +73,8 @@ def _install_fastmcp_stub() -> None:
 _install_fastmcp_stub()
 
 
-from src.models import Repository, Session, User, UserHiddenRepository  # noqa: E402
-from src.utilities import (  # noqa: E402
+from mcp_client.models import Repository, Session, User, UserHiddenRepository  # noqa: E402
+from mcp_client.utilities import (  # noqa: E402
     AuthenticatedUser,
     AuthorizationError,
     GitHubRepository,
@@ -103,7 +104,7 @@ def auth_headers() -> dict[str, str]:
 @pytest.fixture
 def app_factory(tmp_path):
     """Create isolated app instances with optional sqlite-backed test storage."""
-    from src.main import App
+    from mcp_client.main import App
 
     created_apps = []
 

@@ -1,4 +1,4 @@
-const API_TOKEN_STORAGE_KEY = "LIGHTHOUSE_MCP_TOKEN";
+const API_TOKEN_STORAGE_KEY = "MCP_CLIENT_TOKEN";
 
 function hasStorage() {
   return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
