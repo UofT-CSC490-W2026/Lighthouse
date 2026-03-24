@@ -235,6 +235,13 @@ class Settings(BaseSettings):
             "aws_region",
         ),
     )
+    search_service_url: str = Field(
+        default="http://localhost:8002",
+        validation_alias=AliasChoices(
+            "SEARCH_SERVICE_URL",
+            "search_service_url",
+        ),
+    )
 
     @classmethod
     def settings_customise_sources(

@@ -25,6 +25,8 @@ COPY --from=builder /app/.venv /app/.venv
 
 ENV PATH="/app/.venv/bin:$PATH"
 
-EXPOSE 8000
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
 
-CMD ["uvicorn", "search.main:app", "--host", "0.0.0.0", "--port", "8000"]
+EXPOSE 8002
+
+CMD ["uvicorn", "search.main:app", "--host", "0.0.0.0", "--port", "8002"]

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from logging import Logger
+import logging
 from typing import TYPE_CHECKING, Annotated
 
+import httpx
 from fastapi import Body
 from pydantic import BaseModel, Field
 
@@ -15,7 +16,7 @@ if TYPE_CHECKING:
 class SearchEngine:
     """Expose coding-context retrieval entrypoints for agents."""
 
-    log: Logger
+    log: logging.Logger
 
     def __init__(self, engine: Engine) -> None:
         """Bind the search service to the shared engine."""
@@ -26,11 +27,11 @@ class SearchEngine:
         "POST",
         "/v1/search/code-context",
         name="get_code_context",
-        description="Placeholder entrypoint for requesting coding-task context.",
+        description="Request relevant code context for a coding task.",
     )
     @toolcall(
         "get_code_context",
-        description="Placeholder entrypoint for requesting coding-task context.",
+        description="Request relevant code context for a coding task.",
     )
     async def get_code_context(
         self,
@@ -45,7 +46,7 @@ class SearchEngine:
         selected_text: Annotated[str | None, Body()] = None,
         surrounding_context: Annotated[str | None, Body()] = None,
     ) -> "CodeContextResponse":
-        """Capture a code-context request envelope for future retrieval work."""
+        """Retrieve code context by calling the search service."""
         normalized_repository_name = repository_name.strip()
         normalized_task_description = task_description.strip()
         normalized_branch = branch.strip() or "main"
@@ -73,12 +74,59 @@ class SearchEngine:
                 "end_line must be greater than or equal to start_line.", status_code=422
             )
 
+        # Build search query from task description and context
+        query_parts = [normalized_task_description]
+        if normalized_selected_text:
+            query_parts.append(normalized_selected_text)
+        if normalized_surrounding_context:
+            query_parts.append(normalized_surrounding_context)
+        search_query = " ".join(query_parts)
+
+        # Call search service
+        search_url = self.engine.app.settings.search_service_url
+        search_payload = {
+            "query": search_query,
+            "repository_name": normalized_repository_name,
+            "branch": normalized_branch,
+            "file_path": normalized_file_path,
+            "top_k": 10,
+        }
+
+        snippets: list[CodeContextSnippet] = []
+        status = "ok"
+        message = "Code context retrieved successfully."
+
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.post(
+                    f"{search_url}/search",
+                    json=search_payload,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+
+                for s in data.get("snippets", []):
+                    snippets.append(
+                        CodeContextSnippet(
+                            file_path=s["file_path"],
+                            start_line=s.get("start_line"),
+                            end_line=s.get("end_line"),
+                            content=s["content"],
+                            reason=s.get("reason"),
+                        )
+                    )
+        except httpx.HTTPStatusError as exc:
+            self.log.error("Search service returned %s: %s", exc.response.status_code, exc.response.text)
+            status = "error"
+            message = f"Search service error: {exc.response.status_code}"
+        except httpx.RequestError as exc:
+            self.log.error("Failed to reach search service: %s", exc)
+            status = "error"
+            message = "Search service unavailable."
+
         return CodeContextResponse(
-            status="not_implemented",
-            message=(
-                "Code context retrieval is not implemented yet. "
-                "This placeholder captures the request envelope for future search work."
-            ),
+            status=status,
+            message=message,
             repository_name=normalized_repository_name,
             branch=normalized_branch,
             latest_commit=normalized_latest_commit,
@@ -91,7 +139,7 @@ class SearchEngine:
                 selected_text=normalized_selected_text,
                 surrounding_context=normalized_surrounding_context,
             ),
-            snippets=[],
+            snippets=snippets,
             follow_up=[],
         )
 
@@ -117,11 +165,11 @@ class CodeContextSnippet(BaseModel):
 
 
 class CodeContextResponse(BaseModel):
-    """Return the current placeholder response shape for code-context requests."""
+    """Return the response shape for code-context requests."""
 
     status: str = Field(
-        default="not_implemented",
-        description="Placeholder status until search-backed retrieval is implemented.",
+        default="ok",
+        description="Status of the search: ok, error, or not_implemented.",
     )
     message: str
     repository_name: str
