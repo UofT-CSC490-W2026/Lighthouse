@@ -12,7 +12,7 @@ from peewee import (
     TextField,
 )
 
-from .database import BaseModel
+from ..database import BaseModel
 
 
 def _uuid_text() -> str:

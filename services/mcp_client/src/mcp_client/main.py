@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from logging import Logger
 
-from db import MCPDatabase
+from db import DatabaseManager
 from .utilities import Authenticator, DEBUG, get_logger, get_settings
 from .engine import Engine
 from .routers.http import HTTPRouteHandler
@@ -15,13 +15,13 @@ class App(FastAPI):
 
     log: Logger
     engine: Engine
-    database: MCPDatabase
+    database: DatabaseManager
     authenticator: Authenticator
 
     def __init__(self):
         """Initialize settings, shared services, and middleware."""
         self.settings = get_settings()
-        self.database = MCPDatabase(self.settings.postgres_dsn)
+        self.database = DatabaseManager(self.settings.postgres_dsn)
         super().__init__(
             debug=DEBUG,
             lifespan=self.lifespan,

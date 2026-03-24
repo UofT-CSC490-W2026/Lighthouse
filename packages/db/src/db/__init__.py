@@ -1,8 +1,9 @@
-from .models import BaseModel, MCPDatabase, Repository, Session, User, UserHiddenRepository
+from .database import BaseModel, DatabaseManager
+from .models import Repository, Session, User, UserHiddenRepository
 
 __all__ = [
     "BaseModel",
-    "MCPDatabase",
+    "DatabaseManager",
     "Repository",
     "Session",
     "User",

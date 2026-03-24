@@ -4,7 +4,7 @@ from peewee import Database, DatabaseProxy, Model
 from playhouse.db_url import connect as connect_database_url
 
 
-class MCPDatabase:
+class DatabaseManager:
     """Own the configured Peewee database and its lifecycle helpers."""
 
     proxy = DatabaseProxy()
@@ -76,6 +76,6 @@ class BaseModel(Model):
     """Base Peewee model bound to the shared database proxy."""
 
     class Meta:
-        """Bind all derived models to the MCP database proxy."""
+        """Bind all derived models to the shared database proxy."""
 
-        database = MCPDatabase.proxy
+        database = DatabaseManager.proxy

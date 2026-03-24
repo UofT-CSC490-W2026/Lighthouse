@@ -21,7 +21,7 @@ The service has been refactored around:
 - an `Engine` with service subobjects for `auth`, `user`, and `search`
 - decorator-based registration for both HTTP routes and MCP tools
 - one shared bearer-token authentication path for HTTP and MCP
-- Peewee models and a retained `MCPDatabase` object on the app
+- Peewee models and a retained `DatabaseManager` object on the app
 - typed settings with SSM-backed defaults and environment-variable overrides
 
 Important current limitation:
@@ -329,7 +329,7 @@ This table tracks which repositories a specific user has chosen to hide without 
 
 ## Database Lifecycle
 
-`services/mcp_client/src/mcp_client/models/database.py` defines `MCPDatabase`.
+`packages/db/src/db/database.py` defines `DatabaseManager`.
 
 It owns:
 
