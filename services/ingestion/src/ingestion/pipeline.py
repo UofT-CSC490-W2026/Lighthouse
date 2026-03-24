@@ -11,7 +11,7 @@ from vectordb import MilvusClient
 
 from .chunking import SlidingWindowChunker
 from .config import IngestionSettings
-from .embedding import EmbeddingService
+from .embedding import OpenAIEmbeddingProvider
 from .git_ops import GitOperations
 
 logger = logging.getLogger(__name__)
@@ -27,7 +27,7 @@ class IndexingPipeline:
             uri=settings.milvus_uri,
             collection_name=MILVUS_COLLECTION_NAME,
         )
-        self.embedder = EmbeddingService(
+        self.embedder = OpenAIEmbeddingProvider(
             api_key=settings.openai_api_key,
         )
         self.chunker = SlidingWindowChunker()
