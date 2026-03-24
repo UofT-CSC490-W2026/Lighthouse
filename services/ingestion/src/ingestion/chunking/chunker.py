@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import hashlib
-from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from pathlib import Path
 
 from shared.config import CHUNK_MAX_LINES, CHUNK_OVERLAP_LINES
+
+from .base_chunker import ChunkResult, Chunker
 
 EXTENSION_TO_LANGUAGE: dict[str, str] = {
     ".py": "python",
@@ -71,28 +71,7 @@ def compute_chunk_hash(content: str) -> str:
     return hashlib.sha256(content.encode("utf-8")).hexdigest()
 
 
-@dataclass
-class ChunkResult:
-    """Result of chunking a single region of a file."""
-
-    content: str
-    start_line: int
-    end_line: int
-    language: str | None
-    chunk_hash: str
-
-
-class CodeChunker(ABC):
-    """Abstract base class for code chunking strategies."""
-
-    @abstractmethod
-    def chunk_file(
-        self, content: str, file_path: str, language: str | None = None
-    ) -> list[ChunkResult]:
-        ...
-
-
-class SlidingWindowChunker(CodeChunker):
+class SlidingWindowChunker(Chunker):
     """Chunk code files using a sliding window with overlap."""
 
     def __init__(
