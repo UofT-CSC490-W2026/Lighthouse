@@ -5,7 +5,6 @@ import { apiFetch } from "@/lib/api";
 export function AddRepoForm() {
   const navigate = useNavigate();
   const [repoUrl, setRepoUrl] = useState("");
-  const [ref, setRef] = useState("main");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -17,7 +16,7 @@ export function AddRepoForm() {
     try {
       await apiFetch("/v1/user/repos", {
         method: "POST",
-        body: { repo_url: repoUrl, ref },
+        body: { repo_url: repoUrl },
       });
       navigate("/dashboard");
     } catch (err) {
@@ -43,23 +42,6 @@ export function AddRepoForm() {
           onChange={(e) => setRepoUrl(e.target.value)}
           placeholder="https://github.com/owner/repo or owner/repo"
           required
-          className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
-        />
-      </div>
-
-      <div>
-        <label
-          htmlFor="ref"
-          className="block text-sm font-medium text-gray-700"
-        >
-          Branch
-        </label>
-        <input
-          id="ref"
-          type="text"
-          value={ref}
-          onChange={(e) => setRef(e.target.value)}
-          placeholder="main"
           className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
         />
       </div>

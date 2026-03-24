@@ -1,6 +1,7 @@
 import { Link, useNavigate } from "react-router-dom";
 import type { User } from "@/lib/api";
 import { apiFetch } from "@/lib/api";
+import { clearApiToken } from "@/lib/auth";
 
 export function Navbar({ user }: { user: User | null }) {
   const navigate = useNavigate();
@@ -11,7 +12,8 @@ export function Navbar({ user }: { user: User | null }) {
     } catch {
       /* ignore */
     }
-    navigate("/login");
+    clearApiToken();
+    navigate("/login", { replace: true });
   }
 
   return (

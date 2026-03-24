@@ -3,7 +3,6 @@ import { StatusBadge } from "./StatusBadge";
 interface RepoCardProps {
   repoId: string;
   repoUrl: string;
-  branch: string;
   indexStatus: string | null;
   addedAt: string;
   onRemove: (repoId: string) => void;
@@ -12,7 +11,6 @@ interface RepoCardProps {
 export function RepoCard({
   repoId,
   repoUrl,
-  branch,
   indexStatus,
   addedAt,
   onRemove,
@@ -31,9 +29,6 @@ export function RepoCard({
               {repoId}
             </a>
           </h3>
-          <p className="mt-1 text-xs text-gray-500">
-            Branch: <span className="font-mono">{branch}</span>
-          </p>
         </div>
         <StatusBadge status={indexStatus} />
       </div>
