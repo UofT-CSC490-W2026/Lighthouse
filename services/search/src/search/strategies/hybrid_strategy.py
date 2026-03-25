@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 
 from db import CodeChunk, DatabaseManager, Repository
-from embedding import OpenAIEmbeddingProvider
+from embedding import EmbeddingProvider
 from shared.schemas.search import CodeSnippet, SearchRequest, SearchResult
 from vectordb import MilvusClient
 
@@ -19,7 +19,7 @@ class HybridSearchStrategy(SearchStrategy):
         self,
         db_manager: DatabaseManager,
         milvus: MilvusClient,
-        embedder: OpenAIEmbeddingProvider,
+        embedder: EmbeddingProvider,
     ) -> None:
         self.db_manager = db_manager
         self.milvus = milvus
