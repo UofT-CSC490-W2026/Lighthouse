@@ -1,15 +1,9 @@
 from __future__ import annotations
 
-import hashlib
-
 from shared.config import CHUNK_MAX_LINES, CHUNK_OVERLAP_LINES
 
 from .base_chunker import ChunkResult, Chunker
-
-
-def compute_chunk_hash(content: str) -> str:
-    """Compute SHA-256 hash of chunk content for dedup."""
-    return hashlib.sha256(content.encode("utf-8")).hexdigest()
+from .utils import compute_chunk_hash
 
 
 class SlidingWindowChunker(Chunker):
