@@ -53,7 +53,7 @@ export function RepoList() {
       {data.map((repo) => (
         <RepoCard
           key={repo.id}
-          repoId={repo.repo_id}
+          repoId={repo.full_name}
           repoUrl={repo.repo_url}
           indexStatus={repo.index_status}
           addedAt={repo.added_at}

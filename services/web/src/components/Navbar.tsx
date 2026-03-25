@@ -20,9 +20,30 @@ export function Navbar({ user }: { user: User | null }) {
     <nav className="border-b border-gray-200 bg-white">
       <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-14 items-center justify-between">
-          <Link to="/dashboard" className="text-lg font-semibold text-gray-900">
-            Lighthouse
-          </Link>
+          <div className="flex items-center gap-6">
+            <Link
+              to="/dashboard"
+              className="text-lg font-semibold text-gray-900"
+            >
+              Lighthouse
+            </Link>
+            {user ? (
+              <div className="flex items-center gap-4">
+                <Link
+                  to="/dashboard"
+                  className="text-sm text-gray-600 hover:text-gray-900"
+                >
+                  Dashboard
+                </Link>
+                <Link
+                  to="/dashboard/search"
+                  className="text-sm text-gray-600 hover:text-gray-900"
+                >
+                  Search
+                </Link>
+              </div>
+            ) : null}
+          </div>
 
           {user ? (
             <div className="flex items-center gap-3">

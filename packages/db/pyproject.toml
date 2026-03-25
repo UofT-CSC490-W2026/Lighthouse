@@ -2,7 +2,12 @@
 name = "db"
 version = "0.1.0"
 requires-python = ">=3.11"
-dependencies = ["sqlalchemy>=2.0", "alembic>=1.13"]
+dependencies = [
+  "sqlalchemy>=2.0",
+  "alembic>=1.13",
+  "peewee>=3.17",
+  "psycopg2-binary>=2.9",
+]
 
 [build-system]
 requires = ["hatchling"]

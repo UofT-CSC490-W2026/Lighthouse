@@ -44,7 +44,7 @@ resource "null_resource" "docker_build_push" {
       aws ecr get-login-password --region ${data.aws_region.current.name} | \
         docker login --username AWS --password-stdin ${data.aws_caller_identity.current.account_id}.dkr.ecr.${data.aws_region.current.name}.amazonaws.com
 
-      docker build -t ${local.mcp_image_uri} -f ${local.project_root}/mcp/Dockerfile ${local.project_root}
+      docker build -t ${local.mcp_image_uri} -f ${local.project_root}/services/mcp_server/Dockerfile ${local.project_root}
       docker push ${local.mcp_image_uri}
 
       docker build -t ${local.worker_image_uri} -f ${local.project_root}/pipeline/Dockerfile ${local.project_root}

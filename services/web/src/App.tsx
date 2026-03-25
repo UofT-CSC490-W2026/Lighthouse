@@ -3,6 +3,7 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import AddRepo from "./pages/AddRepo";
 import AuthCallback from "./pages/AuthCallback";
+import Search from "./pages/Search";
 
 export default function App() {
   return (
@@ -12,6 +13,7 @@ export default function App() {
         <Route path="/auth/callback" element={<AuthCallback />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/dashboard/add-repo" element={<AddRepo />} />
+        <Route path="/dashboard/search" element={<Search />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </BrowserRouter>

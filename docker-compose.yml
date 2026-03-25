@@ -2,7 +2,9 @@ name: lighthouse
 
 services:
   postgres:
-    image: postgres:17-alpine
+    build:
+      context: .
+      dockerfile: docker/postgres/Dockerfile
     environment:
       POSTGRES_USER: lighthouse
       POSTGRES_PASSWORD: lighthouse
@@ -49,7 +51,11 @@ services:
     volumes:
       - minio_data:/minio_data
     healthcheck:
-      test: ["CMD-SHELL", "/usr/bin/mc alias set myminio http://localhost:9000 minioadmin minioadmin > /dev/null 2>&1 && /usr/bin/mc ready myminio"]
+      test:
+        [
+          "CMD-SHELL",
+          "/usr/bin/mc alias set myminio http://localhost:9000 minioadmin minioadmin > /dev/null 2>&1 && /usr/bin/mc ready myminio",
+        ]
       interval: 30s
       timeout: 20s
       retries: 3
@@ -79,19 +85,132 @@ services:
       retries: 3
       start_period: 90s
 
-  mcp:
+  # Attu — Milvus admin UI (https://github.com/zilliztech/attu). Open http://localhost:8088
+  attu:
+    image: zilliz/attu:v2.6
+    ports:
+      - "8088:3000"
+    environment:
+      MILVUS_URL: milvus:19530
+    depends_on:
+      milvus:
+        condition: service_healthy
+
+  temporal:
+    image: temporalio/temporal:latest
+    ports:
+      - "7233:7233"
+      - "8233:8233"
+    volumes:
+      - temporal_data:/home/temporal
+    command: ["server", "start-dev", "--ip", "0.0.0.0", "--db-filename", "/home/temporal/temporal.db"]
+    healthcheck:
+      test: ["CMD", "temporal", "operator", "cluster", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  ingestion:
     build:
       context: .
-      dockerfile: services/mcp/Dockerfile
+      dockerfile: services/ingestion/Dockerfile
     ports:
-      - "8000:8000"
+      - "8001:8001"
     env_file:
-      - services/mcp/.env
+      - services/ingestion/.env
+    environment:
+      POSTGRES_DSN: postgresql://lighthouse:lighthouse@postgres:5432/lighthouse
+      MILVUS_URI: http://milvus:19530
+      TEMPORAL_ADDRESS: temporal:7233
     depends_on:
       postgres:
         condition: service_healthy
+      milvus:
+        condition: service_healthy
+      temporal:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  ingestion-worker:
+    build:
+      context: .
+      dockerfile: services/ingestion/Dockerfile
+    command: ["python", "-m", "ingestion.temporal.worker"]
+    env_file:
+      - services/ingestion/.env
+    environment:
+      POSTGRES_DSN: postgresql://lighthouse:lighthouse@postgres:5432/lighthouse
+      MILVUS_URI: http://milvus:19530
+      TEMPORAL_ADDRESS: temporal:7233
+    depends_on:
+      postgres:
+        condition: service_healthy
+      milvus:
+        condition: service_healthy
+      temporal:
+        condition: service_healthy
+
+  search:
+    build:
+      context: .
+      dockerfile: services/search/Dockerfile
+    ports:
+      - "8002:8002"
+    env_file:
+      - services/search/.env
+    environment:
+      POSTGRES_DSN: postgresql://lighthouse:lighthouse@postgres:5432/lighthouse
+      MILVUS_URI: http://milvus:19530
+    depends_on:
+      postgres:
+        condition: service_healthy
+      milvus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mcp_server:
+    build:
+      context: .
+      dockerfile: services/mcp_server/Dockerfile
+    ports:
+      - "8000:8000"
+    env_file:
+      - services/mcp_server/.env
+    environment:
+      POSTGRES_DSN: postgresql://lighthouse:lighthouse@postgres:5432/lighthouse
+      SEARCH_SERVICE_URL: http://search:8002
+      INGESTION_SERVICE_URL: http://ingestion:8001
+    depends_on:
+      postgres:
+        condition: service_healthy
+      search:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build:
+      context: .
+      dockerfile: services/web/Dockerfile
+    ports:
+      - "3000:80"
+    depends_on:
+      mcp_server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -101,3 +220,4 @@ volumes:
   etcd_data:
   minio_data:
   milvus_data:
+  temporal_data:

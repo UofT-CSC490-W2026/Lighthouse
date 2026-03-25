@@ -24,8 +24,11 @@ def _db_url() -> str:
         if env_url.startswith("postgresql://"):
             env_url = env_url.replace("postgresql://", "postgresql+asyncpg://", 1)
         return env_url
-    return config.get_main_option("sqlalchemy.url")
 
+    config_url = config.get_main_option("sqlalchemy.url")
+    if not config_url:
+        raise RuntimeError("SQLALCHEMY_URL is not set")
+    return config_url
 
 def run_migrations_offline() -> None:
     url = _db_url()

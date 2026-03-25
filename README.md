@@ -11,7 +11,7 @@ monorepo/
 ├── services/
 │   ├── ingestion/          # Data ingestion service
 │   ├── search/             # Search layer service
-│   ├── mcp/                # MCP service
+│   ├── mcp_server/         # MCP server (agent-facing API)
 │   └── web/                # Web service
 │
 ├── packages/               # Shared internal libraries
@@ -33,12 +33,10 @@ monorepo/
 ### Setup Instructions
 
 1. Install [Docker Desktop](https://docs.docker.com/desktop/)
-2. Install [Temporal CLI](https://temporal.io/setup/install-temporal-cli) for running temporal locally.
-3. Install [`uv`](https://docs.astral.sh/uv/getting-started/installation/) for Python package management.
-4. Run `uv sync` to install dependencies for the entire monorepo.
+2. Install [`uv`](https://docs.astral.sh/uv/getting-started/installation/) for Python package management.
+3. Run `uv sync --all-packages` to install dependencies for the entire monorepo.
 
 ### Running the Services
 
-1. Run `docker compose up -d` to start Postgres and Milvus.
-2. Run `temporal server start-dev` to start the Temporal server.
-3. For running a `service`, use `uv run --package <service> ...`.
+1. Run `docker compose up -d` to start Postgres, Milvus, Temporal, and other services.
+2. For running a `service`, use `uv run --package <service> ...`.

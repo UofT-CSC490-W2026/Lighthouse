@@ -36,12 +36,20 @@ export default function Dashboard() {
             <h1 className="text-xl font-semibold text-gray-900">
               Repositories
             </h1>
-            <Link
-              to="/dashboard/add-repo"
-              className="inline-flex items-center rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-blue-700"
-            >
-              + Add Repository
-            </Link>
+            <div className="flex items-center gap-3">
+              <Link
+                to="/dashboard/search"
+                className="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+              >
+                Search Indexed Code
+              </Link>
+              <Link
+                to="/dashboard/add-repo"
+                className="inline-flex items-center rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-blue-700"
+              >
+                + Add Repository
+              </Link>
+            </div>
           </div>
           <RepoList />
         </div>

@@ -60,3 +60,5 @@ infra/.terraform.tfstate.lock.info
 node_modules/
 *.tsbuildinfo
 dist/
+
+.pytest_cache/
