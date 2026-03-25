@@ -4,6 +4,7 @@ version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
   "db",
+  "shared",
   "fastapi[standard]>=0.115",
   "fastmcp<3",
   "httpx>=0.27",
@@ -15,6 +16,7 @@ dependencies = [
 
 [tool.uv.sources]
 db = { workspace = true }
+shared = { workspace = true }
 
 [dependency-groups]
 dev = ["pytest>=9.0.2", "ruff>=0.15.7"]
