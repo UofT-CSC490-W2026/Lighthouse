@@ -19,18 +19,18 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = SearchSettings()
-
+    
     db_manager = DatabaseManager(settings.postgres_dsn)
     db_manager.connect()
-    app.state.db_manager = db_manager
 
     milvus = MilvusClient(
         uri=settings.milvus_uri,
         collection_name=MILVUS_COLLECTION_NAME,
     )
-    app.state.milvus = milvus
 
     embedder = EmbeddingClient(api_key=settings.openai_api_key)
+
+    # Set the search strategy
     app.state.strategy = HybridSearchStrategy(
         db_manager=db_manager,
         milvus=milvus,
