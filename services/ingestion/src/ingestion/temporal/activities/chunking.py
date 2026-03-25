@@ -49,7 +49,7 @@ async def chunk_files(input: ChunkFilesInput) -> ChunkFilesOutput:
 
             relative_path = str(file_path.relative_to(repo_path))
             language = lang_detector.detect(relative_path)
-            chunk_results = chunker.chunk_file(content, relative_path, language=language)
+            chunk_results = chunker.chunk_file(content, relative_path)
 
             for chunk in chunk_results:
                 all_chunks.append(
@@ -61,7 +61,7 @@ async def chunk_files(input: ChunkFilesInput) -> ChunkFilesOutput:
                         "start_line": chunk.start_line,
                         "end_line": chunk.end_line,
                         "content": chunk.content,
-                        "language": chunk.language,
+                        "language": language,
                         "chunk_hash": chunk.chunk_hash,
                     }
                 )
