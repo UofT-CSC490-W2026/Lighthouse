@@ -7,7 +7,7 @@ class SearchRequest(BaseModel):
     """Request payload for the search service."""
 
     query: str
-    repository_name: str = Field(..., min_length=1)
+    github_repo_id: int
     branch: str = Field(default="main", min_length=1)
     file_path: str | None = None
     top_k: int = Field(default=10, ge=1, le=100)

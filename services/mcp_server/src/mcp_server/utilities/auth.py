@@ -54,12 +54,13 @@ class GitHubRepository:
     """Hold normalized GitHub repository metadata returned by the API."""
 
     github_repo_id: int
-    repo_id: str
+    full_name: str
     repo_url: str
     display_name: str
     owner_login: str
     owner_type: str
     is_private: bool
+    default_branch: str = "main"
 
 
 @dataclass(frozen=True, slots=True)
@@ -200,8 +201,8 @@ class Authenticator:
         response.raise_for_status()
         return self._to_github_repository(response.json())
 
-    async def list_visible_private_repository_ids(self, user_id: str) -> set[str]:
-        """Return the private repositories the given user can currently access."""
+    async def list_visible_private_repository_ids(self, user_id: str) -> set[int]:
+        """Return GitHub repo IDs of private repos the user can currently access."""
         access_token = await asyncio.to_thread(
             self._get_github_access_token_sync, user_id
         )
@@ -213,7 +214,7 @@ class Authenticator:
             "Accept": "application/vnd.github+json",
         }
         page = 1
-        repo_ids: set[str] = set()
+        repo_ids: set[int] = set()
 
         async with httpx.AsyncClient() as client:
             while True:
@@ -235,9 +236,9 @@ class Authenticator:
                     break
 
                 for repo in page_data:
-                    full_name = str(repo.get("full_name", "")).strip().lower()
-                    if full_name:
-                        repo_ids.add(full_name)
+                    github_id = repo.get("id")
+                    if github_id is not None:
+                        repo_ids.add(int(github_id))
 
                 if len(page_data) < 100:
                     break
@@ -511,10 +512,11 @@ class Authenticator:
 
         return GitHubRepository(
             github_repo_id=int(data["id"]),
-            repo_id=full_name,
+            full_name=full_name,
             repo_url=str(data["html_url"]),
             display_name=full_name,
             owner_login=str(owner.get("login") or full_name.split("/", 1)[0]),
             owner_type=str(owner.get("type") or "User"),
             is_private=bool(data.get("private", False)),
+            default_branch=str(data.get("default_branch") or "main"),
         )

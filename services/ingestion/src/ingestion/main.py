@@ -7,7 +7,8 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
+from shared.schemas.ingestion import IndexAcceptedResponse, IndexRequest
 from temporalio.client import Client
 
 from .utilities import IngestionSettings
@@ -37,17 +38,6 @@ app = FastAPI(title="Lighthouse Ingestion Service", lifespan=lifespan)
 # --- Request/Response Models ---
 
 
-class RepoIndexRequest(BaseModel):
-    repo_url: str
-    repo_id: str
-    branches: list[str] = Field(default_factory=lambda: ["main"])
-    github_token: str | None = None
-
-
-class IndexRequest(BaseModel):
-    repositories: list[RepoIndexRequest]
-
-
 class BranchStatus(BaseModel):
     branch_name: str
     status: str
@@ -56,13 +46,8 @@ class BranchStatus(BaseModel):
 
 
 class IndexStatusResponse(BaseModel):
-    repo_id: str
+    github_repo_id: int
     branches: list[BranchStatus]
-
-
-class IndexAcceptedResponse(BaseModel):
-    status: str = "accepted"
-    workflow_ids: list[str]
 
 
 # --- Endpoints ---
@@ -76,12 +61,13 @@ async def index_repos(request: IndexRequest):
     workflow_ids: list[str] = []
 
     for repo in request.repositories:
-        workflow_id = f"index-{repo.repo_id.replace('/', '-')}"
+        workflow_id = f"index-{repo.github_repo_id}"
         await temporal.start_workflow(
             IndexRepositoryWorkflow.run,
             IndexRepoInput(
+                github_repo_id=repo.github_repo_id,
                 repo_url=repo.repo_url,
-                repo_id=repo.repo_id,
+                full_name=repo.full_name.strip().lower(),
                 branches=repo.branches,
                 github_token=repo.github_token,
             ),
@@ -131,21 +117,24 @@ async def github_webhook(request: Request):
         return {"status": "ignored", "reason": "not a branch push"}
 
     branch = ref.removeprefix("refs/heads/")
-    repo_full_name = payload.get("repository", {}).get("full_name", "")
+    repo_data = payload.get("repository", {})
+    github_repo_id = repo_data.get("id")
+    full_name = repo_data.get("full_name", "").lower()
     before_commit = payload.get("before", "")
     after_commit = payload.get("after", "")
 
-    if not repo_full_name or not before_commit or not after_commit:
+    if not github_repo_id or not full_name or not before_commit or not after_commit:
         raise HTTPException(status_code=400, detail="Missing required webhook fields")
 
     # Start incremental indexing workflow
     temporal: Client = app.state.temporal_client
-    workflow_id = f"incremental-{repo_full_name.replace('/', '-')}-{branch}-{after_commit[:8]}"
+    workflow_id = f"incremental-{github_repo_id}-{branch}-{after_commit[:8]}"
 
     await temporal.start_workflow(
         IncrementalIndexWorkflow.run,
         IncrementalIndexInput(
-            repo_id=repo_full_name,
+            github_repo_id=github_repo_id,
+            full_name=full_name,
             branch=branch,
             before_commit=before_commit,
             after_commit=after_commit,
@@ -158,8 +147,8 @@ async def github_webhook(request: Request):
     return {"status": "accepted", "workflow_id": workflow_id}
 
 
-@app.get("/status/{repo_id:path}", response_model=IndexStatusResponse)
-async def get_status(repo_id: str):
+@app.get("/status/{github_repo_id:int}", response_model=IndexStatusResponse)
+async def get_status(github_repo_id: int):
     """Return indexing status for all branches of a repository."""
     from db import DatabaseManager, IndexedBranch, Repository
 
@@ -169,9 +158,14 @@ async def get_status(repo_id: str):
 
     try:
         with db.connection_context():
-            repo = Repository.get_or_none(Repository.repo_id == repo_id)
+            repo = Repository.get_or_none(
+                Repository.github_repo_id == github_repo_id
+            )
             if repo is None:
-                raise HTTPException(status_code=404, detail=f"Repository {repo_id} not found")
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Repository {github_repo_id} not found",
+                )
 
             branches_query = IndexedBranch.select().where(
                 IndexedBranch.repository == repo
@@ -186,7 +180,9 @@ async def get_status(repo_id: str):
                 for ib in branches_query
             ]
 
-            return IndexStatusResponse(repo_id=repo_id, branches=branch_statuses)
+            return IndexStatusResponse(
+                github_repo_id=github_repo_id, branches=branch_statuses
+            )
     finally:
         db.close()
 

@@ -46,27 +46,43 @@ class IndexingPipeline:
 
     def index_repository(
         self,
+        github_repo_id: int,
         repo_url: str,
-        repo_id: str,
+        full_name: str,
         branches: list[str],
         github_token: str | None = None,
     ) -> None:
         """Full indexing pipeline for a repository."""
         with self.db_manager.connection_context():
-            repo = Repository.get_or_none(Repository.repo_id == repo_id)
+            repo = Repository.get_or_none(
+                Repository.github_repo_id == github_repo_id
+            )
             if repo is None:
-                # Parse owner/repo from repo_id
-                parts = repo_id.split("/")
+                parts = full_name.split("/")
                 owner = parts[0] if len(parts) > 1 else ""
                 name = parts[-1]
                 repo = Repository.create(
-                    repo_id=repo_id,
+                    github_repo_id=github_repo_id,
+                    full_name=full_name,
                     repo_url=repo_url,
                     display_name=name,
                     owner_login=owner,
                     owner_type="User",
                 )
-                logger.info("Created repository record: %s", repo_id)
+                logger.info("Created repository record: %s", full_name)
+            else:
+                # Update mutable fields in case of a rename
+                if repo.full_name != full_name:
+                    logger.info(
+                        "Repository renamed: %s -> %s", repo.full_name, full_name
+                    )
+                    repo.full_name = full_name
+                    parts = full_name.split("/")
+                    repo.owner_login = parts[0] if len(parts) > 1 else ""
+                    repo.display_name = parts[-1]
+                if repo.repo_url != repo_url:
+                    repo.repo_url = repo_url
+                repo.save()
 
             for branch in branches:
                 self._index_branch(repo, branch, repo_url, github_token)
@@ -97,7 +113,9 @@ class IndexingPipeline:
                 base_dir=self.settings.clone_base_dir,
                 github_token=github_token,
             )
-            repo_path = git.clone_or_fetch(repo_url, repo.repo_id, branch)
+            repo_path = git.clone_or_fetch(
+                repo_url, str(repo.github_repo_id), branch
+            )
             latest_commit = git.get_latest_commit(repo_path, branch)
 
             # Get all code files
@@ -105,7 +123,7 @@ class IndexingPipeline:
             logger.info(
                 "Found %d files to index for %s/%s",
                 len(files),
-                repo.repo_id,
+                repo.full_name,
                 branch,
             )
 
@@ -124,7 +142,7 @@ class IndexingPipeline:
 
             logger.info(
                 "Successfully indexed %s/%s at %s",
-                repo.repo_id,
+                repo.full_name,
                 branch,
                 latest_commit,
             )
@@ -133,7 +151,7 @@ class IndexingPipeline:
             indexed_branch.status = "failed"
             indexed_branch.updated_at = datetime.now(timezone.utc)
             indexed_branch.save()
-            logger.exception("Failed to index %s/%s", repo.repo_id, branch)
+            logger.exception("Failed to index %s/%s", repo.full_name, branch)
             raise
 
     def _delete_existing_chunks(self, repository_id: str, branch: str) -> None:
@@ -242,17 +260,34 @@ class IndexingPipeline:
 
     def incremental_index(
         self,
-        repo_id: str,
+        github_repo_id: int,
+        full_name: str,
         branch: str,
         before_commit: str,
         after_commit: str,
     ) -> None:
         """Incremental indexing for push events - only re-index changed files."""
         with self.db_manager.connection_context():
-            repo = Repository.get_or_none(Repository.repo_id == repo_id)
+            repo = Repository.get_or_none(
+                Repository.github_repo_id == github_repo_id
+            )
             if repo is None:
-                logger.warning("Repository %s not found, skipping incremental index", repo_id)
+                logger.warning(
+                    "Repository %s not found, skipping incremental index",
+                    full_name,
+                )
                 return
+
+            # Update mutable fields in case of a rename
+            if repo.full_name != full_name:
+                logger.info(
+                    "Repository renamed: %s -> %s", repo.full_name, full_name
+                )
+                repo.full_name = full_name
+                parts = full_name.split("/")
+                repo.owner_login = parts[0] if len(parts) > 1 else ""
+                repo.display_name = parts[-1]
+                repo.save()
 
             indexed_branch = IndexedBranch.get_or_none(
                 (IndexedBranch.repository == repo)
@@ -261,7 +296,7 @@ class IndexingPipeline:
             if indexed_branch is None:
                 logger.warning(
                     "Branch %s/%s not indexed, skipping incremental index",
-                    repo_id,
+                    full_name,
                     branch,
                 )
                 return
@@ -277,11 +312,19 @@ class IndexingPipeline:
                     base_dir=self.settings.clone_base_dir,
                     github_token=github_token,
                 )
-                repo_path = git.clone_or_fetch(repo.repo_url, repo_id, branch)
-                changed_files = git.get_changed_files(repo_path, before_commit, after_commit)
+                repo_path = git.clone_or_fetch(
+                    repo.repo_url, str(repo.github_repo_id), branch
+                )
+                changed_files = git.get_changed_files(
+                    repo_path, before_commit, after_commit
+                )
 
                 if not changed_files:
-                    logger.info("No files changed between %s and %s", before_commit, after_commit)
+                    logger.info(
+                        "No files changed between %s and %s",
+                        before_commit,
+                        after_commit,
+                    )
                     indexed_branch.status = "indexed"
                     indexed_branch.last_indexed_commit = after_commit
                     indexed_branch.updated_at = datetime.now(timezone.utc)
@@ -291,7 +334,7 @@ class IndexingPipeline:
                 logger.info(
                     "Re-indexing %d changed files for %s/%s",
                     len(changed_files),
-                    repo_id,
+                    full_name,
                     branch,
                 )
 
@@ -327,6 +370,6 @@ class IndexingPipeline:
                 indexed_branch.updated_at = datetime.now(timezone.utc)
                 indexed_branch.save()
                 logger.exception(
-                    "Failed incremental index for %s/%s", repo_id, branch
+                    "Failed incremental index for %s/%s", full_name, branch
                 )
                 raise

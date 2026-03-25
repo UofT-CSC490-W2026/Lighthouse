@@ -74,8 +74,8 @@ class Repository(BaseModel):
     """Store globally indexed repositories independently from local user records."""
 
     id = CharField(primary_key=True, default=_uuid_text)
-    github_repo_id = BigIntegerField(null=True, unique=True)
-    repo_id = CharField(unique=True)
+    github_repo_id = BigIntegerField(unique=True)
+    full_name = CharField(unique=True)
     repo_url = CharField()
     display_name = CharField()
     owner_login = CharField()

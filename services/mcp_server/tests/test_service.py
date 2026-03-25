@@ -25,14 +25,47 @@ def test_health_is_public_and_current_user_requires_auth(app_factory) -> None:
         assert current_user.json() == {"detail": "Missing Authorization header"}
 
 
-def test_get_code_context_http_returns_placeholder(
+def test_get_code_context_http_returns_repo_not_found_when_unindexed(
+    app_factory,
+    install_fake_auth,
+    auth_headers,
+) -> None:
+    """Return a 404 when the repository has not been indexed yet."""
+    app = install_fake_auth(app_factory(with_db=True))
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/search/code-context",
+            headers=auth_headers,
+            json={
+                "repository_name": "openai/openai-python",
+                "task_description": "Need context for a parser bug fix",
+            },
+        )
+
+    assert response.status_code == 404
+    assert "not found" in response.json()["detail"].lower()
+
+
+def test_get_code_context_http_returns_error_when_search_unavailable(
     app_factory,
     install_fake_auth,
     auth_headers,
     authenticated_user,
 ) -> None:
-    """Ensure the HTTP search entrypoint returns the current placeholder envelope."""
-    app = install_fake_auth(app_factory())
+    """Return an error envelope when search service is unreachable but repo exists."""
+    app = install_fake_auth(app_factory(with_db=True))
+
+    with app.database.connection_context():
+        Repository.create(
+            github_repo_id=1001,
+            full_name="openai/openai-python",
+            repo_url="https://github.com/openai/openai-python",
+            display_name="openai/openai-python",
+            owner_login="openai",
+            owner_type="Organization",
+            is_private=False,
+        )
 
     with TestClient(app) as client:
         response = client.post(
@@ -52,27 +85,11 @@ def test_get_code_context_http_returns_placeholder(
         )
 
     assert response.status_code == 200
-    assert response.json() == {
-        "status": "not_implemented",
-        "message": (
-            "Code context retrieval is not implemented yet. "
-            "This placeholder captures the request envelope for future search work."
-        ),
-        "repository_name": "openai/openai-python",
-        "branch": "main",
-        "latest_commit": "abc123",
-        "task_description": "Need context for a parser bug fix",
-        "requested_by_user_id": authenticated_user.id,
-        "highlight": {
-            "file_path": "src/parser.py",
-            "start_line": 10,
-            "end_line": 20,
-            "selected_text": "def parse(): ...",
-            "surrounding_context": "Parser is failing on empty input.",
-        },
-        "snippets": [],
-        "follow_up": [],
-    }
+    body = response.json()
+    assert body["status"] == "error"
+    assert body["repository_name"] == "openai/openai-python"
+    assert body["task_description"] == "Need context for a parser bug fix"
+    assert body["requested_by_user_id"] == authenticated_user.id
 
 
 def test_get_code_context_rejects_invalid_line_ranges(
@@ -127,14 +144,15 @@ def test_user_repo_http_lifecycle(
             },
         )
         assert created.status_code == 200
-        assert created.json()["repo_id"] == "openai/openai-python"
+        assert created.json()["full_name"] == "openai/openai-python"
 
         listed = client.get("/v1/user/repos", headers=auth_headers)
         assert listed.status_code == 200
         assert listed.json() == [
             {
                 "id": created.json()["id"],
-                "repo_id": "openai/openai-python",
+                "github_repo_id": created.json()["github_repo_id"],
+                "full_name": "openai/openai-python",
                 "repo_url": "https://github.com/openai/openai-python",
                 "display_name": "openai/openai-python",
                 "added_at": created.json()["added_at"],
@@ -147,7 +165,10 @@ def test_user_repo_http_lifecycle(
             headers=auth_headers,
         )
         assert removed.status_code == 200
-        assert removed.json() == {"repo_id": "openai/openai-python", "hidden": True}
+        assert removed.json() == {
+            "full_name": "openai/openai-python",
+            "hidden": True,
+        }
 
         listed_after_delete = client.get("/v1/user/repos", headers=auth_headers)
         assert listed_after_delete.status_code == 200
@@ -162,18 +183,18 @@ def test_user_repo_http_lifecycle(
         )
         assert restored.status_code == 200
         assert restored.json()["id"] == created.json()["id"]
-        assert restored.json()["repo_id"] == "openai/openai-python"
+        assert restored.json()["full_name"] == "openai/openai-python"
 
         listed_after_restore = client.get("/v1/user/repos", headers=auth_headers)
         assert listed_after_restore.status_code == 200
         assert len(listed_after_restore.json()) == 1
-        assert listed_after_restore.json()[0]["repo_id"] == "openai/openai-python"
+        assert listed_after_restore.json()[0]["full_name"] == "openai/openai-python"
 
     with app.database.connection_context():
         repos = list(Repository.select())
         assert len(repos) == 1
         repo = repos[0]
-        assert repo.repo_id == "openai/openai-python"
+        assert repo.full_name == "openai/openai-python"
         hidden_repos = list(UserHiddenRepository.select())
         assert hidden_repos == []
 
@@ -218,7 +239,10 @@ def test_hiding_a_public_repo_only_hides_it_for_the_requesting_user(
             headers=auth_headers,
         )
         assert removed.status_code == 200
-        assert removed.json() == {"repo_id": "openai/openai-python", "hidden": True}
+        assert removed.json() == {
+            "full_name": "openai/openai-python",
+            "hidden": True,
+        }
 
     hidden_for_user_one = app.engine.user._list_user_repos_sync(
         authenticated_user.id, set()
@@ -226,7 +250,9 @@ def test_hiding_a_public_repo_only_hides_it_for_the_requesting_user(
     visible_for_user_two = app.engine.user._list_user_repos_sync("user-2", set())
 
     assert hidden_for_user_one == []
-    assert [repo.repo_id for repo in visible_for_user_two] == ["openai/openai-python"]
+    assert [repo.full_name for repo in visible_for_user_two] == [
+        "openai/openai-python"
+    ]
 
     with app.database.connection_context():
         assert Repository.select().count() == 1
@@ -243,15 +269,15 @@ def test_list_user_repos_filters_private_visibility(
     """List all public repositories and only the private repositories the user can access."""
     app = install_fake_auth(app_factory(with_db=True))
 
-    async def visible_private_repo_ids(user_id: str) -> set[str]:
-        return {"acme/private-visible"}
+    async def visible_private_repo_ids(user_id: str) -> set[int]:
+        return {1002}
 
     app.authenticator.list_visible_private_repository_ids = visible_private_repo_ids
 
     with app.database.connection_context():
         Repository.create(
             github_repo_id=1001,
-            repo_id="openai/openai-python",
+            full_name="openai/openai-python",
             repo_url="https://github.com/openai/openai-python",
             display_name="openai/openai-python",
             owner_login="openai",
@@ -260,7 +286,7 @@ def test_list_user_repos_filters_private_visibility(
         )
         Repository.create(
             github_repo_id=1002,
-            repo_id="acme/private-visible",
+            full_name="acme/private-visible",
             repo_url="https://github.com/acme/private-visible",
             display_name="acme/private-visible",
             owner_login="acme",
@@ -269,7 +295,7 @@ def test_list_user_repos_filters_private_visibility(
         )
         Repository.create(
             github_repo_id=1003,
-            repo_id="acme/private-hidden",
+            full_name="acme/private-hidden",
             repo_url="https://github.com/acme/private-hidden",
             display_name="acme/private-hidden",
             owner_login="acme",
@@ -281,7 +307,7 @@ def test_list_user_repos_filters_private_visibility(
         response = client.get("/v1/user/repos", headers=auth_headers)
 
     assert response.status_code == 200
-    assert [repo["repo_id"] for repo in response.json()] == [
+    assert [repo["full_name"] for repo in response.json()] == [
         "acme/private-visible",
         "openai/openai-python",
     ]
@@ -350,7 +376,19 @@ def test_get_code_context_mcp_tool_uses_injected_auth(
     install_fake_auth,
 ) -> None:
     """Verify the MCP wrapper injects auth before invoking the search tool."""
-    app = install_fake_auth(app_factory())
+    app = install_fake_auth(app_factory(with_db=True))
+
+    with app.database.connection_context():
+        Repository.create(
+            github_repo_id=1001,
+            full_name="openai/openai-python",
+            repo_url="https://github.com/openai/openai-python",
+            display_name="openai/openai-python",
+            owner_login="openai",
+            owner_type="Organization",
+            is_private=False,
+        )
+
     handler = MCPToolHandler(app)
     tool = handler._make_tool_fn(
         collect_toolcalls(*app.engine.registries())["get_code_context"]
@@ -374,7 +412,7 @@ def test_get_code_context_mcp_tool_uses_injected_auth(
         )
     )
 
-    assert result["status"] == "not_implemented"
+    assert result["status"] == "error"
     assert result["requested_by_user_id"] == "user-1"
     assert result["highlight"]["file_path"] == "src/parser.py"
 

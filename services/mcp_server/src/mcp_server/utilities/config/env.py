@@ -92,6 +92,13 @@ class Settings(BaseSettings):
             "search_service_url",
         ),
     )
+    ingestion_service_url: str = Field(
+        default="http://localhost:8001",
+        validation_alias=AliasChoices(
+            "INGESTION_SERVICE_URL",
+            "ingestion_service_url",
+        ),
+    )
 
     @classmethod
     def settings_customise_sources(

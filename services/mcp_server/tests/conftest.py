@@ -156,16 +156,16 @@ def install_fake_auth(
             repo_id: str, *, user_id: str | None = None
         ):
             """Return deterministic repository metadata without calling GitHub."""
-            normalized_repo_id = repo_id.lower()
-            owner_login, _, repo_name = normalized_repo_id.partition("/")
+            normalized_full_name = repo_id.lower()
+            owner_login, _, repo_name = normalized_full_name.partition("/")
             github_repo_id = int(
-                hashlib.sha1(normalized_repo_id.encode()).hexdigest()[:12], 16
+                hashlib.sha1(normalized_full_name.encode()).hexdigest()[:12], 16
             )
             return GitHubRepository(
                 github_repo_id=github_repo_id,
-                repo_id=normalized_repo_id,
-                repo_url=f"https://github.com/{normalized_repo_id}",
-                display_name=normalized_repo_id,
+                full_name=normalized_full_name,
+                repo_url=f"https://github.com/{normalized_full_name}",
+                display_name=normalized_full_name,
                 owner_login=owner_login,
                 owner_type="User",
                 is_private=False,
@@ -175,11 +175,18 @@ def install_fake_auth(
             """Return no visible private repositories unless a test overrides it."""
             return set()
 
+        def fake_get_github_access_token_sync(user_id: str) -> str | None:
+            """Return no stored GitHub token in tests."""
+            return None
+
         app.authenticator.require_http_request = fake_http_auth
         app.authenticator.require_mcp_context = fake_mcp_auth
         app.authenticator.fetch_github_repository = fake_fetch_github_repository
         app.authenticator.list_visible_private_repository_ids = (
             fake_list_visible_private_repository_ids
+        )
+        app.authenticator._get_github_access_token_sync = (
+            fake_get_github_access_token_sync
         )
         return app
 

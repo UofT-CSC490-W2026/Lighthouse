@@ -5,8 +5,10 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Annotated
 from urllib.parse import urlparse
 
+import httpx
 from fastapi import Body
 from pydantic import BaseModel
+from shared.schemas.ingestion import IndexAcceptedResponse, IndexRequest, RepoIndexRequest
 
 from db import Repository, UserHiddenRepository
 from ..utilities import (
@@ -93,19 +95,23 @@ class UserEngine:
         repo_url: Annotated[str, Body(..., embed=True)],
     ) -> "UserRepoResponse":
         """Validate and create or unhide an indexed repository for the current user."""
-        normalized_repo_id = self._normalize_repo_id(repo_url)
+        normalized_full_name = self._normalize_full_name(repo_url)
         github_repo = await self.engine.app.authenticator.fetch_github_repository(
-            normalized_repo_id,
+            normalized_full_name,
             user_id=auth.id,
         )
         repo = await asyncio.to_thread(
             self._upsert_user_repo_sync, github_repo, auth.id
         )
+
+        # Fire-and-forget ingestion trigger
+        await self._trigger_ingestion(github_repo, auth.id)
+
         return self._to_user_repo_response(repo)
 
     @httproute(
         "DELETE",
-        "/v1/user/repos/{repo_id:path}",
+        "/v1/user/repos/{full_name:path}",
         name="remove_user_repo",
         description="Hide a repository from the current user without deleting it globally.",
     )
@@ -116,16 +122,67 @@ class UserEngine:
     async def remove_user_repo(
         self,
         auth: AuthenticatedUser,
-        repo_id: str,
+        full_name: str,
     ) -> "HideUserRepoResponse":
         """Hide an indexed repository for the current user."""
-        normalized_repo_id = self._normalize_repo_id(repo_id)
+        normalized_full_name = self._normalize_full_name(full_name)
         hidden = await asyncio.to_thread(
             self._hide_user_repo_sync,
             auth.id,
-            normalized_repo_id,
+            normalized_full_name,
         )
-        return HideUserRepoResponse(repo_id=normalized_repo_id, hidden=hidden)
+        return HideUserRepoResponse(full_name=normalized_full_name, hidden=hidden)
+
+    async def _trigger_ingestion(
+        self,
+        github_repo: GitHubRepository,
+        user_id: str,
+    ) -> None:
+        """Call the ingestion service to index the repository. Best-effort."""
+        ingestion_url = self.engine.app.settings.ingestion_service_url
+
+        github_token = await asyncio.to_thread(
+            self.engine.app.authenticator._get_github_access_token_sync, user_id
+        )
+
+        index_request = IndexRequest(
+            repositories=[
+                RepoIndexRequest(
+                    github_repo_id=github_repo.github_repo_id,
+                    repo_url=github_repo.repo_url,
+                    full_name=github_repo.full_name,
+                    branches=[github_repo.default_branch],
+                    github_token=github_token,
+                )
+            ]
+        )
+
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.post(
+                    f"{ingestion_url}/index",
+                    json=index_request.model_dump(exclude_none=True),
+                )
+                resp.raise_for_status()
+                result = IndexAcceptedResponse.model_validate(resp.json())
+                self.log.info(
+                    "Ingestion triggered for %s, workflow_ids=%s",
+                    github_repo.full_name,
+                    result.workflow_ids,
+                )
+        except httpx.HTTPStatusError as exc:
+            self.log.warning(
+                "Ingestion service returned %s for %s: %s",
+                exc.response.status_code,
+                github_repo.full_name,
+                exc.response.text,
+            )
+        except httpx.RequestError as exc:
+            self.log.warning(
+                "Failed to reach ingestion service for %s: %s",
+                github_repo.full_name,
+                exc,
+            )
 
     def _upsert_user_repo_sync(
         self,
@@ -135,14 +192,13 @@ class UserEngine:
         """Insert or update a globally indexed repository row and clear any user hide."""
         with self.engine.app.database.connection_context():
             repo = Repository.get_or_none(
-                (Repository.github_repo_id == github_repo.github_repo_id)
-                | (Repository.repo_id == github_repo.repo_id)
+                Repository.github_repo_id == github_repo.github_repo_id
             )
             created = repo is None
             if repo is None:
                 repo = Repository(
                     github_repo_id=github_repo.github_repo_id,
-                    repo_id=github_repo.repo_id,
+                    full_name=github_repo.full_name,
                     repo_url=github_repo.repo_url,
                     display_name=github_repo.display_name,
                     owner_login=github_repo.owner_login,
@@ -151,7 +207,7 @@ class UserEngine:
                 )
             else:
                 repo.github_repo_id = github_repo.github_repo_id
-                repo.repo_id = github_repo.repo_id
+                repo.full_name = github_repo.full_name
                 repo.repo_url = github_repo.repo_url
                 repo.display_name = github_repo.display_name
                 repo.owner_login = github_repo.owner_login
@@ -172,14 +228,17 @@ class UserEngine:
     def _list_user_repos_sync(
         self,
         user_id: str,
-        visible_private_repo_ids: set[str],
+        visible_private_repo_ids: set[int],
     ) -> list[Repository]:
         """Load visible repositories in newest-first order."""
         with self.engine.app.database.connection_context():
             visibility_clause = ~Repository.is_private
             if visible_private_repo_ids:
-                visibility_clause = visibility_clause | Repository.repo_id.in_(
-                    sorted(visible_private_repo_ids)
+                visibility_clause = (
+                    visibility_clause
+                    | Repository.github_repo_id.in_(
+                        sorted(visible_private_repo_ids)
+                    )
                 )
 
             hidden_repository_ids = UserHiddenRepository.select(
@@ -194,10 +253,10 @@ class UserEngine:
             )
             return list(query)
 
-    def _hide_user_repo_sync(self, user_id: str, repo_id: str) -> bool:
+    def _hide_user_repo_sync(self, user_id: str, full_name: str) -> bool:
         """Hide an existing repository for a single user without deleting it globally."""
         with self.engine.app.database.connection_context():
-            repo = Repository.get_or_none(Repository.repo_id == repo_id)
+            repo = Repository.get_or_none(Repository.full_name == full_name)
             if repo is None:
                 return False
 
@@ -211,7 +270,7 @@ class UserEngine:
             UserHiddenRepository.create(user=user_id, repository=repo)
             return True
 
-    def _normalize_repo_id(self, repo: str) -> str:
+    def _normalize_full_name(self, repo: str) -> str:
         """Normalize a GitHub repository reference into `owner/repo` form."""
         candidate = repo.strip()
         if not candidate:
@@ -248,7 +307,8 @@ class UserEngine:
         """Convert a repository model into the API response shape."""
         return UserRepoResponse(
             id=repo.id,
-            repo_id=repo.repo_id,
+            github_repo_id=repo.github_repo_id,
+            full_name=repo.full_name,
             repo_url=repo.repo_url,
             display_name=repo.display_name,
             added_at=repo.added_at,
@@ -271,7 +331,8 @@ class UserRepoResponse(BaseModel):
     """Serialize an indexed repository visible to the authenticated user."""
 
     id: str
-    repo_id: str
+    github_repo_id: int
+    full_name: str
     repo_url: str
     display_name: str
     added_at: datetime
@@ -281,7 +342,7 @@ class UserRepoResponse(BaseModel):
 class HideUserRepoResponse(BaseModel):
     """Report whether a repository hide operation was applied."""
 
-    repo_id: str
+    full_name: str
     hidden: bool
 
 
