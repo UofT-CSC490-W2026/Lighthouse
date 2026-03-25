@@ -85,6 +85,17 @@ services:
       retries: 3
       start_period: 90s
 
+  # Attu — Milvus admin UI (https://github.com/zilliztech/attu). Open http://localhost:8088
+  attu:
+    image: zilliz/attu:v2.6
+    ports:
+      - "8088:3000"
+    environment:
+      MILVUS_URL: milvus:19530
+    depends_on:
+      milvus:
+        condition: service_healthy
+
   temporal:
     image: temporalio/temporal:latest
     ports:
