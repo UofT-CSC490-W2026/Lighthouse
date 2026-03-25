@@ -2,7 +2,9 @@ name: lighthouse
 
 services:
   postgres:
-    image: postgres:17-alpine
+    build:
+      context: .
+      dockerfile: docker/postgres/Dockerfile
     environment:
       POSTGRES_USER: lighthouse
       POSTGRES_PASSWORD: lighthouse
