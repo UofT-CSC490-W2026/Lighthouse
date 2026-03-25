@@ -16,12 +16,8 @@ from shared.schemas.ingestion import (
 from temporalio.client import Client
 
 from .utilities import IngestionSettings
-from .temporal import (
-    IncrementalIndexInput,
-    IncrementalIndexWorkflow,
-    IndexRepoInput,
-    IndexRepositoryWorkflow,
-)
+from .temporal import IncrementalIndexWorkflow, IndexRepositoryWorkflow
+from .temporal.activities import IncrementalIndexInput, IndexRepoInput
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
