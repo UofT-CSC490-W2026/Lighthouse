@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 import uuid
 
 from peewee import (
+    BlobField,
     CharField,
     DateTimeField,
     ForeignKeyField,
@@ -70,3 +71,25 @@ class Chunk(BaseModel):
 
     class Meta:
         table_name = "chunks"
+
+
+class StagingChunk(BaseModel):
+    """Temporary staging table for chunks between Temporal activities."""
+
+    id = CharField(primary_key=True, default=_uuid_text)
+    batch_id = CharField(index=True)
+    seq_index = IntegerField()
+    repository_id = CharField()
+    branch = CharField()
+    file_path = CharField()
+    start_line = IntegerField()
+    end_line = IntegerField()
+    content = TextField()
+    language = CharField(null=True)
+    chunk_hash = CharField()
+    embedding = BlobField(null=True)
+    created_at = DateTimeField(default=_utcnow)
+
+    class Meta:
+        table_name = "staging_chunks"
+        indexes = ((("batch_id", "seq_index"), False),)

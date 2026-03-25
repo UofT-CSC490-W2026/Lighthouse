@@ -1,5 +1,11 @@
 from .config import IngestionSettings
 from .git_ops import GitOperations
-from .pipeline import IndexingPipeline
+from .services import BranchService, ChunkService, RepositoryService
 
-__all__ = ["IngestionSettings", "GitOperations", "IndexingPipeline"]
+__all__ = [
+    "BranchService",
+    "ChunkService",
+    "IngestionSettings",
+    "GitOperations",
+    "RepositoryService",
+]

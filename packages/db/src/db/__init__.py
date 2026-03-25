@@ -1,5 +1,5 @@
 from .database import BaseModel, DatabaseManager
-from .models import Chunk, IndexedBranch, Repository, Session, User, UserHiddenRepository
+from .models import Chunk, IndexedBranch, Repository, Session, StagingChunk, User, UserHiddenRepository
 
 __all__ = [
     "BaseModel",
@@ -8,6 +8,7 @@ __all__ = [
     "IndexedBranch",
     "Repository",
     "Session",
+    "StagingChunk",
     "User",
     "UserHiddenRepository",
 ]

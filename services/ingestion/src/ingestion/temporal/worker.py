@@ -13,8 +13,23 @@ from temporalio.worker import Worker
 
 from ..utilities import IngestionSettings
 
-from .activities import incremental_index_activity, index_repository_activity
-from .workflows import IncrementalIndexWorkflow, IndexRepositoryWorkflow
+from .activities import (
+    chunk_files,
+    cleanup_staging,
+    delete_chunks_for_files,
+    delete_existing_chunks,
+    embed_chunk_batch,
+    ensure_repository_record,
+    get_changed_files,
+    git_clone_or_fetch,
+    store_chunks,
+    update_branch_status,
+)
+from .workflows import (
+    IncrementalIndexWorkflow,
+    IndexBranchWorkflow,
+    IndexRepositoryWorkflow,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -33,8 +48,23 @@ async def main() -> None:
     worker = Worker(
         client,
         task_queue=settings.temporal_task_queue,
-        workflows=[IndexRepositoryWorkflow, IncrementalIndexWorkflow],
-        activities=[index_repository_activity, incremental_index_activity],
+        workflows=[
+            IndexRepositoryWorkflow,
+            IndexBranchWorkflow,
+            IncrementalIndexWorkflow,
+        ],
+        activities=[
+            ensure_repository_record,
+            update_branch_status,
+            git_clone_or_fetch,
+            chunk_files,
+            get_changed_files,
+            delete_existing_chunks,
+            delete_chunks_for_files,
+            embed_chunk_batch,
+            store_chunks,
+            cleanup_staging,
+        ],
     )
     await worker.run()
 

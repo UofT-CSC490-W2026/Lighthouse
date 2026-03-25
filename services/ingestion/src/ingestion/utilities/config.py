@@ -16,6 +16,8 @@ class IngestionSettings(BaseSettings):
     clone_base_dir: str = "/tmp/lighthouse_repos"
     temporal_address: str = "localhost:7233"
     temporal_task_queue: str = "ingestion"
+    chunker_strategy: str = "sliding_window"
+    embedding_strategy: str = "openai"
 
     model_config = {"env_prefix": "", "env_file": ".env", "extra": "ignore"}
 

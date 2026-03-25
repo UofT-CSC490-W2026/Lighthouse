@@ -1,69 +1,10 @@
 from __future__ import annotations
 
 import hashlib
-from pathlib import Path
 
 from shared.config import CHUNK_MAX_LINES, CHUNK_OVERLAP_LINES
 
 from .base_chunker import ChunkResult, Chunker
-
-EXTENSION_TO_LANGUAGE: dict[str, str] = {
-    ".py": "python",
-    ".js": "javascript",
-    ".ts": "typescript",
-    ".tsx": "typescript",
-    ".jsx": "javascript",
-    ".java": "java",
-    ".go": "go",
-    ".rs": "rust",
-    ".c": "c",
-    ".cpp": "cpp",
-    ".h": "c",
-    ".hpp": "cpp",
-    ".rb": "ruby",
-    ".php": "php",
-    ".cs": "csharp",
-    ".swift": "swift",
-    ".kt": "kotlin",
-    ".scala": "scala",
-    ".sh": "shell",
-    ".bash": "shell",
-    ".zsh": "shell",
-    ".sql": "sql",
-    ".html": "html",
-    ".css": "css",
-    ".scss": "scss",
-    ".yaml": "yaml",
-    ".yml": "yaml",
-    ".json": "json",
-    ".toml": "toml",
-    ".xml": "xml",
-    ".md": "markdown",
-    ".r": "r",
-    ".lua": "lua",
-    ".dart": "dart",
-    ".ex": "elixir",
-    ".exs": "elixir",
-    ".erl": "erlang",
-    ".hs": "haskell",
-    ".ml": "ocaml",
-    ".clj": "clojure",
-    ".vim": "vim",
-    ".proto": "protobuf",
-    ".tf": "terraform",
-    ".dockerfile": "dockerfile",
-}
-
-
-def detect_language(file_path: str) -> str | None:
-    """Detect programming language from file extension."""
-    name = Path(file_path).name.lower()
-    if name == "dockerfile":
-        return "dockerfile"
-    if name == "makefile":
-        return "makefile"
-    suffix = Path(file_path).suffix.lower()
-    return EXTENSION_TO_LANGUAGE.get(suffix)
 
 
 def compute_chunk_hash(content: str) -> str:
@@ -88,7 +29,6 @@ class SlidingWindowChunker(Chunker):
         if not content.strip():
             return []
 
-        lang = language or detect_language(file_path)
         lines = content.splitlines(keepends=True)
         total = len(lines)
 
@@ -103,7 +43,7 @@ class SlidingWindowChunker(Chunker):
                     content=chunk_content,
                     start_line=1,
                     end_line=total,
-                    language=lang,
+                    language=language,
                     chunk_hash=compute_chunk_hash(chunk_content),
                 )
             ]
@@ -122,7 +62,7 @@ class SlidingWindowChunker(Chunker):
                     content=chunk_content,
                     start_line=start + 1,  # 1-indexed
                     end_line=end,
-                    language=lang,
+                    language=language,
                     chunk_hash=compute_chunk_hash(chunk_content),
                 )
             )
