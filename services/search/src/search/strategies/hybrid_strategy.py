@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import asdict
 
 from db import CodeChunk, DatabaseManager, Repository
 from embedding import EmbeddingProvider
@@ -46,11 +47,14 @@ class HybridSearchStrategy(SearchStrategy):
         vector_results: list[dict] = []
         try:
             query_embedding = self.embedder.embed_single(request.query)
-            vector_results = self.milvus.search(
-                query_embedding=query_embedding,
-                top_k=request.top_k * 2,
-                filters=filters if filters else None,
-            )
+            vector_results = [
+                asdict(r)
+                for r in self.milvus.search(
+                    query_embedding=query_embedding,
+                    top_k=request.top_k * 2,
+                    filters=filters if filters else None,
+                )
+            ]
         except Exception:
             logger.exception("Vector search failed, falling back to keyword-only")
 

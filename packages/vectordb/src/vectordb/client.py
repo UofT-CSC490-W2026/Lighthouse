@@ -1,6 +1,17 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from pymilvus import MilvusClient as _MilvusClient, DataType
+
+
+@dataclass
+class MilvusSearchResult:
+    chunk_id: str
+    score: float
+    repository_id: str
+    file_path: str
+    branch: str
 
 
 class MilvusClient:
@@ -9,7 +20,7 @@ class MilvusClient:
     def __init__(
         self,
         uri: str = "http://localhost:19530",
-        collection_name: str = "code_embeddings",
+        collection_name: str = "embeddings",
     ) -> None:
         self.uri = uri
         self.collection_name = collection_name
@@ -21,13 +32,16 @@ class MilvusClient:
             return
 
         schema = self._client.create_schema(auto_id=False, enable_dynamic_field=False)
+
+        # Define schema fields here.
         schema.add_field("id", DataType.VARCHAR, is_primary=True, max_length=64)
         schema.add_field("chunk_id", DataType.VARCHAR, max_length=64)
         schema.add_field("embedding", DataType.FLOAT_VECTOR, dim=dimension)
         schema.add_field("repository_id", DataType.VARCHAR, max_length=64)
         schema.add_field("file_path", DataType.VARCHAR, max_length=512)
         schema.add_field("branch", DataType.VARCHAR, max_length=128)
-
+        
+        # Define indices here.
         index_params = self._client.prepare_index_params()
         index_params.add_index(
             field_name="embedding",
@@ -56,17 +70,8 @@ class MilvusClient:
         query_embedding: list[float],
         top_k: int = 10,
         filters: dict | None = None,
-    ) -> list[dict]:
-        """Vector similarity search with optional filters.
-
-        Args:
-            query_embedding: The query vector.
-            top_k: Number of results to return.
-            filters: Optional dict with keys like repository_id, branch to filter on.
-
-        Returns:
-            List of dicts with chunk_id, score, repository_id, file_path, branch.
-        """
+    ) -> list[MilvusSearchResult]:
+        """Vector similarity search with optional filters."""
         filter_expr = self._build_filter_expr(filters)
 
         results = self._client.search(
@@ -82,13 +87,13 @@ class MilvusClient:
         for result in results:
             for hit in result:
                 hits.append(
-                    {
-                        "chunk_id": hit["entity"]["chunk_id"],
-                        "score": hit["distance"],
-                        "repository_id": hit["entity"]["repository_id"],
-                        "file_path": hit["entity"]["file_path"],
-                        "branch": hit["entity"]["branch"],
-                    }
+                    MilvusSearchResult(
+                        chunk_id=hit["entity"]["chunk_id"],
+                        score=hit["distance"],
+                        repository_id=hit["entity"]["repository_id"],
+                        file_path=hit["entity"]["file_path"],
+                        branch=hit["entity"]["branch"],
+                    )
                 )
         return hits
 

@@ -1,3 +1,3 @@
-from .client import MilvusClient
+from .client import MilvusClient, MilvusSearchResult
 
-__all__ = ["MilvusClient"]
+__all__ = ["MilvusClient", "MilvusSearchResult"]
