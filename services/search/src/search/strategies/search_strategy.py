@@ -1,9 +1,13 @@
 from abc import ABC, abstractmethod
+from typing import Generic, TypeVar
 
-from shared.schemas.search import SearchRequest, SearchResult
+from pydantic import BaseModel
+
+RequestT = TypeVar("RequestT", bound=BaseModel)
+ResultT = TypeVar("ResultT", bound=BaseModel)
 
 
-class SearchStrategy(ABC):
+class SearchStrategy(ABC, Generic[RequestT, ResultT]):
     @abstractmethod
-    async def search(self, request: SearchRequest) -> SearchResult:
+    async def search(self, request: RequestT) -> ResultT:
         ...

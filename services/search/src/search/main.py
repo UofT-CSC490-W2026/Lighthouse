@@ -12,6 +12,7 @@ from vectordb import MilvusClient
 from search.config import SearchSettings
 from embedding import OpenAIEmbeddingProvider
 from search.strategies.hybrid_strategy import HybridSearchStrategy
+from search.strategies.search_strategy import SearchStrategy
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -50,7 +51,7 @@ app = FastAPI(title="Lighthouse Search Service", lifespan=lifespan)
 
 @app.post("/search", response_model=SearchResult)
 async def search(request: SearchRequest) -> SearchResult:
-    strategy: HybridSearchStrategy = app.state.strategy
+    strategy: SearchStrategy[SearchRequest, SearchResult] = app.state.strategy
     return await strategy.search(request)
 
 

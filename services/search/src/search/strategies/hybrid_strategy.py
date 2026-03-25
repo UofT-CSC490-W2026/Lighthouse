@@ -13,7 +13,7 @@ from .search_strategy import SearchStrategy
 logger = logging.getLogger(__name__)
 
 
-class HybridSearchStrategy(SearchStrategy):
+class HybridSearchStrategy(SearchStrategy[SearchRequest, SearchResult]):
     """Hybrid search combining vector similarity and PostgreSQL full-text search."""
 
     def __init__(
