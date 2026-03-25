@@ -28,13 +28,12 @@ class HybridSearchStrategy(SearchStrategy):
 
     async def search(self, request: SearchRequest) -> SearchResult:
         repo_id: str | None = None
-        if request.repository_name:
-            with self.db_manager.connection_context():
-                repo = Repository.get_or_none(
-                    Repository.repo_id == request.repository_name
-                )
-                if repo:
-                    repo_id = repo.id
+        with self.db_manager.connection_context():
+            repo = Repository.get_or_none(
+                Repository.github_repo_id == request.github_repo_id
+            )
+            if repo:
+                repo_id = repo.id
 
         # Build filters for Milvus
         filters: dict[str, str] = {}

@@ -42,15 +42,16 @@ class GitOperations:
             )
         return repo_url
 
-    def clone_or_fetch(self, repo_url: str, repo_id: str, branch: str = "main") -> Path:
+    def clone_or_fetch(
+        self, repo_url: str, repo_dir_name: str, branch: str = "main"
+    ) -> Path:
         """Clone if not exists, else fetch and checkout branch. Returns repo path."""
-        safe_name = repo_id.replace("/", "_")
-        repo_path = self.base_dir / safe_name
+        repo_path = self.base_dir / repo_dir_name
 
         auth_url = self._authenticated_url(repo_url)
 
         if repo_path.exists() and (repo_path / ".git").exists():
-            logger.info("Fetching updates for %s branch %s", repo_id, branch)
+            logger.info("Fetching updates for %s branch %s", repo_dir_name, branch)
             repo = Repo(repo_path)
             # Update remote URL in case token changed
             repo.remotes.origin.set_url(auth_url)
@@ -58,7 +59,7 @@ class GitOperations:
             repo.git.checkout(branch)
             repo.git.pull("origin", branch)
         else:
-            logger.info("Cloning %s branch %s", repo_id, branch)
+            logger.info("Cloning %s branch %s", repo_dir_name, branch)
             repo = Repo.clone_from(
                 auth_url,
                 repo_path,

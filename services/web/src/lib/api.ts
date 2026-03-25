@@ -75,7 +75,8 @@ export interface User {
 
 export interface UserRepo {
   id: string;
-  repo_id: string;
+  github_repo_id: number;
+  full_name: string;
   repo_url: string;
   display_name: string;
   added_at: string;

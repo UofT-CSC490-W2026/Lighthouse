@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import TYPE_CHECKING, Annotated
 
@@ -8,6 +9,7 @@ from fastapi import Body
 from pydantic import BaseModel, Field, ValidationError
 from shared.schemas.search import SearchRequest, SearchResult
 
+from db import Repository
 from ..utilities import AuthenticatedUser, RequestError, get_logger, httproute, toolcall
 
 if TYPE_CHECKING:
@@ -78,12 +80,21 @@ class SearchEngine:
             query_parts.append(normalized_surrounding_context)
         search_query = " ".join(query_parts)
 
-        # Validate and build search payload using the shared schema
+        # Resolve repository name to github_repo_id
         normalized_file_path = file_path.strip() if file_path else None
+        normalized_repo_name = repository_name.strip().lower()
+        github_repo_id = await asyncio.to_thread(
+            self._resolve_github_repo_id, normalized_repo_name
+        )
+        if github_repo_id is None:
+            raise RequestError(
+                f"Repository '{normalized_repo_name}' not found.", status_code=404
+            )
+
         try:
             search_request = SearchRequest(
                 query=search_query,
-                repository_name=repository_name.strip(),
+                github_repo_id=github_repo_id,
                 branch=branch.strip() or "main",
                 file_path=normalized_file_path,
                 top_k=10,
@@ -129,7 +140,7 @@ class SearchEngine:
         return CodeContextResponse(
             status=status,
             message=message,
-            repository_name=search_request.repository_name,
+            repository_name=normalized_repo_name,
             branch=search_request.branch,
             latest_commit=normalized_latest_commit,
             task_description=normalized_task_description,
@@ -144,6 +155,14 @@ class SearchEngine:
             snippets=snippets,
             follow_up=[],
         )
+
+    def _resolve_github_repo_id(self, full_name: str) -> int | None:
+        """Look up the github_repo_id for a repository by its full_name."""
+        with self.engine.app.database.connection_context():
+            repo = Repository.get_or_none(Repository.full_name == full_name)
+            if repo is not None:
+                return repo.github_repo_id
+            return None
 
 
 class CodeContextHighlight(BaseModel):
