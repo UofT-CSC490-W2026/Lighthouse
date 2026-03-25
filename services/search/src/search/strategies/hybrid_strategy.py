@@ -70,7 +70,7 @@ class HybridSearchStrategy(SearchStrategy):
         with self.db_manager.connection_context():
             chunks = (
                 CodeChunk.select()
-                .where(CodeChunk.id.in_(top_chunk_ids))
+                .where(CodeChunk.id.in_(top_chunk_ids)) #type: ignore
             )
             chunk_map = {c.id: c for c in chunks}
 
