@@ -8,7 +8,7 @@ dependencies = [
     "shared",
     "db",
     "vectordb",
-    "openai>=1.0",
+    "embedding",
     "pydantic-settings>=2.0",
 ]
 
@@ -16,6 +16,7 @@ dependencies = [
 shared = { workspace = true }
 db = { workspace = true }
 vectordb = { workspace = true }
+embedding = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]

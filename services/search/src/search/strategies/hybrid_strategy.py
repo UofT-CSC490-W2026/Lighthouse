@@ -3,27 +3,13 @@ from __future__ import annotations
 import logging
 
 from db import CodeChunk, DatabaseManager, Repository
-from shared.config import EMBEDDING_MODEL
+from embedding import OpenAIEmbeddingProvider
 from shared.schemas.search import CodeSnippet, SearchRequest, SearchResult
 from vectordb import MilvusClient
 
 from .search_strategy import SearchStrategy
 
 logger = logging.getLogger(__name__)
-
-
-class EmbeddingClient:
-    """Lightweight embedding client for the search service."""
-
-    def __init__(self, api_key: str, model: str = EMBEDDING_MODEL) -> None:
-        import openai
-
-        self.client = openai.OpenAI(api_key=api_key)
-        self.model = model
-
-    def embed(self, text: str) -> list[float]:
-        response = self.client.embeddings.create(input=[text], model=self.model)
-        return response.data[0].embedding
 
 
 class HybridSearchStrategy(SearchStrategy):
@@ -33,7 +19,7 @@ class HybridSearchStrategy(SearchStrategy):
         self,
         db_manager: DatabaseManager,
         milvus: MilvusClient,
-        embedder: EmbeddingClient,
+        embedder: OpenAIEmbeddingProvider,
     ) -> None:
         self.db_manager = db_manager
         self.milvus = milvus
@@ -59,7 +45,7 @@ class HybridSearchStrategy(SearchStrategy):
         # 1. Vector search
         vector_results: list[dict] = []
         try:
-            query_embedding = self.embedder.embed(request.query)
+            query_embedding = self.embedder.embed_single(request.query)
             vector_results = self.milvus.search(
                 query_embedding=query_embedding,
                 top_k=request.top_k * 2,

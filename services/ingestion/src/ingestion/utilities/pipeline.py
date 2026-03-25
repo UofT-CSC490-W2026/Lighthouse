@@ -9,8 +9,9 @@ from db import CodeChunk, DatabaseManager, IndexedBranch, Repository
 from shared.config import EMBEDDING_DIMENSION, MILVUS_COLLECTION_NAME
 from vectordb import MilvusClient
 
+from embedding import OpenAIEmbeddingProvider
+
 from ..chunking import SlidingWindowChunker
-from ..embedding import OpenAIEmbeddingProvider
 
 from .config import IngestionSettings
 from .git_ops import GitOperations

@@ -1,5 +1,11 @@
 {
-  "extraPaths": ["packages/db/src", "packages/shared/src", "services/mcp_server/src"],
+  "extraPaths": [
+    "packages/db/src",
+    "packages/embedding/src",
+    "packages/shared/src",
+    "packages/vectordb/src",
+    "services/mcp_server/src"
+  ],
   "venvPath": ".",
   "venv": ".venv"
 }

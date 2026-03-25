@@ -10,7 +10,8 @@ from shared.schemas.search import SearchRequest, SearchResult
 from vectordb import MilvusClient
 
 from search.config import SearchSettings
-from search.strategies.hybrid_strategy import EmbeddingClient, HybridSearchStrategy
+from embedding import OpenAIEmbeddingProvider
+from search.strategies.hybrid_strategy import HybridSearchStrategy
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -28,7 +29,7 @@ async def lifespan(app: FastAPI):
         collection_name=MILVUS_COLLECTION_NAME,
     )
 
-    embedder = EmbeddingClient(api_key=settings.openai_api_key)
+    embedder = OpenAIEmbeddingProvider(api_key=settings.openai_api_key)
 
     # Set the search strategy
     app.state.strategy = HybridSearchStrategy(
