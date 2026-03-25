@@ -5,7 +5,8 @@ from typing import TYPE_CHECKING, Annotated
 
 import httpx
 from fastapi import Body
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
+from shared.schemas.search import SearchRequest, SearchResult
 
 from ..utilities import AuthenticatedUser, RequestError, get_logger, httproute, toolcall
 
@@ -47,18 +48,13 @@ class SearchEngine:
         surrounding_context: Annotated[str | None, Body()] = None,
     ) -> "CodeContextResponse":
         """Retrieve code context by calling the search service."""
-        normalized_repository_name = repository_name.strip()
         normalized_task_description = task_description.strip()
-        normalized_branch = branch.strip() or "main"
         normalized_latest_commit = latest_commit.strip() if latest_commit else None
-        normalized_file_path = file_path.strip() if file_path else None
         normalized_selected_text = selected_text.strip() if selected_text else None
         normalized_surrounding_context = (
             surrounding_context.strip() if surrounding_context else None
         )
 
-        if not normalized_repository_name:
-            raise RequestError("repository_name is required.", status_code=422)
         if not normalized_task_description:
             raise RequestError("task_description is required.", status_code=422)
         if start_line is not None and start_line < 1:
@@ -82,15 +78,21 @@ class SearchEngine:
             query_parts.append(normalized_surrounding_context)
         search_query = " ".join(query_parts)
 
+        # Validate and build search payload using the shared schema
+        normalized_file_path = file_path.strip() if file_path else None
+        try:
+            search_request = SearchRequest(
+                query=search_query,
+                repository_name=repository_name.strip(),
+                branch=branch.strip() or "main",
+                file_path=normalized_file_path,
+                top_k=10,
+            )
+        except ValidationError as exc:
+            raise RequestError(str(exc), status_code=422) from exc
+
         # Call search service
         search_url = self.engine.app.settings.search_service_url
-        search_payload = {
-            "query": search_query,
-            "repository_name": normalized_repository_name,
-            "branch": normalized_branch,
-            "file_path": normalized_file_path,
-            "top_k": 10,
-        }
 
         snippets: list[CodeContextSnippet] = []
         status = "ok"
@@ -100,19 +102,19 @@ class SearchEngine:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 resp = await client.post(
                     f"{search_url}/search",
-                    json=search_payload,
+                    json=search_request.model_dump(exclude_none=True),
                 )
                 resp.raise_for_status()
-                data = resp.json()
+                result = SearchResult.model_validate(resp.json())
 
-                for s in data.get("snippets", []):
+                for s in result.snippets:
                     snippets.append(
                         CodeContextSnippet(
-                            file_path=s["file_path"],
-                            start_line=s.get("start_line"),
-                            end_line=s.get("end_line"),
-                            content=s["content"],
-                            reason=s.get("reason"),
+                            file_path=s.file_path,
+                            start_line=s.start_line,
+                            end_line=s.end_line,
+                            content=s.content,
+                            reason=s.reason,
                         )
                     )
         except httpx.HTTPStatusError as exc:
@@ -127,8 +129,8 @@ class SearchEngine:
         return CodeContextResponse(
             status=status,
             message=message,
-            repository_name=normalized_repository_name,
-            branch=normalized_branch,
+            repository_name=search_request.repository_name,
+            branch=search_request.branch,
             latest_commit=normalized_latest_commit,
             task_description=normalized_task_description,
             requested_by_user_id=auth.id,
