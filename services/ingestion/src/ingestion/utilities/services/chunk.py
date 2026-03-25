@@ -106,6 +106,37 @@ class ChunkService:
             if not staging_rows:
                 return 0
 
+            milvus_batches: list[list[dict]] = []
+
+            # Normalize and validate embeddings before mutating final storage.
+            for i in range(0, len(staging_rows), self.BATCH_SIZE):
+                batch = staging_rows[i : i + self.BATCH_SIZE]
+                milvus_records = []
+                for row in batch:
+                    if row.embedding is None:
+                        logger.warning(
+                            "Staging chunk %s has no embedding, skipping Milvus insert",
+                            row.id,
+                        )
+                        continue
+
+                    raw_embedding = row.embedding
+                    if isinstance(raw_embedding, memoryview):
+                        raw_embedding = raw_embedding.tobytes()
+
+                    embedding = json.loads(raw_embedding.decode("utf-8"))
+                    milvus_records.append(
+                        {
+                            "id": row.id,
+                            "chunk_id": row.id,
+                            "embedding": embedding,
+                            "repository_id": row.repository_id,
+                            "file_path": row.file_path,
+                            "branch": row.branch,
+                        }
+                    )
+                milvus_batches.append(milvus_records)
+
             # Insert into postgres chunks table
             for i in range(0, len(staging_rows), self.BATCH_SIZE):
                 batch = staging_rows[i : i + self.BATCH_SIZE]
@@ -124,30 +155,10 @@ class ChunkService:
                         }
                         for row in batch
                     ]
-                ).execute()
+                ).on_conflict_ignore().execute()
 
             # Insert into Milvus
-            for i in range(0, len(staging_rows), self.BATCH_SIZE):
-                batch = staging_rows[i : i + self.BATCH_SIZE]
-                milvus_records = []
-                for row in batch:
-                    if row.embedding is None:
-                        logger.warning(
-                            "Staging chunk %s has no embedding, skipping Milvus insert",
-                            row.id,
-                        )
-                        continue
-                    embedding = json.loads(row.embedding.decode("utf-8"))
-                    milvus_records.append(
-                        {
-                            "id": row.id,
-                            "chunk_id": row.id,
-                            "embedding": embedding,
-                            "repository_id": row.repository_id,
-                            "file_path": row.file_path,
-                            "branch": row.branch,
-                        }
-                    )
+            for milvus_records in milvus_batches:
                 if milvus_records:
                     milvus.insert(milvus_records)
 
