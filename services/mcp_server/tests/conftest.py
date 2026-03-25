@@ -159,11 +159,17 @@ def install_fake_auth(
             """Return deterministic repository metadata without calling GitHub."""
             normalized_full_name = repo_id.lower()
             owner_login, _, repo_name = normalized_full_name.partition("/")
+            normalized_full_name = repo_id.lower()
+            owner_login, _, repo_name = normalized_full_name.partition("/")
             github_repo_id = int(
+                hashlib.sha1(normalized_full_name.encode()).hexdigest()[:12], 16
                 hashlib.sha1(normalized_full_name.encode()).hexdigest()[:12], 16
             )
             return GitHubRepository(
                 github_repo_id=github_repo_id,
+                full_name=normalized_full_name,
+                repo_url=f"https://github.com/{normalized_full_name}",
+                display_name=normalized_full_name,
                 full_name=normalized_full_name,
                 repo_url=f"https://github.com/{normalized_full_name}",
                 display_name=normalized_full_name,
@@ -175,6 +181,10 @@ def install_fake_auth(
         async def fake_list_visible_private_repository_ids(user_id: str):
             """Return no visible private repositories unless a test overrides it."""
             return set()
+
+        def fake_get_github_access_token_sync(user_id: str) -> str | None:
+            """Return no stored GitHub token in tests."""
+            return None
 
         def fake_get_github_access_token_sync(user_id: str) -> str | None:
             """Return no stored GitHub token in tests."""

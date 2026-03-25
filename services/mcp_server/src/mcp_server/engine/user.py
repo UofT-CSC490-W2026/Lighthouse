@@ -6,8 +6,10 @@ from typing import TYPE_CHECKING, Annotated
 from urllib.parse import urlparse
 
 import httpx
+import httpx
 from fastapi import Body
 from pydantic import BaseModel
+from shared.schemas.ingestion import IndexAcceptedResponse, IndexRequest, RepoIndexRequest
 from shared.schemas.ingestion import IndexAcceptedResponse, IndexRequest, RepoIndexRequest
 
 from db import Repository, UserHiddenRepository
@@ -96,7 +98,9 @@ class UserEngine:
     ) -> "UserRepoResponse":
         """Validate and create or unhide an indexed repository for the current user."""
         normalized_full_name = self._normalize_full_name(repo_url)
+        normalized_full_name = self._normalize_full_name(repo_url)
         github_repo = await self.engine.app.authenticator.fetch_github_repository(
+            normalized_full_name,
             normalized_full_name,
             user_id=auth.id,
         )
@@ -111,6 +115,7 @@ class UserEngine:
     @httproute(
         "DELETE",
         "/v1/user/repos/{full_name:path}",
+        "/v1/user/repos/{full_name:path}",
         name="remove_user_repo",
         description="Hide a repository from the current user without deleting it globally.",
     )
@@ -122,8 +127,10 @@ class UserEngine:
         self,
         auth: AuthenticatedUser,
         full_name: str,
+        full_name: str,
     ) -> "HideUserRepoResponse":
         """Hide an indexed repository for the current user."""
+        normalized_full_name = self._normalize_full_name(full_name)
         normalized_full_name = self._normalize_full_name(full_name)
         hidden = await asyncio.to_thread(
             self._hide_user_repo_sync,
@@ -202,11 +209,13 @@ class UserEngine:
         with self.engine.app.database.connection_context():
             repo = Repository.get_or_none(
                 Repository.github_repo_id == github_repo.github_repo_id
+                Repository.github_repo_id == github_repo.github_repo_id
             )
             created = repo is None
             if repo is None:
                 repo = Repository(
                     github_repo_id=github_repo.github_repo_id,
+                    full_name=github_repo.full_name,
                     full_name=github_repo.full_name,
                     repo_url=github_repo.repo_url,
                     display_name=github_repo.display_name,
@@ -216,6 +225,7 @@ class UserEngine:
                 )
             else:
                 repo.github_repo_id = github_repo.github_repo_id
+                repo.full_name = github_repo.full_name
                 repo.full_name = github_repo.full_name
                 repo.repo_url = github_repo.repo_url
                 repo.display_name = github_repo.display_name
@@ -238,11 +248,17 @@ class UserEngine:
         self,
         user_id: str,
         visible_private_repo_ids: set[int],
+        visible_private_repo_ids: set[int],
     ) -> list[Repository]:
         """Load visible repositories in newest-first order."""
         with self.engine.app.database.connection_context():
             visibility_clause = ~Repository.is_private
             if visible_private_repo_ids:
+                visibility_clause = (
+                    visibility_clause
+                    | Repository.github_repo_id.in_(
+                        sorted(visible_private_repo_ids)
+                    )
                 visibility_clause = (
                     visibility_clause
                     | Repository.github_repo_id.in_(
@@ -263,8 +279,10 @@ class UserEngine:
             return list(query)
 
     def _hide_user_repo_sync(self, user_id: str, full_name: str) -> bool:
+    def _hide_user_repo_sync(self, user_id: str, full_name: str) -> bool:
         """Hide an existing repository for a single user without deleting it globally."""
         with self.engine.app.database.connection_context():
+            repo = Repository.get_or_none(Repository.full_name == full_name)
             repo = Repository.get_or_none(Repository.full_name == full_name)
             if repo is None:
                 return False
@@ -279,6 +297,7 @@ class UserEngine:
             UserHiddenRepository.create(user=user_id, repository=repo)
             return True
 
+    def _normalize_full_name(self, repo: str) -> str:
     def _normalize_full_name(self, repo: str) -> str:
         """Normalize a GitHub repository reference into `owner/repo` form."""
         candidate = repo.strip()
@@ -318,6 +337,8 @@ class UserEngine:
             id=repo.id,
             github_repo_id=repo.github_repo_id,
             full_name=repo.full_name,
+            github_repo_id=repo.github_repo_id,
+            full_name=repo.full_name,
             repo_url=repo.repo_url,
             display_name=repo.display_name,
             added_at=repo.added_at,
@@ -342,6 +363,8 @@ class UserRepoResponse(BaseModel):
     id: str
     github_repo_id: int
     full_name: str
+    github_repo_id: int
+    full_name: str
     repo_url: str
     display_name: str
     added_at: datetime
@@ -351,6 +374,7 @@ class UserRepoResponse(BaseModel):
 class HideUserRepoResponse(BaseModel):
     """Report whether a repository hide operation was applied."""
 
+    full_name: str
     full_name: str
     hidden: bool
 
