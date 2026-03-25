@@ -3,7 +3,7 @@ from __future__ import annotations
 from enum import StrEnum
 
 from .base_chunker import Chunker
-from .chunker import SlidingWindowChunker
+from .sliding_window_chunker import SlidingWindowChunker
 
 
 class ChunkerStrategy(StrEnum):

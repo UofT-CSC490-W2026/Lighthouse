@@ -52,7 +52,7 @@ services/ingestion/src/ingestion/
       chunk.py
   chunking/
     base_chunker.py
-    chunker.py
+    sliding_window_chunker.py
     registry.py
   embedding/
     registry.py

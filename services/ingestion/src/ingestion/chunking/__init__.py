@@ -1,5 +1,5 @@
 from .base_chunker import ChunkResult, Chunker
-from .chunker import SlidingWindowChunker
+from .sliding_window_chunker import SlidingWindowChunker
 from .registry import ChunkerStrategy, get_chunker, register_chunker
 
 __all__ = [
