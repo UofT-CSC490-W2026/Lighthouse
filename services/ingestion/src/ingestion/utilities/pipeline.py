@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from db import CodeChunk, DatabaseManager, IndexedBranch, Repository
+from db import Chunk, DatabaseManager, IndexedBranch, Repository
 from shared.config import EMBEDDING_DIMENSION, MILVUS_COLLECTION_NAME
 from vectordb import MilvusClient
 
@@ -158,9 +158,9 @@ class IndexingPipeline:
         """Delete existing chunks from postgres and milvus for a repo+branch."""
         # Delete from postgres
         deleted = (
-            CodeChunk.delete()
+            Chunk.delete()
             .where(
-                (CodeChunk.repository == repository_id) & (CodeChunk.branch == branch)
+                (Chunk.repository == repository_id) & (Chunk.branch == branch)
             )
             .execute()
         )
@@ -224,7 +224,7 @@ class IndexingPipeline:
         batch_size = 500
         for i in range(0, len(all_chunks), batch_size):
             batch = all_chunks[i : i + batch_size]
-            CodeChunk.insert_many(
+            Chunk.insert_many(
                 [
                     {
                         "id": c["chunk_id"],
@@ -344,10 +344,10 @@ class IndexingPipeline:
                 ]
                 for rel_path in relative_paths:
                     # Delete from postgres
-                    CodeChunk.delete().where(
-                        (CodeChunk.repository == repo.id)
-                        & (CodeChunk.branch == branch)
-                        & (CodeChunk.file_path == rel_path)
+                    Chunk.delete().where(
+                        (Chunk.repository == repo.id)
+                        & (Chunk.branch == branch)
+                        & (Chunk.file_path == rel_path)
                     ).execute()
                     # Delete from milvus
                     self.milvus.delete_by_filter(

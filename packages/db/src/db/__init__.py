@@ -1,9 +1,9 @@
 from .database import BaseModel, DatabaseManager
-from .models import CodeChunk, IndexedBranch, Repository, Session, User, UserHiddenRepository
+from .models import Chunk, IndexedBranch, Repository, Session, User, UserHiddenRepository
 
 __all__ = [
     "BaseModel",
-    "CodeChunk",
+    "Chunk",
     "DatabaseManager",
     "IndexedBranch",
     "Repository",

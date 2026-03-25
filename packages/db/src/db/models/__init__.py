@@ -1,10 +1,10 @@
 from ..database import BaseModel, DatabaseManager
 from .auth import Repository, Session, User, UserHiddenRepository
-from .indexing import CodeChunk, IndexedBranch
+from .indexing import Chunk, IndexedBranch
 
 __all__ = [
     "BaseModel",
-    "CodeChunk",
+    "Chunk",
     "DatabaseManager",
     "IndexedBranch",
     "Repository",

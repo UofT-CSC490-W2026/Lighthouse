@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from dataclasses import asdict
 
-from db import CodeChunk, DatabaseManager, Repository
+from db import Chunk, DatabaseManager, Repository
 from embedding import EmbeddingProvider
 from shared.schemas.search import CodeSnippet, SearchRequest, SearchResult
 from vectordb import MilvusClient
@@ -72,8 +72,8 @@ class HybridSearchStrategy(SearchStrategy):
         # Fetch full chunks from postgres
         with self.db_manager.connection_context():
             chunks = (
-                CodeChunk.select()
-                .where(CodeChunk.id.in_(top_chunk_ids)) #type: ignore
+                Chunk.select()
+                .where(Chunk.id.in_(top_chunk_ids)) #type: ignore
             )
             chunk_map = {c.id: c for c in chunks}
 
@@ -133,7 +133,7 @@ class HybridSearchStrategy(SearchStrategy):
             params.append(str(request.top_k * 2))
 
             results = []
-            for row in CodeChunk.raw(sql, *params):
+            for row in Chunk.raw(sql, *params):
                 results.append(
                     {
                         "chunk_id": row.id,

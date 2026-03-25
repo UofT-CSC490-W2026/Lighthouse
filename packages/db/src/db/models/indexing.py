@@ -47,7 +47,7 @@ class IndexedBranch(BaseModel):
         indexes = ((("repository", "branch_name"), True),)
 
 
-class CodeChunk(BaseModel):
+class Chunk(BaseModel):
     """Store a chunk of code for keyword search and metadata."""
 
     id = CharField(primary_key=True, default=_uuid_text)
