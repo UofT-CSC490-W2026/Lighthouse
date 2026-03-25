@@ -60,6 +60,8 @@ EXTENSION_TO_LANGUAGE: dict[str, str] = {
     ".dockerfile": "dockerfile",
 }
 
+CODE_EXTENSIONS: frozenset[str] = frozenset(EXTENSION_TO_LANGUAGE)
+
 
 class ExtensionLanguageDetector(LanguageDetector):
     """Detects programming language from file extension."""

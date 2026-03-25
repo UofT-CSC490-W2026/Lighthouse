@@ -5,16 +5,9 @@ from pathlib import Path
 
 from git import Repo
 
-logger = logging.getLogger(__name__)
+from ..language.detector import CODE_EXTENSIONS
 
-# File extensions we consider indexable code
-CODE_EXTENSIONS: set[str] = {
-    ".py", ".js", ".ts", ".tsx", ".jsx", ".java", ".go", ".rs", ".c", ".cpp",
-    ".h", ".hpp", ".rb", ".php", ".cs", ".swift", ".kt", ".scala", ".sh",
-    ".bash", ".zsh", ".sql", ".html", ".css", ".scss", ".yaml", ".yml",
-    ".json", ".toml", ".xml", ".md", ".r", ".lua", ".dart", ".ex", ".exs",
-    ".erl", ".hs", ".ml", ".clj", ".vim", ".proto", ".tf",
-}
+logger = logging.getLogger(__name__)
 
 # Files to skip regardless of extension
 SKIP_PATTERNS: set[str] = {
