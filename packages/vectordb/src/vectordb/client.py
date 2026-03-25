@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Any
 
 from pymilvus import MilvusClient as _MilvusClient, DataType
 
@@ -141,8 +142,68 @@ class MilvusClient:
     def _build_filter_expr(filters: dict | None) -> str:
         if not filters:
             return ""
-        parts = []
+
+        parts: list[str] = []
         for key, value in filters.items():
-            escaped = value.replace('"', '\\"')
-            parts.append(f'{key} == "{escaped}"')
+            if isinstance(value, dict):
+                field_parts = []
+                for operator, operand in value.items():
+                    field_parts.append(
+                        MilvusClient._build_filter_condition(key, operator, operand)
+                    )
+                if len(field_parts) == 1:
+                    parts.append(field_parts[0])
+                else:
+                    parts.append(f"({' and '.join(field_parts)})")
+                continue
+
+            parts.append(
+                MilvusClient._build_filter_condition(key, "==", value)
+            )
+
         return " and ".join(parts)
+
+    @staticmethod
+    def _build_filter_condition(field: str, operator: str, value: Any) -> str:
+        normalized_operator = operator.lower()
+        if normalized_operator == "eq":
+            normalized_operator = "=="
+        elif normalized_operator == "ne":
+            normalized_operator = "!="
+        elif normalized_operator == "gt":
+            normalized_operator = ">"
+        elif normalized_operator == "lt":
+            normalized_operator = "<"
+        elif normalized_operator == "gte":
+            normalized_operator = ">="
+        elif normalized_operator == "lte":
+            normalized_operator = "<="
+
+        if normalized_operator == "in":
+            if not isinstance(value, list | tuple | set):
+                raise TypeError(
+                    f"Filter operator 'in' for field {field!r} expects a sequence."
+                )
+            values = ", ".join(MilvusClient._format_filter_value(item) for item in value)
+            return f"{field} in [{values}]"
+
+        if normalized_operator not in {"==", "!=", ">", "<", ">=", "<=", "like"}:
+            raise ValueError(
+                f"Unsupported filter operator {operator!r} for field {field!r}."
+            )
+
+        return (
+            f"{field} {normalized_operator} "
+            f"{MilvusClient._format_filter_value(value)}"
+        )
+
+    @staticmethod
+    def _format_filter_value(value: Any) -> str:
+        if isinstance(value, str):
+            escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+            return f'"{escaped}"'
+        if isinstance(value, bool):
+            return str(value).lower()
+        if isinstance(value, int | float):
+            return str(value)
+        raise TypeError(f"Unsupported filter value type: {type(value).__name__}")
