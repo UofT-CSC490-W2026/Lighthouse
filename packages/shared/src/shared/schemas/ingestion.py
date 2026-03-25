@@ -24,3 +24,19 @@ class IndexAcceptedResponse(BaseModel):
 
     status: str = "accepted"
     workflow_ids: list[str]
+
+
+class BranchStatus(BaseModel):
+    """Per-branch indexing state for the ingestion status endpoint."""
+
+    branch_name: str
+    status: str
+    last_indexed_commit: str | None = None
+    indexed_at: str | None = None
+
+
+class IndexStatusResponse(BaseModel):
+    """Response payload from the ingestion service status endpoint."""
+
+    github_repo_id: int
+    branches: list[BranchStatus]

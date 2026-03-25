@@ -7,8 +7,12 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
-from pydantic import BaseModel
-from shared.schemas.ingestion import IndexAcceptedResponse, IndexRequest
+from shared.schemas.ingestion import (
+    BranchStatus,
+    IndexAcceptedResponse,
+    IndexRequest,
+    IndexStatusResponse,
+)
 from temporalio.client import Client
 
 from .utilities import IngestionSettings
@@ -33,21 +37,6 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Lighthouse Ingestion Service", lifespan=lifespan)
-
-
-# --- Request/Response Models ---
-
-
-class BranchStatus(BaseModel):
-    branch_name: str
-    status: str
-    last_indexed_commit: str | None = None
-    indexed_at: str | None = None
-
-
-class IndexStatusResponse(BaseModel):
-    github_repo_id: int
-    branches: list[BranchStatus]
 
 
 # --- Endpoints ---
