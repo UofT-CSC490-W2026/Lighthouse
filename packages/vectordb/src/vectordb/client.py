@@ -1,8 +1,20 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import StrEnum
 
 from pymilvus import MilvusClient as _MilvusClient, DataType
+
+
+class CollectionField(StrEnum):
+    """Milvus collection schema field names."""
+
+    ID = "id"
+    CHUNK_ID = "chunk_id"
+    EMBEDDING = "embedding"
+    REPOSITORY_ID = "repository_id"
+    FILE_PATH = "file_path"
+    BRANCH = "branch"
 
 
 @dataclass
@@ -34,17 +46,23 @@ class MilvusClient:
         schema = self._client.create_schema(auto_id=False, enable_dynamic_field=False)
 
         # Define schema fields here.
-        schema.add_field("id", DataType.VARCHAR, is_primary=True, max_length=64)
-        schema.add_field("chunk_id", DataType.VARCHAR, max_length=64)
-        schema.add_field("embedding", DataType.FLOAT_VECTOR, dim=dimension)
-        schema.add_field("repository_id", DataType.VARCHAR, max_length=64)
-        schema.add_field("file_path", DataType.VARCHAR, max_length=512)
-        schema.add_field("branch", DataType.VARCHAR, max_length=128)
-        
+        schema.add_field(
+            CollectionField.ID, DataType.VARCHAR, is_primary=True, max_length=64
+        )
+        schema.add_field(CollectionField.CHUNK_ID, DataType.VARCHAR, max_length=64)
+        schema.add_field(
+            CollectionField.EMBEDDING, DataType.FLOAT_VECTOR, dim=dimension
+        )
+        schema.add_field(
+            CollectionField.REPOSITORY_ID, DataType.VARCHAR, max_length=64
+        )
+        schema.add_field(CollectionField.FILE_PATH, DataType.VARCHAR, max_length=512)
+        schema.add_field(CollectionField.BRANCH, DataType.VARCHAR, max_length=128)
+
         # Define indices here.
         index_params = self._client.prepare_index_params()
         index_params.add_index(
-            field_name="embedding",
+            field_name=CollectionField.EMBEDDING,
             index_type="HNSW",
             metric_type="COSINE",
             params={"M": 16, "efConstruction": 256},
@@ -59,7 +77,8 @@ class MilvusClient:
     def insert(self, records: list[dict]) -> None:
         """Batch insert records into the collection.
 
-        Each record should have: id, chunk_id, embedding, repository_id, file_path, branch.
+        Each record should have: id, chunk_id, embedding, repository_id, file_path, branch
+        (see CollectionField for shared constants).
         """
         if not records:
             return
@@ -78,7 +97,12 @@ class MilvusClient:
             collection_name=self.collection_name,
             data=[query_embedding],
             limit=top_k,
-            output_fields=["chunk_id", "repository_id", "file_path", "branch"],
+            output_fields=[
+                CollectionField.CHUNK_ID,
+                CollectionField.REPOSITORY_ID,
+                CollectionField.FILE_PATH,
+                CollectionField.BRANCH,
+            ],
             filter=filter_expr if filter_expr else "",
             search_params={"metric_type": "COSINE", "params": {"ef": 128}},
         )
@@ -86,13 +110,14 @@ class MilvusClient:
         hits = []
         for result in results:
             for hit in result:
+                entity = hit["entity"]
                 hits.append(
                     MilvusSearchResult(
-                        chunk_id=hit["entity"]["chunk_id"],
+                        chunk_id=entity[CollectionField.CHUNK_ID],
                         score=hit["distance"],
-                        repository_id=hit["entity"]["repository_id"],
-                        file_path=hit["entity"]["file_path"],
-                        branch=hit["entity"]["branch"],
+                        repository_id=entity[CollectionField.REPOSITORY_ID],
+                        file_path=entity[CollectionField.FILE_PATH],
+                        branch=entity[CollectionField.BRANCH],
                     )
                 )
         return hits
