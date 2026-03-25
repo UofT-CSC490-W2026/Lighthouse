@@ -105,7 +105,7 @@ class HybridSearchStrategy(SearchStrategy):
     def _keyword_search(
         self, request: SearchRequest, repo_id: str | None
     ) -> list[dict]:
-        """Execute PostgreSQL full-text search on code_chunks.content."""
+        """Execute PostgreSQL full-text search on chunks.content."""
         with self.db_manager.connection_context():
             # Build raw SQL for full-text search (Peewee's ORM doesn't
             # handle tsvector/tsquery parameterization cleanly)
@@ -126,7 +126,7 @@ class HybridSearchStrategy(SearchStrategy):
                 SELECT id, file_path,
                        ts_rank(to_tsvector('english', content),
                                plainto_tsquery('english', %s)) as rank
-                FROM code_chunks
+                FROM chunks
                 WHERE {where_clause}
                 ORDER BY rank DESC
                 LIMIT %s

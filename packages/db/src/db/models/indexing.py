@@ -53,7 +53,7 @@ class CodeChunk(BaseModel):
     id = CharField(primary_key=True, default=_uuid_text)
     repository = ForeignKeyField(
         Repository,
-        backref="code_chunks",
+        backref="chunks",
         column_name="repository_id",
         on_delete="CASCADE",
         index=True,
@@ -69,4 +69,4 @@ class CodeChunk(BaseModel):
     updated_at = DateTimeField(default=_utcnow)
 
     class Meta:
-        table_name = "code_chunks"
+        table_name = "chunks"

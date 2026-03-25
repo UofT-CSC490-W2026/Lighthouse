@@ -1502,6 +1502,7 @@ dependencies = [
     { name = "fastmcp" },
     { name = "httpx" },
     { name = "pydantic-settings" },
+    { name = "shared" },
 ]
 
 [package.dev-dependencies]
@@ -1520,6 +1521,7 @@ requires-dist = [
     { name = "fastmcp", specifier = "<3" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "pydantic-settings", specifier = ">=2.0" },
+    { name = "shared", editable = "packages/shared" },
 ]
 
 [package.metadata.requires-dev]
@@ -2733,10 +2735,14 @@ version = "0.1.0"
 source = { editable = "packages/shared" }
 dependencies = [
     { name = "pydantic" },
+    { name = "pydantic-settings" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "pydantic", specifier = ">=2.0" }]
+requires-dist = [
+    { name = "pydantic", specifier = ">=2.0" },
+    { name = "pydantic-settings", specifier = ">=2.0" },
+]
 
 [[package]]
 name = "shellingham"
