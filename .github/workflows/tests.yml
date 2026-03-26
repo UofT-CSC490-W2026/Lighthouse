@@ -57,15 +57,7 @@ jobs:
           elif coverage >= 70:
               color = "orange"
 
-          readme_block = "\n".join(
-              [
-                  f"![Coverage](https://img.shields.io/badge/coverage-{percent.replace('%', '%25')}-{color})",
-                  "",
-                  f"Current Python test coverage: **{percent}**.",
-                  "",
-                  "This value is refreshed automatically by GitHub Actions on pushes to `main`.",
-              ]
-          )
+          readme_block = f"![Coverage](https://img.shields.io/badge/coverage-{percent.replace('%', '%25')}-{color})"
 
           pr_body = "\n".join(
               [

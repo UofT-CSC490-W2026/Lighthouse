@@ -1,18 +1,14 @@
 # Lighthouse
 
+<!-- coverage:start -->
+
+![Coverage](https://img.shields.io/badge/coverage-79.34%25-orange)
+
+<!-- coverage:end -->
+
 Better context for coding agents.
 
 **Team**: Aarya Prakash, Derek Huynh, Merrick Liu, Rhys Balevicius
-
-### Test Coverage
-
-<!-- coverage:start -->
-![Coverage](https://img.shields.io/badge/coverage-79.34%25-orange)
-
-Current Python test coverage: **79.34%**.
-
-This value is refreshed automatically by GitHub Actions on pushes to `main`.
-<!-- coverage:end -->
 
 ### Repo Structure
 
