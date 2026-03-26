@@ -64,3 +64,4 @@ dist/
 .pytest_cache/
 .claude/
 .conductor/
+.coverage
