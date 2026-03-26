@@ -21,10 +21,6 @@ from pydantic.fields import FieldInfo
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
 
 
-# ---------------------------------------------------------------------------
-# Internal helpers
-# ---------------------------------------------------------------------------
-
 def _dedupe(values: list[str]) -> list[str]:
     """Return *values* without empty entries or duplicates, preserving order."""
     seen: set[str] = set()
@@ -125,10 +121,6 @@ def _load_parameter_payload(
     return payload
 
 
-# ---------------------------------------------------------------------------
-# Pydantic settings source
-# ---------------------------------------------------------------------------
-
 class SSMSettingsSource(PydanticBaseSettingsSource):
     """Load settings defaults from a single JSON blob stored in AWS SSM.
 
@@ -174,10 +166,6 @@ class SSMSettingsSource(PydanticBaseSettingsSource):
 
         return data
 
-
-# ---------------------------------------------------------------------------
-# Convenience helper
-# ---------------------------------------------------------------------------
 
 def ssm_settings_sources(
     ssm_env_var: str,
