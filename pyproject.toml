@@ -14,6 +14,7 @@ members = [
   "packages/vectordb",
   "packages/db",
   "packages/embedding",
+  "evaluation"
 ]
 
 [dependency-groups]
