@@ -4,6 +4,12 @@ Better context for coding agents.
 
 **Team**: Aarya Prakash, Derek Huynh, Merrick Liu, Rhys Balevicius
 
+### Test Coverage
+
+<!-- coverage:start -->
+Coverage is generated automatically by GitHub Actions on pushes to `main`.
+<!-- coverage:end -->
+
 ### Repo Structure
 
 ```
