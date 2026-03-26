@@ -8,10 +8,9 @@ from temporalio import activity
 
 from ...chunking import ChunkerStrategy, get_chunker
 from ...language import ExtensionLanguageDetector
-from ...utilities.config import IngestionSettings
 from ...utilities.git_ops import GitOperations
 from ...utilities.services import ChunkService
-from .helpers import make_db
+from .helpers import get_settings, make_db
 from .inputs import ChunkFilesInput, ChunkFilesOutput
 
 logger = logging.getLogger(__name__)
@@ -20,7 +19,7 @@ logger = logging.getLogger(__name__)
 @activity.defn
 async def chunk_files(input: ChunkFilesInput) -> ChunkFilesOutput:
     """Read files, chunk them, and write to the staging table."""
-    settings = IngestionSettings()
+    settings = get_settings()
     db = make_db(settings)
 
     chunker = get_chunker(ChunkerStrategy(input.chunker_strategy))

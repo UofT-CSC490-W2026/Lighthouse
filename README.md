@@ -4,6 +4,14 @@ Better context for coding agents.
 
 **Team**: Aarya Prakash, Derek Huynh, Merrick Liu, Rhys Balevicius
 
+### Test Coverage
+
+<!-- coverage:start -->
+
+Coverage is generated automatically by GitHub Actions on pushes to `main`.
+
+<!-- coverage:end -->
+
 ### Repo Structure
 
 ```
@@ -40,3 +48,15 @@ monorepo/
 
 1. Run `docker compose up -d` to start Postgres, Milvus, Temporal, and other services.
 2. For running a `service`, use `uv run --package <service> ...`.
+
+### Running Tests
+
+```shell
+uv run pytest
+
+# Run tests with coverage
+uv run pytest --cov
+
+# Run unit/integration/e2e tests
+uv run pytest -m <unit|integration|e2e>
+```

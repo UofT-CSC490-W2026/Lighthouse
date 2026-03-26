@@ -18,9 +18,9 @@ class App(FastAPI):
     database: DatabaseManager
     authenticator: Authenticator
 
-    def __init__(self):
+    def __init__(self, settings=None):
         """Initialize settings, shared services, and middleware."""
-        self.settings = get_settings()
+        self.settings = settings or get_settings()
         self.database = DatabaseManager(self.settings.postgres_dsn)
         super().__init__(
             debug=DEBUG,
