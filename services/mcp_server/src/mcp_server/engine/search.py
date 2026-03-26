@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Annotated
 import httpx
 from fastapi import Body
 from pydantic import BaseModel, Field, ValidationError
-from shared.schemas.search import SearchRequest, SearchResult
+from shared.schemas.search import HybridRequest, SearchMethod, SearchResult
 
 from db import Repository
 from ..utilities import AuthenticatedUser, RequestError, get_logger, httproute, toolcall
@@ -92,7 +92,7 @@ class SearchEngine:
             )
 
         try:
-            search_request = SearchRequest(
+            search_request = HybridRequest(
                 query=search_query,
                 github_repo_id=github_repo_id,
                 branch=branch.strip() or "main",
@@ -113,7 +113,7 @@ class SearchEngine:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 resp = await client.post(
                     f"{search_url}/search",
-                    json=search_request.model_dump(exclude_none=True),
+                    json=[search_request.model_dump()],
                 )
                 resp.raise_for_status()
                 result = SearchResult.model_validate(resp.json())
