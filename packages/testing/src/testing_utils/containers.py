@@ -16,8 +16,15 @@ def pg_container() -> Generator[PostgresContainer, None, None]:
 
 @pytest.fixture(scope="session")
 def pg_dsn(pg_container: PostgresContainer) -> str:
-    """Return the DSN for the running Postgres testcontainer."""
-    return pg_container.get_connection_url()
+    """Return the DSN for the running Postgres testcontainer.
+
+    Peewee's playhouse.db_url expects ``postgresql://`` (no driver suffix),
+    but testcontainers returns ``postgresql+psycopg2://``.  Strip the driver.
+    """
+    url = pg_container.get_connection_url()
+    return url.replace("postgresql+psycopg2://", "postgresql://").replace(
+        "postgres+psycopg2://", "postgresql://"
+    )
 
 
 @pytest.fixture(scope="session")

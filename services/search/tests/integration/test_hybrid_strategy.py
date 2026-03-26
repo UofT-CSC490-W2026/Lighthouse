@@ -75,12 +75,9 @@ class TestHybridSearchStrategy:
         strategy = HybridSearchStrategy(db_manager=db_manager, milvus=milvus_client, embedder=mock_embedder)
         request = SearchRequest(query="python code in repo1", github_repo_id=repo1.github_repo_id, branch="main")
         result = await strategy.search(request)
-        # All results should be from repo1
+        # Verify snippets only contain content from repo1 (seeded as "python code in repo1")
         for snippet in result.snippets:
-            with db_manager.connection_context():
-                chunk = Chunk.get_by_id(snippet.file_path.replace("file", "").replace(".py", ""))  # Not reliable
-            # Just verify we got results - filter should work
-        assert len(result.snippets) >= 0  # At minimum it ran without error
+            assert "repo2" not in snippet.content
 
     @pytest.mark.asyncio
     async def test_search_respects_top_k(self, db_manager, milvus_client, mock_embedder):
