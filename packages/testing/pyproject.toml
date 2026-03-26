@@ -1,0 +1,26 @@
+[project]
+name = "testing"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+  "db",
+  "vectordb",
+  "embedding",
+  "shared",
+  "pytest>=9.0.2",
+  "pytest-asyncio>=1.3.0",
+  "testcontainers[milvus,postgres]>=4.14.2",
+]
+
+[tool.uv.sources]
+db = { workspace = true }
+vectordb = { workspace = true }
+embedding = { workspace = true }
+shared = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/testing_utils"]

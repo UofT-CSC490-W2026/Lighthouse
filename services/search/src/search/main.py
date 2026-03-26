@@ -10,7 +10,7 @@ from shared.schemas.search import SearchRequest, SearchResult
 from vectordb import MilvusClient
 
 from search.config import SearchSettings
-from embedding import OpenAIEmbeddingProvider
+from embedding import EmbeddingProvider, OpenAIEmbeddingProvider
 from search.strategies.hybrid_strategy import HybridSearchStrategy
 from search.strategies.search_strategy import SearchStrategy
 
@@ -18,35 +18,44 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    settings = SearchSettings()
-    
-    db_manager = DatabaseManager(settings.postgres_dsn)
-    db_manager.connect()
+def create_app(
+    settings: SearchSettings | None = None,
+    embedder: EmbeddingProvider | None = None,
+) -> FastAPI:
+    """Factory to create the FastAPI app with optional dependency overrides."""
+    _settings = settings
+    _embedder = embedder
 
-    milvus = MilvusClient(
-        uri=settings.milvus_uri,
-        collection_name=MILVUS_COLLECTION_NAME,
-    )
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        s = _settings or SearchSettings()
 
-    embedder = OpenAIEmbeddingProvider(api_key=settings.openai_api_key)
+        db_manager = DatabaseManager(s.postgres_dsn)
+        db_manager.connect()
 
-    # Set the search strategy
-    app.state.strategy = HybridSearchStrategy(
-        db_manager=db_manager,
-        milvus=milvus,
-        embedder=embedder,
-    )
+        milvus = MilvusClient(
+            uri=s.milvus_uri,
+            collection_name=MILVUS_COLLECTION_NAME,
+        )
 
-    logger.info("Search service initialized")
-    yield
+        emb = _embedder or OpenAIEmbeddingProvider(api_key=s.openai_api_key)
 
-    milvus.close()
-    db_manager.close()
+        app.state.strategy = HybridSearchStrategy(
+            db_manager=db_manager,
+            milvus=milvus,
+            embedder=emb,
+        )
+
+        logger.info("Search service initialized")
+        yield
+
+        milvus.close()
+        db_manager.close()
+
+    return FastAPI(title="Lighthouse Search Service", lifespan=lifespan)
 
 
-app = FastAPI(title="Lighthouse Search Service", lifespan=lifespan)
+app = create_app()
 
 
 @app.post("/search", response_model=SearchResult)
