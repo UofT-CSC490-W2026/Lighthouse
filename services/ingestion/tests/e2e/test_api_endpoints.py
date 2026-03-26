@@ -3,7 +3,6 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
-from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock
 
 import httpx
@@ -27,22 +26,17 @@ def test_settings(pg_dsn):
 
 @pytest.fixture
 async def client(test_settings, db_manager):
-    """Create a test client with a fake lifespan that skips Temporal."""
+    """Create a test client that skips Temporal by setting state directly.
 
-    @asynccontextmanager
-    async def test_lifespan(app):
-        app.state.settings = test_settings
-        app.state.temporal_client = AsyncMock()
-        yield
-
-    original_lifespan = app.router.lifespan_context
-    app.router.lifespan_context = test_lifespan
+    httpx's ASGITransport does not invoke ASGI lifespan events, so we
+    configure app.state manually instead of replacing the lifespan.
+    """
+    app.state.settings = test_settings
+    app.state.temporal_client = AsyncMock()
 
     transport = ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
-
-    app.router.lifespan_context = original_lifespan
 
 
 @pytest.mark.e2e

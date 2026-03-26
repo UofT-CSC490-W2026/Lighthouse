@@ -4,11 +4,9 @@ import pytest
 import httpx
 from httpx import ASGITransport
 
-from db import Chunk, Repository
+from db import Chunk
 from shared.config import MILVUS_COLLECTION_NAME
 from search.config import SearchSettings
-from search.main import create_app
-from shared.schemas.search import SearchRequest, SearchResult
 from testing_utils.mock_embedding import MockEmbeddingProvider
 from testing_utils.factories import create_repository
 from vectordb import MilvusClient
@@ -36,23 +34,17 @@ def e2e_milvus_client(milvus_uri):
 async def client(search_settings, mock_embedder, db_manager, e2e_milvus_client):
     """Create an ASGI test client for the search service.
 
-    The factory ``create_app`` returns a bare FastAPI with a lifespan but no
-    routes.  Routes are registered on the module-level ``app`` singleton in
-    ``search.main``.  To get a fully functional test app we re-register the
-    same route handlers on the factory-created instance.
+    httpx's ASGITransport does not invoke ASGI lifespan events, so we import
+    the module-level ``app`` and set ``app.state.strategy`` directly.
     """
-    app = create_app(settings=search_settings, embedder=mock_embedder)
+    from search.main import app
+    from search.strategies.hybrid_strategy import HybridSearchStrategy
 
-    # Re-register the endpoint handlers that the module attaches to the
-    # global ``app`` object so that our test instance serves them.
-    @app.post("/search", response_model=SearchResult)
-    async def search(request: SearchRequest) -> SearchResult:
-        strategy = app.state.strategy
-        return await strategy.search(request)
-
-    @app.get("/health")
-    async def health():
-        return {"status": "ok"}
+    app.state.strategy = HybridSearchStrategy(
+        db_manager=db_manager,
+        milvus=e2e_milvus_client,
+        embedder=mock_embedder,
+    )
 
     transport = ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:

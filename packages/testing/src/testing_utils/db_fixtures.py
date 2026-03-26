@@ -39,6 +39,11 @@ def db_manager_session(pg_dsn: str) -> Generator[DatabaseManager, None, None]:
 def db_manager(db_manager_session: DatabaseManager) -> Generator[DatabaseManager, None, None]:
     """Function-scoped: yield the shared manager, then truncate all tables for isolation."""
     yield db_manager_session
+    # Re-connect if the proxy was unbound (e.g. a code path created a separate
+    # DatabaseManager and called close(), which unbinds the class-level proxy).
+    if not db_manager_session.is_connected:
+        db_manager_session._database = None  # noqa: SLF001
+        db_manager_session.connect()
     with db_manager_session.connection_context():
         for model in ALL_MODELS:
             model.delete().execute()

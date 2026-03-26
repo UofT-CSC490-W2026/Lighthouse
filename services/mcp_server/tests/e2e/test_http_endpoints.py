@@ -31,10 +31,22 @@ def mcp_settings(pg_dsn):
 
 @pytest.fixture
 async def client(mcp_settings, db_manager):
-    """Create an ASGI test client that triggers the full App lifespan."""
+    """Create an ASGI test client with routes registered manually.
+
+    httpx's ASGITransport does not invoke ASGI lifespan events, so we
+    perform the setup that the lifespan normally handles: connect the
+    database and register the HTTP routes.
+    """
     from mcp_server.main import App
+    from mcp_server.routers.http import HTTPRouteHandler
 
     app = App(settings=mcp_settings)
+    # Use the session-scoped database (already connected by db_manager fixture)
+    app.database = db_manager
+    # Register routes (normally done inside lifespan)
+    http_handler = HTTPRouteHandler(app)
+    app.include_router(http_handler.as_router())
+
     transport = ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
