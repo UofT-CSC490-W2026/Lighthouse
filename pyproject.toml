@@ -47,6 +47,9 @@ markers = [
   "e2e: End-to-end tests with FastAPI/Temporal",
 ]
 asyncio_mode = "auto"
+filterwarnings = [
+  "ignore::DeprecationWarning:testcontainers",
+]
 
 [tool.coverage.run]
 source = [
