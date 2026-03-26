@@ -1,0 +1,19 @@
+models:
+  - "bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0"
+
+context_providers:
+  - "none"
+  - "lighthouse"
+
+dataset:
+  adapter: "bugsinpy"
+  # path: "/path/to/local/bugsinpy-clone"  # required: local BugsInPy repo checkout
+  max_instances: 50
+
+num_runs: 3
+search_service_url: "http://localhost:8002"
+output_dir: "results/bugsinpy/"
+concurrency: 4
+
+metadata:
+  index_registry: "datasets/bugsinpy/index_registry.json"

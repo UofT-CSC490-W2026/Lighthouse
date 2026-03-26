@@ -1,0 +1,21 @@
+models:
+  - "bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0"
+
+context_providers:
+  - "none"
+  - "static:oracle"
+  - "lighthouse"
+
+dataset:
+  adapter: "swebench"
+  source: "princeton-nlp/SWE-bench_Lite"
+  split: "test"
+  max_instances: 50
+
+num_runs: 3
+search_service_url: "http://localhost:8002"
+output_dir: "results/swebench/"
+concurrency: 4
+
+metadata:
+  index_registry: "datasets/swebench/index_registry.json"

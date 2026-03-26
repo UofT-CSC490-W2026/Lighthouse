@@ -1,0 +1,23 @@
+models:
+  - "bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0"
+
+context_providers:
+  - "none"
+  - "static:oracle"
+  - "lighthouse"
+
+dataset:
+  adapter: "crosscodeeval"
+  source: "amazon-science/cceval"
+  split: "test"
+  max_instances: 200
+  options:
+    retrieval_method: "bm25"
+
+num_runs: 3
+search_service_url: "http://localhost:8002"
+output_dir: "results/crosscodeeval/"
+concurrency: 4
+
+metadata:
+  index_registry: "datasets/crosscodeeval/index_registry.json"

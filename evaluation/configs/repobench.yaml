@@ -1,0 +1,21 @@
+models:
+  - "bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0"
+
+context_providers:
+  - "none"
+  - "static:oracle"
+  - "lighthouse"
+
+dataset:
+  adapter: "repobench"
+  source: "tianyang/repobench_python_v1.1"
+  split: "cross_file_first"
+  max_instances: 200
+
+num_runs: 3
+search_service_url: "http://localhost:8002"
+output_dir: "results/repobench/"
+concurrency: 4
+
+metadata:
+  index_registry: "datasets/repobench/index_registry.json"
