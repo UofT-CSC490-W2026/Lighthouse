@@ -11,7 +11,7 @@ DEFAULT_TEST_DIMENSION = 8
 class MockEmbeddingProvider(EmbeddingProvider):
     """Returns deterministic vectors based on text hash. No external API calls."""
 
-    def __init__(self, dimension: int = DEFAULT_TEST_DIMENSION) -> None:
+    def __init__(self, dimension: int = DEFAULT_TEST_DIMENSION, **kwargs) -> None:
         self.dimension = dimension
         self.call_count = 0
         self.last_texts: list[str] = []
