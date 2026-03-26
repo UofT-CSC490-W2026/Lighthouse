@@ -57,7 +57,7 @@ jobs:
           elif coverage >= 70:
               color = "orange"
 
-          readme_block = f"![Coverage](https://img.shields.io/badge/coverage-{percent.replace('%', '%25')}-{color})"
+          readme_block = f"![Test Coverage](https://img.shields.io/badge/test%20coverage-{percent.replace('%', '%25')}-{color})"
 
           pr_body = "\n".join(
               [

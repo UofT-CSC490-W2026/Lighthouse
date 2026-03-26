@@ -2,7 +2,7 @@
 
 <!-- coverage:start -->
 
-![Coverage](https://img.shields.io/badge/coverage-79.34%25-orange)
+![Test Coverage](https://img.shields.io/badge/test%20coverage-79.34%25-orange)
 
 <!-- coverage:end -->
 
