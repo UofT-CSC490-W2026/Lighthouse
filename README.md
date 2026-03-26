@@ -7,9 +7,11 @@ Better context for coding agents.
 ### Test Coverage
 
 <!-- coverage:start -->
+![Coverage](https://img.shields.io/badge/coverage-79.34%25-orange)
 
-Coverage is generated automatically by GitHub Actions on pushes to `main`.
+Current Python test coverage: **79.34%**.
 
+This value is refreshed automatically by GitHub Actions on pushes to `main`.
 <!-- coverage:end -->
 
 ### Repo Structure
