@@ -3,16 +3,15 @@ from __future__ import annotations
 from temporalio import activity
 
 from ...embedding import EmbeddingStrategy, get_embedding_provider
-from ...utilities.config import IngestionSettings
 from ...utilities.services import ChunkService
-from .helpers import make_db
+from .helpers import get_settings, make_db
 from .inputs import EmbedBatchInput
 
 
 @activity.defn
 async def embed_chunk_batch(input: EmbedBatchInput) -> str:
     """Embed a batch of staging chunks and write vectors back."""
-    settings = IngestionSettings()
+    settings = get_settings()
     db = make_db(settings)
     embedder = get_embedding_provider(
         EmbeddingStrategy(input.embedding_strategy),

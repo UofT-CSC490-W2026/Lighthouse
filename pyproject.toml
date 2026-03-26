@@ -14,15 +14,61 @@ members = [
   "packages/vectordb",
   "packages/db",
   "packages/embedding",
-  "evaluation"
+  "evaluation",
+  "packages/testing",
 ]
 
 [dependency-groups]
 dev = [
   "pytest>=9.0.2",
+  "pytest-asyncio>=1.3.0",
+  "pytest-cov>=7.1.0",
   "ruff>=0.15.7",
   "testcontainers[milvus,postgres]>=4.14.2",
+  "testing",
   "ty>=0.0.24",
+]
+
+[tool.uv.sources]
+testing = { workspace = true }
+
+[tool.pytest.ini_options]
+testpaths = [
+  "packages/db/tests",
+  "packages/vectordb/tests",
+  "packages/embedding/tests",
+  "packages/shared/tests",
+  "services/ingestion/tests",
+  "services/search/tests",
+  "services/mcp_server/tests",
+]
+markers = [
+  "unit: Pure unit tests with no external dependencies",
+  "integration: Tests requiring Postgres/Milvus testcontainers",
+  "e2e: End-to-end tests with FastAPI/Temporal",
+]
+asyncio_mode = "auto"
+filterwarnings = [
+  "ignore::DeprecationWarning:testcontainers",
+]
+
+[tool.coverage.run]
+source = [
+  "packages/db/src",
+  "packages/vectordb/src",
+  "packages/embedding/src",
+  "packages/shared/src",
+  "services/ingestion/src",
+  "services/search/src",
+  "services/mcp_server/src",
+]
+
+[tool.coverage.report]
+show_missing = true
+exclude_lines = [
+  "pragma: no cover",
+  "if TYPE_CHECKING:",
+  "raise NotImplementedError",
 ]
 
 [tool.ruff]

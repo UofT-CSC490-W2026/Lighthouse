@@ -9,8 +9,8 @@ from shared.config import MILVUS_COLLECTION_NAME
 from shared.schemas.search import SearchMethod, SearchRequest, SearchResult
 from vectordb import MilvusClient
 
-from embedding import OpenAIEmbeddingProvider
 from search.config import SearchSettings
+from embedding import EmbeddingProvider, OpenAIEmbeddingProvider
 from search.registry import StrategyRegistry
 from search.strategies.hybrid_strategy import HybridSearchStrategy
 
@@ -18,36 +18,46 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    settings = SearchSettings()
+def create_app(
+    settings: SearchSettings | None = None,
+    embedder: EmbeddingProvider | None = None,
+) -> FastAPI:
+    """Factory to create the FastAPI app with optional dependency overrides."""
+    _settings = settings
+    _embedder = embedder
 
-    db_manager = DatabaseManager(settings.postgres_dsn)
-    db_manager.connect()
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        s = _settings or SearchSettings()
 
-    milvus = MilvusClient(
-        uri=settings.milvus_uri,
-        collection_name=MILVUS_COLLECTION_NAME,
-    )
+        db_manager = DatabaseManager(s.postgres_dsn)
+        db_manager.connect()
 
-    embedder = OpenAIEmbeddingProvider(api_key=settings.openai_api_key)
+        milvus = MilvusClient(
+            uri=s.milvus_uri,
+            collection_name=MILVUS_COLLECTION_NAME,
+        )
 
-    registry = StrategyRegistry()
-    registry.register(
-        SearchMethod.hybrid,
-        HybridSearchStrategy(db_manager=db_manager, milvus=milvus, embedder=embedder),
-    )
+        emb = _embedder or OpenAIEmbeddingProvider(api_key=s.openai_api_key)
 
-    app.state.registry = registry
+        registry = StrategyRegistry()
+        registry.register(
+            SearchMethod.hybrid,
+            HybridSearchStrategy(db_manager=db_manager, milvus=milvus, embedder=emb),
+        )
 
-    logger.info("Search service initialized — available methods: %s", registry.available())
-    yield
+        app.state.registry = registry
 
-    milvus.close()
-    db_manager.close()
+        logger.info("Search service initialized — available methods: %s", registry.available())
+        yield
+
+        milvus.close()
+        db_manager.close()
+
+    return FastAPI(title="Lighthouse Search Service", lifespan=lifespan)
 
 
-app = FastAPI(title="Lighthouse Search Service", lifespan=lifespan)
+app = create_app()
 
 
 @app.post("/search", response_model=SearchResult)
@@ -57,7 +67,6 @@ async def search(requests: list[SearchRequest]) -> SearchResult:
 
 @app.get("/search/methods")
 async def list_methods():
-    """List available search methods."""
     registry: StrategyRegistry = app.state.registry
     return {"methods": registry.available()}
 

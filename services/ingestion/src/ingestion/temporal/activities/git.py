@@ -4,15 +4,15 @@ from pathlib import Path
 
 from temporalio import activity
 
-from ...utilities.config import IngestionSettings
 from ...utilities.git_ops import GitOperations
+from .helpers import get_settings
 from .inputs import GetChangedFilesInput, GitCloneFetchInput, GitCloneFetchOutput
 
 
 @activity.defn
 async def git_clone_or_fetch(input: GitCloneFetchInput) -> GitCloneFetchOutput:
     """Clone or fetch a repo and return the path + latest commit."""
-    settings = IngestionSettings()
+    settings = get_settings()
     git = GitOperations(
         base_dir=settings.clone_base_dir,
         github_token=input.github_token,
@@ -28,7 +28,7 @@ async def git_clone_or_fetch(input: GitCloneFetchInput) -> GitCloneFetchOutput:
 @activity.defn
 async def get_changed_files(input: GetChangedFilesInput) -> list[str]:
     """Get the list of changed files between two commits."""
-    settings = IngestionSettings()
+    settings = get_settings()
     git = GitOperations(base_dir=settings.clone_base_dir)
     repo_path = Path(input.repo_path)
     changed = git.get_changed_files(repo_path, input.before_commit, input.after_commit)

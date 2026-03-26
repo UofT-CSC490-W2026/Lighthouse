@@ -13,7 +13,7 @@ from .search_strategy import SearchStrategy
 logger = logging.getLogger(__name__)
 
 
-class HybridSearchStrategy(SearchStrategy[HybridRequest]):
+class HybridSearchStrategy(SearchStrategy[HybridRequest, SearchResult]):
     """Hybrid search combining vector similarity and PostgreSQL full-text search."""
 
     def __init__(
@@ -26,11 +26,11 @@ class HybridSearchStrategy(SearchStrategy[HybridRequest]):
         self.milvus = milvus
         self.embedder = embedder
 
-    async def search(self, payload: HybridRequest) -> SearchResult:
+    async def search(self, request: HybridRequest) -> SearchResult:
         repo_id: str | None = None
         with self.db_manager.connection_context():
             repo = Repository.get_or_none(
-                Repository.github_repo_id == payload.github_repo_id
+                Repository.github_repo_id == request.github_repo_id
             )
             if repo:
                 repo_id = repo.id
@@ -39,18 +39,18 @@ class HybridSearchStrategy(SearchStrategy[HybridRequest]):
         filters: dict[str, str] = {}
         if repo_id:
             filters["repository_id"] = repo_id
-        if payload.branch:
-            filters["branch"] = payload.branch
+        if request.branch:
+            filters["branch"] = request.branch
 
         # 1. Vector search
         vector_results: list[dict] = []
         try:
-            query_embedding = self.embedder.embed_single(payload.query)
+            query_embedding = self.embedder.embed_single(request.query)
             vector_results = [
                 asdict(r)
                 for r in self.milvus.search(
                     query_embedding=query_embedding,
-                    top_k=payload.top_k * 2,
+                    top_k=request.top_k * 2,
                     filters=filters if filters else None,
                 )
             ]
@@ -58,16 +58,16 @@ class HybridSearchStrategy(SearchStrategy[HybridRequest]):
             logger.exception("Vector search failed, falling back to keyword-only")
 
         # 2. Keyword search
-        keyword_results = self._keyword_search(payload, repo_id)
+        keyword_results = self._keyword_search(request, repo_id)
 
         # 3. Reciprocal Rank Fusion
         fused = self._rrf_fusion(vector_results, keyword_results, k=60)
 
         # 4. Get top_k chunk IDs and fetch full content
-        top_chunk_ids = [r["chunk_id"] for r in fused[: payload.top_k]]
+        top_chunk_ids = [r["chunk_id"] for r in fused[: request.top_k]]
 
         if not top_chunk_ids:
-            return SearchResult(snippets=[], query=payload.query, total_results=0)
+            return SearchResult(snippets=[], query=request.query, total_results=0)
 
         # Fetch full chunks from postgres
         with self.db_manager.connection_context():
@@ -97,26 +97,26 @@ class HybridSearchStrategy(SearchStrategy[HybridRequest]):
 
         return SearchResult(
             snippets=snippets,
-            query=payload.query,
+            query=request.query,
             total_results=len(fused),
         )
 
     def _keyword_search(
-        self, payload: HybridRequest, repo_id: str | None
+        self, request: HybridRequest, repo_id: str | None
     ) -> list[dict]:
         """Execute PostgreSQL full-text search on chunks.content."""
         with self.db_manager.connection_context():
             conditions = [
                 "to_tsvector('english', content) @@ plainto_tsquery('english', %s)"
             ]
-            params: list[str] = [payload.query, payload.query]
+            params: list[str] = [request.query, request.query]
 
             if repo_id:
                 conditions.append("repository_id = %s")
                 params.append(repo_id)
-            if payload.branch:
+            if request.branch:
                 conditions.append("branch = %s")
-                params.append(payload.branch)
+                params.append(request.branch)
 
             where_clause = " AND ".join(conditions)
             sql = f"""
@@ -128,7 +128,7 @@ class HybridSearchStrategy(SearchStrategy[HybridRequest]):
                 ORDER BY rank DESC
                 LIMIT %s
             """
-            params.append(str(payload.top_k * 2))
+            params.append(str(request.top_k * 2))
 
             results = []
             for row in Chunk.raw(sql, *params):

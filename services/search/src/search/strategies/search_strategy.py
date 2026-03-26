@@ -5,12 +5,11 @@ from typing import Generic, TypeVar
 
 from pydantic import BaseModel
 
-from shared.schemas.search import SearchResult
+RequestT = TypeVar("RequestT", bound=BaseModel)
+ResultT = TypeVar("ResultT", bound=BaseModel)
 
-T = TypeVar("T", bound=BaseModel)
 
-
-class SearchStrategy(ABC, Generic[T]):
+class SearchStrategy(ABC, Generic[RequestT, ResultT]):
     @abstractmethod
-    async def search(self, payload: T) -> SearchResult:
+    async def search(self, request: RequestT) -> ResultT:
         ...

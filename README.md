@@ -1,5 +1,9 @@
 # Lighthouse
 
+<!-- coverage:start -->
+![Test Coverage](https://img.shields.io/badge/test%20coverage-79.34%25-orange)
+<!-- coverage:end -->
+
 Better context for coding agents.
 
 **Team**: Aarya Prakash, Derek Huynh, Merrick Liu, Rhys Balevicius
@@ -40,3 +44,15 @@ monorepo/
 
 1. Run `docker compose up -d` to start Postgres, Milvus, Temporal, and other services.
 2. For running a `service`, use `uv run --package <service> ...`.
+
+### Running Tests
+
+```shell
+uv run pytest
+
+# Run tests with coverage
+uv run pytest --cov
+
+# Run unit/integration/e2e tests
+uv run pytest -m <unit|integration|e2e>
+```

@@ -11,7 +11,6 @@ class ChunkResult:
     content: str
     start_line: int
     end_line: int
-    language: str | None
     chunk_hash: str
 
 
@@ -19,7 +18,5 @@ class Chunker(ABC):
     """Abstract base class for code chunking strategies."""
 
     @abstractmethod
-    def chunk_file(
-        self, content: str, file_path: str, language: str | None = None
-    ) -> list[ChunkResult]:
+    def chunk_file(self, content: str, file_path: str) -> list[ChunkResult]:
         ...
