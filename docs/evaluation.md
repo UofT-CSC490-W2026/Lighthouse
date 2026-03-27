@@ -19,15 +19,17 @@ Current scope:
 - load a SWE-bench slice from Hugging Face
 - inspect the selected slice
 - prepare SWE-bench Docker images for that slice
+- index SWE-bench repositories into Lighthouse and write a repo registry file
 - generate baseline SWE-bench prediction JSONL with Bedrock
+- generate retrieval-augmented SWE-bench prediction JSONL with Lighthouse
 - evaluate predictions with the official SWE-bench harness
 - summarize harness results in a small human-readable report
 
 Current non-scope:
 
-- Lighthouse retrieval integration
 - result comparison
 - support for datasets other than SWE-bench
+- commit-pinned retrieval instead of branch-based retrieval
 
 ## Design
 
@@ -50,7 +52,9 @@ packages/eval/
     cli.py
     slice.py
     harness.py
+    indexing.py
     bedrock.py
+    lighthouse.py
     prompts.py
     predictions.py
     summary.py
@@ -98,9 +102,23 @@ Harness build logs are written under:
 .cache/eval/swebench_harness/logs/build_images
 ```
 
-### `bedrock.py`, `prompts.py`, and `predictions.py`
+### `indexing.py`
 
-These files make up the current baseline generation path.
+`indexing.py` is the host-side helper for pre-indexing Lighthouse repositories
+for a selected SWE-bench slice.
+
+It:
+
+- resolves the unique repositories referenced by the selected tasks
+- looks up each repo's GitHub repo id and default branch via the GitHub API
+- checks whether that branch is already indexed in Lighthouse
+- submits missing repositories to the ingestion service
+- waits for indexing completion
+- writes a registry JSON file that `generate-lighthouse` can consume later
+
+### `bedrock.py`, `lighthouse.py`, `prompts.py`, and `predictions.py`
+
+These files make up the current generation paths.
 
 `bedrock.py` contains a small Bedrock wrapper that:
 
@@ -120,6 +138,16 @@ It uses only benchmark metadata from the selected task:
 
 `predictions.py` turns model responses into harness-compatible JSONL rows and
 writes them incrementally to disk.
+
+`lighthouse.py` is the retrieval layer for Lighthouse-augmented generation.
+
+It:
+
+- calls the search service at `POST /search`
+- resolves `owner/repo -> github_repo_id, branch` through either:
+  - a repository registry JSON file, or
+  - a single `--github-repo-id` override for one-repo slices
+- builds prompt-ready retrieved context for each SWE-bench task
 
 ### `summary.py`
 
@@ -187,7 +215,9 @@ Available commands today:
 
 - `show-slice`
 - `prepare-images`
+- `index-repos`
 - `generate-baseline`
+- `generate-lighthouse`
 - `evaluate`
 - `summarize`
 
@@ -233,6 +263,47 @@ Supported arguments:
 - `--temperature`
 - `--max-tokens`
 - `--overwrite`
+
+### `index-repos`
+
+Resolve the repositories referenced by a selected SWE-bench slice, submit them
+to Lighthouse ingestion, wait for the requested branches to become indexed, and
+write a repo registry JSON file.
+
+Supported arguments:
+
+- `--dataset-name`
+- `--split`
+- `--max-instances`
+- `--instance-id`
+- `--ingestion-url`
+- `--github-token`
+- `--output`
+- `--status-poll-interval`
+- `--status-timeout-seconds`
+
+### `generate-lighthouse`
+
+Load a selected SWE-bench slice, retrieve code context from Lighthouse, and
+generate one prediction per task with Bedrock.
+
+Supported arguments:
+
+- `--dataset-name`
+- `--split`
+- `--max-instances`
+- `--instance-id`
+- `--model`
+- `--output`
+- `--region-name`
+- `--temperature`
+- `--max-tokens`
+- `--overwrite`
+- `--search-url`
+- `--repo-registry`
+- `--github-repo-id`
+- `--branch`
+- `--top-k`
 
 ### `evaluate`
 
@@ -494,7 +565,118 @@ Then verify the file has three rows:
 wc -l .cache/eval/runs/baseline-3.jsonl
 ```
 
-### 5. Evaluate Predictions
+### 5. Index Repositories For Lighthouse
+
+Before using Lighthouse retrieval, pre-index the repositories referenced by the
+selected SWE-bench slice.
+
+For the full SWE-bench Lite `test` split, run:
+
+```bash
+uv run --package eval python -m eval.cli index-repos \
+  --ingestion-url http://localhost:8001 \
+  --output .cache/eval/repo-registry.json
+```
+
+For just the current 3-instance smoke slice:
+
+```bash
+uv run --package eval python -m eval.cli index-repos \
+  --max-instances 3 \
+  --ingestion-url http://localhost:8001 \
+  --output .cache/eval/repo-registry.json
+```
+
+Expected output shape:
+
+```text
+SWE-bench slice: ... instance(s) from princeton-nlp/SWE-bench_Lite [test]
+...
+Resolving GitHub metadata for astropy/astropy
+    resolved -> github_repo_id=..., branch=main
+Submitting ... repository indexing request(s)
+Accepted workflows: index-...
+Index status: astropy/astropy@main -> ...
+Index status: astropy/astropy@main -> indexed
+Repository registry: .cache/eval/repo-registry.json
+```
+
+The resulting registry file is the input you can reuse for later
+`generate-lighthouse` runs.
+
+### 6. Generate Lighthouse-Augmented Predictions
+
+Before using Lighthouse retrieval, make sure:
+
+- the search service is running
+- the repository for the selected SWE-bench tasks has already been indexed
+- you know either:
+  - the indexed repository's `github_repo_id`, or
+  - a registry file that maps `owner/repo` to `github_repo_id` and `branch`
+
+For a single-repository slice, the smallest manual test is to pass the GitHub
+repo id directly:
+
+```bash
+uv run --package eval python -m eval.cli generate-lighthouse \
+  --instance-id astropy__astropy-12907 \
+  --github-repo-id <github-repo-id> \
+  --branch main \
+  --search-url http://localhost:8002 \
+  --output .cache/eval/runs/lighthouse-1.jsonl
+```
+
+For multi-repository slices, use a registry JSON file. The simplest supported
+format is:
+
+```json
+{
+  "astropy/astropy": {
+    "github_repo_id": 123456,
+    "branch": "main"
+  }
+}
+```
+
+and then:
+
+```bash
+uv run --package eval python -m eval.cli generate-lighthouse \
+  --max-instances 3 \
+  --repo-registry .cache/eval/repo-registry.json \
+  --search-url http://localhost:8002 \
+  --output .cache/eval/runs/lighthouse-3.jsonl
+```
+
+Expected output shape:
+
+```text
+SWE-bench slice: 1 instance(s) from princeton-nlp/SWE-bench_Lite [test]
+1. astropy__astropy-12907
+   repo: astropy/astropy
+   base_commit: ...
+   version: ...
+Model: bedrock/us.amazon.nova-lite-v1:0
+Bedrock region: us-east-1
+Search service URL: http://localhost:8002
+GitHub repo id override: ...
+Branch override: main
+Output file: .cache/eval/runs/lighthouse-1.jsonl
+[1/1] Retrieving Lighthouse context for astropy__astropy-12907
+    repo target: astropy/astropy (github_repo_id=..., branch=main)
+    retrieved ... snippet(s)
+[1/1] Generating Lighthouse patch for astropy__astropy-12907
+    wrote ... patch chars
+Wrote 1 prediction(s) to .cache/eval/runs/lighthouse-1.jsonl
+```
+
+Then inspect the file directly:
+
+```bash
+sed -n '1,5p' .cache/eval/runs/lighthouse-1.jsonl
+```
+
+### 7. Evaluate Predictions
 
 Once you have a predictions file, run the official SWE-bench harness through
 the new wrapper.
@@ -575,7 +757,7 @@ uv run --package eval python -m eval.cli evaluate \
   --max-workers 1
 ```
 
-### 6. Summarize A Completed Run
+### 8. Summarize A Completed Run
 
 Once an evaluation has finished, you can print a compact summary without
 opening the raw harness JSON files manually.
@@ -646,6 +828,17 @@ For example:
 
 ```text
 .cache/eval/runs/baseline-1.jsonl
+```
+
+### Repo Registry Files
+
+The indexing command writes a JSON registry that maps `owner/repo` to
+`github_repo_id` and `branch`.
+
+For example:
+
+```text
+.cache/eval/repo-registry.json
 ```
 
 ### Evaluation Reports
@@ -723,6 +916,42 @@ works.
 
 If you previously ran the command with the older raw foundation-model id, rerun
 with `--overwrite` or remove the previous output file first.
+
+### Repository Indexing Fails
+
+Check that:
+
+- the ingestion service is running
+- the GitHub metadata lookup can reach `api.github.com`
+- the indexing branch eventually reaches `indexed`
+
+Useful checks:
+
+```bash
+curl -s http://localhost:8001/health
+curl -s https://api.github.com/repos/astropy/astropy
+```
+
+### Lighthouse Generation Fails Before Writing Any Predictions
+
+Check that:
+
+- the search service is running
+- the selected repository has already been indexed
+- you supplied either `--repo-registry` or `--github-repo-id`
+
+Useful checks:
+
+```bash
+curl -s http://localhost:8002/health
+curl -s http://localhost:8002/search/methods
+```
+
+If you are using a registry file, validate that it contains the selected repo:
+
+```bash
+sed -n '1,80p' .cache/eval/repo-registry.json
+```
 
 ### Evaluation Fails Before Any Instance Runs
 
