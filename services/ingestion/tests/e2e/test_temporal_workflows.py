@@ -544,6 +544,43 @@ class TestIncrementalIndexWorkflow:
         assert any(s.status == "failed" for s in status_calls)
         assert "cleanup_staging" in names
 
+    async def test_publish_failure_before_switch_never_runs_stale_cleanup(
+        self, workflow_environment
+    ):
+        tracker = ActivityTracker(
+            chunk_count=5,
+            changed_files=["a.py"],
+            fail_on="publish_staged_chunks",
+        )
+        queue = _queue()
+        async with Worker(
+            workflow_environment.client,
+            task_queue=queue,
+            workflows=[IncrementalIndexWorkflow],
+            activities=make_mock_activities(tracker),
+            workflow_runner=UnsandboxedWorkflowRunner(),
+        ):
+            with pytest.raises(WorkflowFailureError):
+                await workflow_environment.client.execute_workflow(
+                    IncrementalIndexWorkflow.run,
+                    IncrementalIndexInput(
+                        github_repo_id=1,
+                        full_name="o/r",
+                        branch="main",
+                        before_commit="aaa11111",
+                        after_commit="bbb22222",
+                    ),
+                    id=f"test-{uuid.uuid4().hex[:8]}",
+                    task_queue=queue,
+                )
+
+        names = _activity_names(tracker)
+        assert "publish_staged_chunks" in names
+        assert "cleanup_staging" in names
+        assert "cleanup_inactive_chunks" not in names
+        status_calls = [inp for name, inp in tracker.calls if name == "update_branch_status"]
+        assert status_calls[-1].status == "failed"
+
     async def test_cleanup_inactive_failure_does_not_fail_workflow(
         self, workflow_environment
     ):

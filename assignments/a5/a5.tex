@@ -421,6 +421,67 @@ Silent parameter drops would cause production failures with no error signal.
 % • The test cases you created to prevent this bug from reoccurring
 % Link your video in your a5.pdf
 
-Ingestion service. First one was incremental index gap. Second one was incremental index failure after delete what happens.
+One of the most instructive parts of Lighthouse to debug was the ingestion pipeline,
+because it sits directly between repository updates and user-visible search results.
+At a high level, the ingestion service is responsible for cloning repositories,
+chunking changed files, generating embeddings, and persisting searchable chunks into
+Postgres and Milvus. The search service then performs hybrid retrieval over those two
+stores. This means that any mistake in the orchestration logic of the incremental
+indexing workflow in \texttt{services/ingestion/src/ingestion/temporal/workflows/incremental.py}
+immediately affects what the user can and cannot retrieve through search. We discovered
+both bugs in this section in the same way: by rereading the workflow carefully and
+thinking through edge cases, especially failure ordering and visibility semantics.
+
+The first memorable bug was a \textbf{temporary gap in searchable data during
+incremental indexing}. The original incremental workflow deleted all chunks for the
+changed files first, and only after that did it chunk the updated files, embed the
+new chunks, and store them back into the final search indices. That meant there was a
+window of time in which a file that had merely been modified would disappear from
+search entirely, even though a new version of that file was in the process of being
+indexed. We discovered this bug by simply reading the orchestration steps in order:
+the code deleted old chunks before preparing the replacements, so the gap was obvious
+once we asked ourselves what search would see in between those two steps. Debugging it
+was therefore unusually straightforward. We did not need a long exploratory debugging
+session or complicated logging; the control flow itself made the issue clear. To
+confirm the reasoning, we wrote tests around the new publish path rather than relying
+only on inspection. In particular,
+\texttt{TestPublishStagedChunks.test\_switches\_active\_publish\_without\_deleting\_old\_rows}
+now verifies that a new publish becomes active before the stale rows are cleaned up,
+so there is no interval in which the changed file vanishes from search. The fix was
+to move from a delete-then-rebuild model to a publish-and-switch model using
+\texttt{publish\_id} and \texttt{indexed\_files.active\_publish\_id}. The main lesson
+was that in a search pipeline, correctness is not just about eventually producing the
+right data; it is also about what is visible at every intermediate step.
+
+The second memorable bug was more serious: a \textbf{catastrophic deletion path in the
+same incremental workflow}. In the original design, the workflow deleted the existing
+chunks for changed files before the replacement publish had succeeded. If anything
+failed afterward---for example, during chunking, embedding, or storage---the workflow
+marked the branch as failed and cleaned up staging, but it never restored the old
+chunks that had already been deleted. In effect, a transient failure could permanently
+remove previously searchable files until some later successful re-index happened to
+recreate them. Again, we discovered the bug by rereading the code and thinking through
+the unhappy path. Once we saw that deletion happened early and rollback did not exist,
+the consequence was immediate: a failed incremental run could leave the system in a
+worse state than before it started. The debugging process was still simple because the
+workflow logic was easy to follow; we knew the issue was there from inspection, and we
+then confirmed it with tests. We now have an explicit regression test,
+\texttt{test\_publish\_failure\_before\_switch\_never\_runs\_stale\_cleanup}, which
+verifies that if publishing fails before visibility is switched, the workflow fails,
+cleans up staging, and never proceeds into stale-data cleanup. This works together
+with the integration tests for \texttt{publish\_staged\_chunks}, which verify that the
+active publish is only updated on success. The fix was therefore the same architectural
+change as above: do not make old data invisible until the new data is fully ready.
+What we learned from this bug was that failure handling in orchestration code must be
+designed around preserving the last known-good user-visible state, not merely cleaning
+up intermediate artifacts.
+
+Together, these two bugs taught us an important engineering lesson about distributed
+orchestration code. Even when each individual activity is simple, the ordering between
+activities can create subtle but severe user-facing failures. In our case, the code
+was readable enough that the bugs were visible through careful inspection, but we still
+needed tests to lock in the intended behavior. The resulting regression tests now
+protect both the no-gap visibility property and the no-catastrophic-deletion property
+of incremental indexing, which makes the ingestion and search pipeline much more robust.
 
 \end{document}
