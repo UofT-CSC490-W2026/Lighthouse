@@ -163,10 +163,10 @@ interfaces, and documentation.\\
 
 The system is composed of several services: an \textbf{ingestion service} that clones
 repositories, chunks source files, generates embeddings, and stores them in Postgres
-and Milvus via Temporal workflows; a \textbf{search service} that implements retrieval
+and Milvus (vector database) via Temporal (distributed, durable execution solution) workflows; a \textbf{search service} that implements retrieval
 strategies (e.g.\ hybrid search combining dense vector similarity with sparse keyword
 matching); an \textbf{MCP server} that exposes search as MCP tools consumable by coding
-agents; and a \textbf{web service} for management and visualization.
+agents; and a \textbf{web service} for management and visualization (currently used for debugging).
 
 \subsection{Current State}
 
@@ -186,6 +186,40 @@ returned to coding agents. However, several areas are still in active developmen
     AST-aware chunking), and embedding models to improve retrieval quality beyond
     our current baseline.
 \end{itemize}
+
+\subsection{Tech \& Testing Stack}
+
+\begin{itemize}
+  \item \texttt{ingestion} --- A Python 3.11 service built with FastAPI and Temporal.
+    It uses GitPython for repository cloning, our shared workspace packages
+    (\texttt{shared}, \texttt{db}, \texttt{vectordb}, and \texttt{embedding}) for
+    schemas and storage, and implements the indexing pipeline including chunking,
+    embedding generation, and workflow orchestration.
+  \item \texttt{search} --- A Python 3.11 FastAPI service that implements retrieval
+    logic. It uses the same shared workspace packages as the ingestion service and
+    contains our search strategies, including hybrid search over Postgres and Milvus.
+  \item \texttt{mcp\_server} --- A Python 3.11 service built with FastAPI and
+    FastMCP. It exposes Lighthouse functionality as MCP and HTTP endpoints for coding
+    agents, and also uses \texttt{httpx}, \texttt{cryptography}, \texttt{asyncpg},
+    and \texttt{boto3} for integration with authentication, persistence, and external
+    services.
+  \item \texttt{web} --- A TypeScript frontend built with React 19 and Vite. It uses
+    React Router for navigation, SWR for client-side data fetching, and Tailwind CSS
+    for styling; at the moment it primarily serves as an internal debugging and
+    management UI.
+\end{itemize}
+
+For testing, our backend stack is centered on \texttt{pytest}, with tests organized
+into \texttt{unit}, \texttt{integration}, and \texttt{e2e} markers. We use
+\texttt{pytest-asyncio} for async service and API tests, and \texttt{pytest-cov} to
+measure line coverage across the Python services and shared packages. For
+infrastructure-dependent tests, we use \texttt{testcontainers} to provision isolated
+Postgres and Milvus instances during test runs instead of depending on shared
+developer machines. Since Temporal is a core part of the ingestion pipeline, we also
+use Temporal Python SDK testing utilities such as
+\texttt{temporalio.testing.WorkflowEnvironment} and
+\texttt{ActivityEnvironment} to test workflow orchestration and activities in a
+deterministic local environment.
 
 % ================================================================================
 \section{Profiling Execution time}
