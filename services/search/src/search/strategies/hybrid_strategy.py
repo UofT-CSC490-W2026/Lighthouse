@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import logging
+import operator
 from dataclasses import asdict
+from functools import reduce
+from typing import cast
 
-from db import Chunk, DatabaseManager, Repository
+from db import Chunk, DatabaseManager, IndexedFile, Repository
 from embedding import EmbeddingProvider
 from shared.schemas.search import CodeSnippet, SearchRequest, SearchResult
 from vectordb import MilvusClient
@@ -15,6 +18,8 @@ logger = logging.getLogger(__name__)
 
 class HybridSearchStrategy(SearchStrategy[SearchRequest, SearchResult]):
     """Hybrid search combining vector similarity and PostgreSQL full-text search."""
+
+    VECTOR_OVERFETCH_MULTIPLIER = 4
 
     def __init__(
         self,
@@ -46,14 +51,17 @@ class HybridSearchStrategy(SearchStrategy[SearchRequest, SearchResult]):
         vector_results: list[dict] = []
         try:
             query_embedding = self.embedder.embed_single(request.query)
-            vector_results = [
+            raw_vector_results = [
                 asdict(r)
                 for r in self.milvus.search(
                     query_embedding=query_embedding,
-                    top_k=request.top_k * 2,
+                    # Over-fetch because stale-publish hits may be filtered out
+                    # before fusion.
+                    top_k=request.top_k * self.VECTOR_OVERFETCH_MULTIPLIER,
                     filters=filters if filters else None,
                 )
             ]
+            vector_results = self._filter_vector_results(raw_vector_results)
         except Exception:
             logger.exception("Vector search failed, falling back to keyword-only")
 
@@ -109,24 +117,36 @@ class HybridSearchStrategy(SearchStrategy[SearchRequest, SearchResult]):
             # Build raw SQL for full-text search (Peewee's ORM doesn't
             # handle tsvector/tsquery parameterization cleanly)
             conditions = [
-                "to_tsvector('english', content) @@ plainto_tsquery('english', %s)"
+                "to_tsvector('english', chunks.content) @@ plainto_tsquery('english', %s)"
             ]
             params: list[str] = [request.query, request.query]  # one for WHERE, one for ts_rank
 
             if repo_id:
-                conditions.append("repository_id = %s")
+                conditions.append("chunks.repository_id = %s")
                 params.append(repo_id)
             if request.branch:
-                conditions.append("branch = %s")
+                conditions.append("chunks.branch = %s")
                 params.append(request.branch)
 
             where_clause = " AND ".join(conditions)
             sql = f"""
-                SELECT id, file_path,
-                       ts_rank(to_tsvector('english', content),
+                SELECT chunks.id, chunks.file_path,
+                       ts_rank(to_tsvector('english', chunks.content),
                                plainto_tsquery('english', %s)) as rank
                 FROM chunks
+                LEFT JOIN indexed_files
+                  ON indexed_files.repository_id = chunks.repository_id
+                 AND indexed_files.branch_name = chunks.branch
+                 AND indexed_files.file_path = chunks.file_path
                 WHERE {where_clause}
+                  AND (
+                    (indexed_files.active_publish_id IS NOT NULL
+                     AND chunks.publish_id = indexed_files.active_publish_id)
+                    OR
+                    (indexed_files.active_publish_id IS NULL
+                     AND indexed_files.id IS NULL
+                     AND chunks.publish_id = 'legacy')
+                  )
                 ORDER BY rank DESC
                 LIMIT %s
             """
@@ -141,6 +161,67 @@ class HybridSearchStrategy(SearchStrategy[SearchRequest, SearchResult]):
                     }
                 )
             return results
+
+    def _filter_vector_results(self, vector_results: list[dict]) -> list[dict]:
+        if not vector_results:
+            return []
+
+        active_publish_by_file = self._get_active_publish_map(
+            [
+                cast(tuple[str, str, str], (r["repository_id"], r["branch"], r["file_path"]))
+                for r in vector_results
+            ]
+        )
+
+        filtered = []
+        for result in vector_results:
+            key = cast(
+                tuple[str, str, str],
+                (result["repository_id"], result["branch"], result["file_path"]),
+            )
+            if key not in active_publish_by_file:
+                if result["publish_id"] == "legacy":
+                    filtered.append(result)
+                continue
+
+            active_publish_id = active_publish_by_file[key]
+            if active_publish_id is None:
+                continue
+
+            if result["publish_id"] == active_publish_id:
+                filtered.append(result)
+
+        return filtered
+
+    def _get_active_publish_map(
+        self, file_keys: list[tuple[str, str, str]]
+    ) -> dict[tuple[str, str, str], str | None]:
+        if not file_keys:
+            return {}
+
+        with self.db_manager.connection_context():
+            predicate = reduce(
+                operator.or_,
+                (
+                    (IndexedFile.repository == repository_id)
+                    & (IndexedFile.branch_name == branch)
+                    & (IndexedFile.file_path == file_path)
+                    for repository_id, branch, file_path in file_keys
+                ),
+            )
+            rows = (
+                IndexedFile.select(
+                    IndexedFile.repository,
+                    IndexedFile.branch_name,
+                    IndexedFile.file_path,
+                    IndexedFile.active_publish_id,
+                )
+                .where(predicate)
+            )
+            return {
+                (row.repository_id, row.branch_name, row.file_path): row.active_publish_id
+                for row in rows
+            }
 
     @staticmethod
     def _rrf_fusion(

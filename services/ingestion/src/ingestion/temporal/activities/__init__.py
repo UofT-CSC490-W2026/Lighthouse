@@ -1,5 +1,6 @@
 from .inputs import (
     EMBED_BATCH_SIZE,
+    CleanupInactiveChunksInput,
     ChunkFilesInput,
     ChunkFilesOutput,
     CleanupStagingInput,
@@ -7,12 +8,15 @@ from .inputs import (
     DeleteChunksInput,
     EmbedBatchInput,
     EnsureRepoInput,
+    FilePublishCleanup,
     GetChangedFilesInput,
     GitCloneFetchInput,
     GitCloneFetchOutput,
     IncrementalIndexInput,
     IndexBranchInput,
     IndexRepoInput,
+    PublishStagedChunksInput,
+    PublishStagedChunksOutput,
     StoreChunksInput,
     UpdateBranchStatusInput,
 )
@@ -21,12 +25,20 @@ from .chunking import chunk_files
 from .embedding import embed_chunk_batch
 from .git import get_changed_files, git_clone_or_fetch
 from .repository import ensure_repository_record
-from .storage import cleanup_staging, delete_chunks_for_files, delete_existing_chunks, store_chunks
+from .storage import (
+    cleanup_inactive_chunks,
+    cleanup_staging,
+    delete_chunks_for_files,
+    delete_existing_chunks,
+    publish_staged_chunks,
+    store_chunks,
+)
 
 __all__ = [
     # Constants
     "EMBED_BATCH_SIZE",
     # Input/Output dataclasses
+    "CleanupInactiveChunksInput",
     "ChunkFilesInput",
     "ChunkFilesOutput",
     "CleanupStagingInput",
@@ -34,16 +46,20 @@ __all__ = [
     "DeleteChunksInput",
     "EmbedBatchInput",
     "EnsureRepoInput",
+    "FilePublishCleanup",
     "GetChangedFilesInput",
     "GitCloneFetchInput",
     "GitCloneFetchOutput",
     "IncrementalIndexInput",
     "IndexBranchInput",
     "IndexRepoInput",
+    "PublishStagedChunksInput",
+    "PublishStagedChunksOutput",
     "StoreChunksInput",
     "UpdateBranchStatusInput",
     # Activities
     "chunk_files",
+    "cleanup_inactive_chunks",
     "cleanup_staging",
     "delete_chunks_for_files",
     "delete_existing_chunks",
@@ -51,6 +67,7 @@ __all__ = [
     "ensure_repository_record",
     "get_changed_files",
     "git_clone_or_fetch",
+    "publish_staged_chunks",
     "store_chunks",
     "update_branch_status",
 ]

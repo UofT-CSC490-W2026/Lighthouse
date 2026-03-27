@@ -11,29 +11,34 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-from db import Chunk, IndexedBranch, Repository, StagingChunk
+from db import Chunk, IndexedBranch, IndexedFile, Repository, StagingChunk
 
 from ingestion.temporal.activities.branch import update_branch_status
 from ingestion.temporal.activities.chunking import chunk_files
 from ingestion.temporal.activities.embedding import embed_chunk_batch
 from ingestion.temporal.activities.git import get_changed_files, git_clone_or_fetch
 from ingestion.temporal.activities.inputs import (
+    CleanupInactiveChunksInput,
     ChunkFilesInput,
     CleanupStagingInput,
     DeleteChunksForFilesInput,
     DeleteChunksInput,
     EmbedBatchInput,
     EnsureRepoInput,
+    FilePublishCleanup,
     GetChangedFilesInput,
     GitCloneFetchInput,
+    PublishStagedChunksInput,
     StoreChunksInput,
     UpdateBranchStatusInput,
 )
 from ingestion.temporal.activities.repository import ensure_repository_record
 from ingestion.temporal.activities.storage import (
+    cleanup_inactive_chunks,
     cleanup_staging,
     delete_chunks_for_files,
     delete_existing_chunks,
+    publish_staged_chunks,
     store_chunks,
 )
 from testing_utils.factories import create_repository, create_staging_chunk
@@ -435,6 +440,212 @@ class TestStoreChunks:
                 .count()
                 == 0
             )
+            assert Chunk.get(Chunk.repository == repo).publish_id == "legacy"
+
+
+# ---------------------------------------------------------------------------
+# publish_staged_chunks
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+class TestPublishStagedChunks:
+    async def test_switches_active_publish_without_deleting_old_rows(
+        self, activity_environment, db_manager, milvus_client, inject_settings
+    ):
+        repo = create_repository(db_manager)
+        old_publish_id = "legacy"
+        with db_manager.connection_context():
+            Chunk.create(
+                repository=repo,
+                branch="main",
+                file_path="file0.py",
+                start_line=1,
+                end_line=5,
+                content="old chunk",
+                chunk_hash="old-hash",
+                publish_id=old_publish_id,
+            )
+            IndexedFile.create(
+                repository=repo,
+                branch_name="main",
+                file_path="file0.py",
+                active_publish_id=old_publish_id,
+            )
+
+        milvus_client.insert(
+            [
+                {
+                    "id": "legacy-file0",
+                    "chunk_id": "legacy-file0",
+                    "embedding": [0.1] * TEST_DIM,
+                    "repository_id": repo.id,
+                    "file_path": "file0.py",
+                    "branch": "main",
+                    "publish_id": old_publish_id,
+                }
+            ]
+        )
+
+        batch_id = str(uuid.uuid4())
+        create_staging_chunk(
+            db_manager,
+            batch_id=batch_id,
+            seq_index=0,
+            repository_id=repo.id,
+            file_path="file0.py",
+            content="new chunk",
+            embedding=json.dumps([0.2] * TEST_DIM).encode("utf-8"),
+        )
+        with db_manager.connection_context():
+            IndexedFile.create(
+                repository=repo,
+                branch_name="main",
+                file_path="deleted.py",
+                active_publish_id=old_publish_id,
+            )
+
+        with patch(
+            "ingestion.temporal.activities.helpers.EMBEDDING_DIMENSION",
+            TEST_DIM,
+        ), patch(
+            "ingestion.temporal.activities.helpers.MILVUS_COLLECTION_NAME",
+            "test_embeddings",
+        ):
+            result = await activity_environment.run(
+                publish_staged_chunks,
+                PublishStagedChunksInput(
+                    batch_id=batch_id,
+                    repository_id=repo.id,
+                    branch="main",
+                    changed_files=["file0.py", "deleted.py"],
+                ),
+            )
+
+        _reconnect(db_manager)
+        with db_manager.connection_context():
+            active_file = IndexedFile.get(
+                IndexedFile.repository == repo,
+                IndexedFile.branch_name == "main",
+                IndexedFile.file_path == "file0.py",
+            )
+            hidden_file = IndexedFile.get(
+                IndexedFile.repository == repo,
+                IndexedFile.branch_name == "main",
+                IndexedFile.file_path == "deleted.py",
+            )
+            assert active_file.active_publish_id == batch_id
+            assert hidden_file.active_publish_id is None
+            assert (
+                Chunk.select()
+                .where(Chunk.repository == repo, Chunk.file_path == "file0.py")
+                .count()
+                == 2
+            )
+            assert (
+                StagingChunk.select()
+                .where(StagingChunk.batch_id == batch_id)
+                .count()
+                == 0
+            )
+
+        assert {target.file_path for target in result.cleanup_targets} == {
+            "file0.py",
+            "deleted.py",
+        }
+
+
+# ---------------------------------------------------------------------------
+# cleanup_inactive_chunks
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+class TestCleanupInactiveChunks:
+    async def test_deletes_only_stale_publish(
+        self, activity_environment, db_manager, milvus_client, inject_settings
+    ):
+        repo = create_repository(db_manager)
+        with db_manager.connection_context():
+            Chunk.create(
+                id="legacy-id",
+                repository=repo,
+                branch="main",
+                file_path="file0.py",
+                start_line=1,
+                end_line=5,
+                content="old chunk",
+                chunk_hash="old-hash",
+                publish_id="legacy",
+            )
+            Chunk.create(
+                id="new-id",
+                repository=repo,
+                branch="main",
+                file_path="file0.py",
+                start_line=1,
+                end_line=5,
+                content="new chunk",
+                chunk_hash="new-hash",
+                publish_id="batch-123",
+            )
+
+        milvus_client.insert(
+            [
+                {
+                    "id": "legacy-id",
+                    "chunk_id": "legacy-id",
+                    "embedding": [0.1] * TEST_DIM,
+                    "repository_id": repo.id,
+                    "file_path": "file0.py",
+                    "branch": "main",
+                    "publish_id": "legacy",
+                },
+                {
+                    "id": "new-id",
+                    "chunk_id": "new-id",
+                    "embedding": [0.2] * TEST_DIM,
+                    "repository_id": repo.id,
+                    "file_path": "file0.py",
+                    "branch": "main",
+                    "publish_id": "batch-123",
+                },
+            ]
+        )
+
+        with patch(
+            "ingestion.temporal.activities.helpers.EMBEDDING_DIMENSION",
+            TEST_DIM,
+        ), patch(
+            "ingestion.temporal.activities.helpers.MILVUS_COLLECTION_NAME",
+            "test_embeddings",
+        ):
+            deleted = await activity_environment.run(
+                cleanup_inactive_chunks,
+                CleanupInactiveChunksInput(
+                    repository_id=repo.id,
+                    branch="main",
+                    cleanup_targets=[
+                        FilePublishCleanup(
+                            file_path="file0.py",
+                            previous_publish_id="legacy",
+                        )
+                    ],
+                ),
+            )
+
+        assert deleted == 1
+        _reconnect(db_manager)
+        with db_manager.connection_context():
+            remaining = list(
+                Chunk.select().where(
+                    Chunk.repository == repo,
+                    Chunk.branch == "main",
+                    Chunk.file_path == "file0.py",
+                )
+            )
+            assert len(remaining) == 1
+            assert remaining[0].publish_id == "batch-123"
 
 
 # ---------------------------------------------------------------------------

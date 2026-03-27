@@ -1,6 +1,6 @@
 import pytest
 from peewee import IntegrityError
-from db import IndexedBranch, Chunk, StagingChunk, Repository, DatabaseManager
+from db import Chunk, IndexedBranch, IndexedFile, Repository, StagingChunk
 
 @pytest.mark.integration
 class TestIndexedBranch:
@@ -50,6 +50,7 @@ class TestChunkModel:
             )
             assert chunk.id is not None
             assert chunk.language is None
+            assert chunk.publish_id == "legacy"
 
     def test_cascade_on_repo_delete(self, db_manager):
         repo = self._make_repo(db_manager, "c2")
@@ -57,6 +58,22 @@ class TestChunkModel:
             Chunk.create(repository=repo, branch="main", file_path="t.py", start_line=1, end_line=1, content="x", chunk_hash="h")
             repo.delete_instance()
             assert Chunk.select().count() == 0
+
+@pytest.mark.integration
+class TestIndexedFileModel:
+    def _make_repo(self, db_manager, suffix=""):
+        with db_manager.connection_context():
+            return Repository.create(
+                github_repo_id=5000 + hash(suffix) % 1000, full_name=f"o/f{suffix}",
+                repo_url="u", display_name="r", owner_login="o", owner_type="User",
+            )
+
+    def test_unique_repo_branch_file(self, db_manager):
+        repo = self._make_repo(db_manager, "f1")
+        with db_manager.connection_context():
+            IndexedFile.create(repository=repo, branch_name="main", file_path="a.py")
+            with pytest.raises(IntegrityError):
+                IndexedFile.create(repository=repo, branch_name="main", file_path="a.py")
 
 @pytest.mark.integration
 class TestStagingChunkModel:

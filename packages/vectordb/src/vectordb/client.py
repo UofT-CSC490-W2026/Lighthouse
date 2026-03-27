@@ -16,6 +16,7 @@ class CollectionField(StrEnum):
     REPOSITORY_ID = "repository_id"
     FILE_PATH = "file_path"
     BRANCH = "branch"
+    PUBLISH_ID = "publish_id"
 
 
 @dataclass
@@ -25,6 +26,7 @@ class MilvusSearchResult:
     repository_id: str
     file_path: str
     branch: str
+    publish_id: str
 
 
 class MilvusClient:
@@ -59,6 +61,7 @@ class MilvusClient:
         )
         schema.add_field(CollectionField.FILE_PATH, DataType.VARCHAR, max_length=512)
         schema.add_field(CollectionField.BRANCH, DataType.VARCHAR, max_length=128)
+        schema.add_field(CollectionField.PUBLISH_ID, DataType.VARCHAR, max_length=128)
 
         # Define indices here.
         index_params = self._client.prepare_index_params()
@@ -78,7 +81,8 @@ class MilvusClient:
     def insert(self, records: list[dict]) -> None:
         """Batch insert records into the collection.
 
-        Each record should have: id, chunk_id, embedding, repository_id, file_path, branch
+        Each record should have:
+        id, chunk_id, embedding, repository_id, file_path, branch, publish_id
         (see CollectionField for shared constants).
         """
         if not records:
@@ -103,6 +107,7 @@ class MilvusClient:
                 CollectionField.REPOSITORY_ID,
                 CollectionField.FILE_PATH,
                 CollectionField.BRANCH,
+                CollectionField.PUBLISH_ID,
             ],
             filter=filter_expr if filter_expr else "",
             search_params={"metric_type": "COSINE", "params": {"ef": 128}},
@@ -119,6 +124,7 @@ class MilvusClient:
                         repository_id=entity[CollectionField.REPOSITORY_ID],
                         file_path=entity[CollectionField.FILE_PATH],
                         branch=entity[CollectionField.BRANCH],
+                        publish_id=entity[CollectionField.PUBLISH_ID],
                     )
                 )
         return hits

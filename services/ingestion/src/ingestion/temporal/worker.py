@@ -15,6 +15,7 @@ from ..utilities import IngestionSettings
 
 from .activities import (
     chunk_files,
+    cleanup_inactive_chunks,
     cleanup_staging,
     delete_chunks_for_files,
     delete_existing_chunks,
@@ -22,6 +23,7 @@ from .activities import (
     ensure_repository_record,
     get_changed_files,
     git_clone_or_fetch,
+    publish_staged_chunks,
     store_chunks,
     update_branch_status,
 )
@@ -62,6 +64,8 @@ async def main() -> None:
             delete_existing_chunks,
             delete_chunks_for_files,
             embed_chunk_batch,
+            publish_staged_chunks,
+            cleanup_inactive_chunks,
             store_chunks,
             cleanup_staging,
         ],

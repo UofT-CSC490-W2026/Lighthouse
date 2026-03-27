@@ -34,6 +34,7 @@ class TestMilvusClientIntegration:
                 "repository_id": "repo-1",
                 "file_path": f"file{i}.py",
                 "branch": "main",
+                "publish_id": "legacy",
             }
             for i, emb in enumerate(embeddings)
         ]
@@ -52,9 +53,9 @@ class TestMilvusClientIntegration:
         embs = embedder.embed_batch(["text1", "text2"])
         milvus_client.insert([
             {"id": str(uuid.uuid4()), "chunk_id": "c1", "embedding": embs[0],
-             "repository_id": "r1", "file_path": "f.py", "branch": "main"},
+             "repository_id": "r1", "file_path": "f.py", "branch": "main", "publish_id": "legacy"},
             {"id": str(uuid.uuid4()), "chunk_id": "c2", "embedding": embs[1],
-             "repository_id": "r2", "file_path": "f.py", "branch": "main"},
+             "repository_id": "r2", "file_path": "f.py", "branch": "main", "publish_id": "legacy"},
         ])
         _flush(milvus_client)
 
@@ -69,9 +70,9 @@ class TestMilvusClientIntegration:
         embs = embedder.embed_batch(["a", "b"])
         milvus_client.insert([
             {"id": str(uuid.uuid4()), "chunk_id": "d1", "embedding": embs[0],
-             "repository_id": "r1", "file_path": "f.py", "branch": "main"},
+             "repository_id": "r1", "file_path": "f.py", "branch": "main", "publish_id": "legacy"},
             {"id": str(uuid.uuid4()), "chunk_id": "d2", "embedding": embs[1],
-             "repository_id": "r2", "file_path": "f.py", "branch": "main"},
+             "repository_id": "r2", "file_path": "f.py", "branch": "main", "publish_id": "legacy"},
         ])
         _flush(milvus_client)
 
