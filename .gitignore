@@ -65,3 +65,10 @@ dist/
 .claude/
 .conductor/
 .coverage
+
+# Profiling outputs
+services/**/profiles/artifacts/
+*.prof
+
+# Temp files
+*.tmp
