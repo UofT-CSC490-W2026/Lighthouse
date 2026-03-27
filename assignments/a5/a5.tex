@@ -153,6 +153,40 @@
 
 \section{Context for Our Project: Lighthouse}
 
+Lighthouse is a code search engine exposed via the Model Context Protocol (MCP) that
+improves the performance of AI coding agents by surfacing relevant context from a
+codebase. A developer selects GitHub repositories to index, Lighthouse ingests and
+indexes them, and the developer adds the Lighthouse MCP server to their AI coding
+agent. When the agent is working on a task and needs context that falls outside its
+immediate working scope, it queries Lighthouse to retrieve relevant code snippets,
+interfaces, and documentation.
+
+The system is composed of several services: an \textbf{ingestion service} that clones
+repositories, chunks source files, generates embeddings, and stores them in Postgres
+and Milvus via Temporal workflows; a \textbf{search service} that implements retrieval
+strategies (e.g.\ hybrid search combining dense vector similarity with sparse keyword
+matching); an \textbf{MCP server} that exposes search as MCP tools consumable by coding
+agents; and a \textbf{web service} for management and visualization.
+
+\subsection{Current State}
+
+We have implemented a baseline version of the full pipeline: repositories can be indexed
+(with both full and incremental indexing), searched via the MCP server, and results are
+returned to coding agents. However, several areas are still in active development:
+
+\begin{itemize}
+  \item \textbf{Web UI} --- The web service currently serves as a debugging interface
+    for internal development. We are still discussing and formulating what the
+    production UI will look like, and expect to redesign it in the coming week.
+  \item \textbf{Evaluation suite} --- We are developing an eval suite to measure how
+    effectively Lighthouse improves coding agent outcomes, building on the aspirational
+    dataset design from A2. This will let us quantitatively compare retrieval strategies.
+  \item \textbf{Search and ingestion experimentation} --- We are experimenting with
+    different search strategies, chunking approaches (e.g.\ sliding window vs.\
+    AST-aware chunking), and embedding models to improve retrieval quality beyond
+    our current baseline.
+\end{itemize}
+
 % ================================================================================
 \section{Profiling Execution time}
 % Profile 5 important functions in your codebase using https://docs.python.org/3/library/profile.html.
