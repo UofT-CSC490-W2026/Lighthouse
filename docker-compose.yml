@@ -123,6 +123,15 @@ services:
       POSTGRES_DSN: postgresql://lighthouse:lighthouse@postgres:5432/lighthouse
       MILVUS_URI: http://milvus:19530
       TEMPORAL_ADDRESS: temporal:7233
+      EMBEDDING_STRATEGY: ${EMBEDDING_STRATEGY:-bedrock}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-}
+      AWS_PROFILE: ${AWS_PROFILE:-}
+    volumes:
+      - ${HOME}/.aws:/root/.aws:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -147,6 +156,15 @@ services:
       POSTGRES_DSN: postgresql://lighthouse:lighthouse@postgres:5432/lighthouse
       MILVUS_URI: http://milvus:19530
       TEMPORAL_ADDRESS: temporal:7233
+      EMBEDDING_STRATEGY: ${EMBEDDING_STRATEGY:-bedrock}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-}
+      AWS_PROFILE: ${AWS_PROFILE:-}
+    volumes:
+      - ${HOME}/.aws:/root/.aws:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -166,6 +184,15 @@ services:
     environment:
       POSTGRES_DSN: postgresql://lighthouse:lighthouse@postgres:5432/lighthouse
       MILVUS_URI: http://milvus:19530
+      EMBEDDING_STRATEGY: ${EMBEDDING_STRATEGY:-bedrock}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-}
+      AWS_PROFILE: ${AWS_PROFILE:-}
+    volumes:
+      - ${HOME}/.aws:/root/.aws:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -214,6 +241,28 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  eval:
+    profiles: ["eval"]
+    build:
+      context: .
+      dockerfile: evaluation/Dockerfile
+    working_dir: /workspace
+    environment:
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-}
+      AWS_PROFILE: ${AWS_PROFILE:-}
+      BUGSINPY_ROOT: /benchmarks/bugsinpy
+      PYBUGHIVE_ROOT: /benchmarks/pybughive
+    volumes:
+      - .:/workspace
+      - ./evaluation/.cache:/workspace/evaluation/.cache
+      - ${BUGSINPY_ROOT:-./evaluation/datasets/bugsinpy}:/benchmarks/bugsinpy
+      - ${PYBUGHIVE_ROOT:-./evaluation/datasets/pybughive}:/benchmarks/pybughive
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${HOME}/.aws:/root/.aws:ro
 
 volumes:
   postgres_data:
