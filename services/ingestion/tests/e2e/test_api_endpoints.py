@@ -18,7 +18,6 @@ def test_settings(pg_dsn):
     return IngestionSettings(
         postgres_dsn=pg_dsn,
         milvus_uri="http://localhost:19530",
-        openai_api_key="test-key",
         github_webhook_secret="test-secret",
         temporal_address="localhost:7233",
     )
