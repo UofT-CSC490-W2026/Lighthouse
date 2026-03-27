@@ -1,538 +1,701 @@
-# Lighthouse Evaluation Framework
+# Eval Package
 
-This document is the canonical guide for the evaluation framework implemented
-under `evaluation/`.
+This document describes the new evaluation package under `packages/eval/`.
 
-A modular evaluation framework for measuring whether retrieval-augmented context improves LLM code generation. Designed to answer the question: *does the context Lighthouse surfaces actually help coding agents complete tasks?*
+It is intentionally narrower than the older `evaluation/` framework. The goal
+is to establish a reliable SWE-bench baseline path first, with manual checks
+after each step, before adding more datasets or more retrieval-aware behavior.
 
-## Table of Contents
+For the broader roadmap, see `docs/eval-package-plan.md`. This document only
+covers the package as it exists today.
 
-- [Overview](#overview)
-- [Design](#design)
-  - [Principles](#principles)
-  - [Architecture](#architecture)
-  - [Core Abstractions](#core-abstractions)
-  - [Evaluation Tracks](#evaluation-tracks)
-  - [Provenance and Comparability](#provenance-and-comparability)
-- [Directory Structure](#directory-structure)
-- [Setup](#setup)
-- [Usage Guide](#usage-guide)
-  - [Running an Evaluation](#running-an-evaluation)
-  - [Writing a Config File](#writing-a-config-file)
-  - [Using External Benchmarks](#using-external-benchmarks)
-  - [Generating Reports](#generating-reports)
-- [Adapters Reference](#adapters-reference)
-- [Wiring in Lighthouse Retrieval](#wiring-in-lighthouse-retrieval)
-- [Pre-indexing Datasets](#pre-indexing-datasets)
-- [Current Limitations](#current-limitations)
-- [Future Work](#future-work)
+## Scope
 
----
+Current scope:
 
-## Overview
+- load a SWE-bench slice from Hugging Face
+- inspect the selected slice
+- prepare SWE-bench Docker images for that slice
+- generate baseline SWE-bench prediction JSONL with Bedrock
+- evaluate predictions with the official SWE-bench harness
 
-The framework compares **baseline** performance (model receives only the task prompt) against **augmented** performance (model receives the task prompt plus context retrieved by Lighthouse). For a given configuration of models, context providers, and datasets, it:
+Current non-scope:
 
-1. Loads tasks from an external benchmark via a **DatasetAdapter**.
-2. Prepares benchmark workspaces for test-execution tasks before any LLM call.
-3. For each runnable `(model, context_provider, task, run)` combination:
-   - Retrieves context using a **ContextProvider** (none, oracle, or Lighthouse).
-   - Generates a code solution using a **CodeGenerator** (currently AWS Bedrock).
-   - Applies the generated output to a temporary workspace as a **CandidateEdit**.
-   - Scores the result with a typed **Evaluator** matching the task's evaluation track.
-4. Aggregates results into per-track reports with mean, stddev, 95% CI, and delta-over-baseline.
-
-All tasks are **Python-only**. The `Task.language` field is `Literal["python"]` and Pydantic will reject anything else.
-
----
+- Lighthouse retrieval integration
+- result comparison
+- support for datasets other than SWE-bench
 
 ## Design
 
-### Principles
+The package is host-first and harness-first.
 
-1. **Provenance is first-class.** Every task and result carries `source_dataset`, `source_instance_id`, `transform_version`, and `comparability_class`. Results from different benchmarks are never silently mixed.
+Host-first means the commands are meant to be run directly on the developer
+machine with `uv`, not through a separate orchestration container.
 
-2. **Metrics are typed, not flattened.** Test-execution, match-based, and retrieval-diagnostic tracks each have their own native metric types and summary models. A normalized convenience score is optional and always accompanied by native metrics.
+Harness-first means we rely on the official SWE-bench harness for benchmark
+runtime concerns such as Docker image preparation, rather than re-implementing
+that behavior ourselves.
 
-3. **CandidateEdit is the central abstraction.** The LLM produces one of four edit types (file rewrite, multi-file rewrite, unified patch, code completion), which is materialized into a workspace and then scored by the appropriate evaluator.
+Today the package contains:
 
-4. **Adapters are not thin add-ons.** Each adapter maps cleanly into the canonical `Task` model with full provenance and provides the correct `Evaluator` and optional oracle `ContextProvider`.
-
-5. **Lighthouse requires indexed repositories.** `LighthouseProvider` targets `POST /search` and expects `task.metadata.github_repo_id` to be set (injected from `index_registry.json`).
-
-### Architecture
-
-```
-CLI (run_eval.py)
-    |
-    v
-EvalRunner
-    |---> DatasetAdapter.load()     --> Dataset[Task]
-    |---> prepare_dataset_for_run() --> cached base workspaces
-    |---> ContextProvider.get_context()
-    |---> CodeGenerator.generate()  --> CandidateEdit
-    |---> CandidateEdit.apply(workspace)
-    |---> Evaluator.evaluate()      --> NativeMetrics
-    |---> EvalReport (per-track summaries)
+```text
+packages/eval/
+  pyproject.toml
+  src/eval/
+    __init__.py
+    cli.py
+    slice.py
+    harness.py
+    bedrock.py
+    prompts.py
+    predictions.py
 ```
 
-The runner prepares test-execution tasks once, then iterates over generation tasks on
-`models x context_providers x tasks x num_runs` and retrieval-diagnostic tasks on
-`context_providers x tasks x num_runs` with bounded async concurrency.
+### `slice.py`
 
-### Core Abstractions
+`slice.py` is the dataset-selection layer.
 
-**Task** (`datasets/schema.py`) -- the canonical unit of work:
-- `id`, `provenance` (source, instance, version, comparability class)
-- `evaluator_kind`: `test_execution | match | retrieval_diagnostic`
-- `output_format`: `file | multi_file | patch | completion`
-- `description`: the prompt shown to the LLM
-- `test_spec` / `match_spec` / `retrieval_spec`: evaluator-specific configuration
-- `oracle_context`: ground-truth context snippets for ablation
+It loads a SWE-bench dataset split and converts rows into a small
+`SWEBenchTask` dataclass containing:
 
-**CandidateEdit** (`candidates/base.py`) -- discriminated union:
+- `instance_id`
+- `repo`
+- `base_commit`
+- `version`
+- `problem_statement`
 
-| Variant | `kind` | `apply()` behavior |
-|---|---|---|
-| `FileRewrite` | `file` | Writes `content` to `workspace/filename` |
-| `MultiFileRewrite` | `multi_file` | Writes each `{path: content}` pair |
-| `UnifiedPatch` | `patch` | Runs `git apply` or `patch -p1` |
-| `Completion` | `completion` | Appends `text` to an optional target file |
+It supports two selection modes:
 
-**ContextProvider** (`context/base.py`) -- protocol:
+- `--max-instances N`
+- repeated `--instance-id ...`
 
-| Implementation | Description |
-|---|---|
-| `NoneProvider` | Returns `[]`. Establishes baseline. |
-| `StaticProvider` | Returns `task.oracle_context`. For ablation/oracle comparison. |
-| `LighthouseProvider` | POSTs to `{url}/search`. Real retrieval. |
+### `harness.py`
 
-**Evaluator** (`execution/evaluators/base.py`) -- protocol returning typed `NativeMetrics`:
+`harness.py` is the wrapper around the official
+`swebench.harness.prepare_images` entrypoint.
 
-| Implementation | Track | Metrics |
-|---|---|---|
-| `PytestEvaluator` | `test_execution` | pass/fail/error counts, pass rate |
-| `ExactMatchEvaluator` | `match` | exact match bool, edit similarity |
-| `EditSimilarityEvaluator` | `match` | edit similarity (Levenshtein) |
-| `BLEUEvaluator` | `match` | BLEU-4 score |
-| `RetrievalDiagnosticEvaluator` | `retrieval_diagnostic` | P@k, R@k, MRR |
+It currently does four things:
 
-**CodeGenerator** (`codegen/base.py`) -- protocol:
+1. resolves the current Docker endpoint
+2. calls the official harness for a chosen SWE-bench slice
+3. streams harness log files while the build runs
+4. verifies that the expected instance image tags exist afterward
 
-| Implementation | Models |
-|---|---|
-| `BedrockGenerator` | `bedrock/<model-id>` — any model available on AWS Bedrock |
+The default harness work directory is:
 
-### Evaluation Tracks
-
-Results are never mixed across tracks. Each has its own summary model and aggregation logic.
-
-**Test Execution** -- runs a test suite against the LLM's generated code. Metrics: pass rate, resolve rate (fraction of tasks fully passing), stddev, 95% CI. Used by: SWE-bench, BugsInPy, PyBugHive.
-
-**Match** -- compares generated text against ground truth. Metrics: exact match rate, edit similarity, BLEU-4. Used by: CrossCodeEval, RepoBench, RepoQA.
-
-**Retrieval Diagnostic** -- scores the context provider itself, not the generated code. Metrics: Precision@k, Recall@k, MRR. Used by: tasks with `retrieval_spec` and gold snippets.
-
-### Provenance and Comparability
-
-Every `Task` carries a `TaskProvenance`:
-
-```python
-class TaskProvenance(BaseModel):
-    source_dataset: str          # e.g. "swebench_lite", "crosscodeeval"
-    source_instance_id: str      # original ID in the source dataset
-    transform_version: str       # adapter version; bump when adapter logic changes
-    comparability_class: str     # groups tasks whose scores can be compared
+```text
+.cache/eval/swebench_harness
 ```
 
-Every `EvalResult` copies the task's provenance. Reports group by `comparability_class` so scores from unrelated datasets are never averaged.
+Harness build logs are written under:
 
----
-
-## Directory Structure
-
-```
-evaluation/
-  pyproject.toml                          # Package config, deps, build system
-
-  src/lighthouse_eval/
-    cli/
-      run_eval.py                         # Main CLI implementation
-      index_dataset.py                    # Dataset indexing CLI implementation
-    config.py                             # EvalConfig, DatasetConfig
-    runner.py                             # EvalRunner orchestration loop
-
-    datasets/
-      schema.py                           # Task, Dataset, EvalResult, NativeMetrics
-      loader.py                           # YAML-based local dataset loader
-      adapters/
-        __init__.py                       # Adapter registry
-        base.py                           # DatasetAdapter protocol + RepoInfo
-        swebench.py                       # SWE-bench Lite / Verified
-        bugsinpy.py                       # BugsInPy (493 bugs, 17 projects)
-        pybughive.py                      # PyBugHive (149 bugs, 11 projects)
-        crosscodeeval.py                  # CrossCodeEval (Python split)
-        repobench.py                      # RepoBench (Python, cross_file_first)
-        repoqa.py                         # RepoQA (Python repos, BLEU-based)
-        custom.py                         # Local YAML datasets
-
-    context/
-      base.py                             # ContextProvider protocol, ContextSnippet
-      none.py                             # NoneProvider (baseline)
-      lighthouse.py                       # LighthouseProvider (POST /search)
-      static.py                           # StaticProvider (oracle context)
-
-    codegen/
-      base.py                             # CodeGenerator protocol
-      bedrock.py                          # BedrockGenerator (Converse API)
-      prompt.py                           # Prompt construction + response parsing
-
-    candidates/
-      base.py                             # CandidateEdit discriminated union
-
-    execution/
-      preparation.py                      # Benchmark preflight + cached workspace prep
-      workspace.py                        # Workspace creation, cleanup, evaluator dispatch
-      evaluators/
-        base.py                           # Evaluator protocol
-        test_execution.py                 # PytestEvaluator
-        match.py                          # ExactMatch, EditSimilarity, BLEU evaluators
-        retrieval.py                      # RetrievalDiagnosticEvaluator
-
-    reporting/
-      tracks.py                           # TestExecutionSummary, MatchSummary, RetrievalSummary
-      results.py                          # EvalReport, aggregation, markdown/JSON output
-
-  scripts/
-    run_eval.py                           # Compatibility wrapper for CLI entry point
-    index_dataset.py                      # Compatibility wrapper for indexing CLI
-
-  configs/                                # YAML config files (one per dataset)
-    swebench.yaml
-    bugsinpy.yaml
-    pybughive.yaml
-    crosscodeeval.yaml
-    repobench.yaml
-    repoqa.yaml
-    smoke/                                # Small baseline smoke-run configs
-
-  Dockerfile                              # Optional eval container image
+```text
+.cache/eval/swebench_harness/logs/build_images
 ```
 
-The evaluation package source lives under `evaluation/`; this guide lives at
-`docs/evaluation.md`.
+### `bedrock.py`, `prompts.py`, and `predictions.py`
 
----
+These files make up the current baseline generation path.
 
-## Setup
+`bedrock.py` contains a small Bedrock wrapper that:
 
-The evaluation framework is a `uv` workspace member within the Lighthouse monorepo.
+- accepts models in `bedrock/<model-id>` format
+- defaults baseline generation to `us-east-1`
+- calls the Bedrock `converse` API
+- returns the text content from the model response
+
+`prompts.py` contains the minimal baseline prompt used for SWE-bench today.
+It uses only benchmark metadata from the selected task:
+
+- `instance_id`
+- `repo`
+- `base_commit`
+- `version`
+- `problem_statement`
+
+`predictions.py` turns model responses into harness-compatible JSONL rows and
+writes them incrementally to disk.
+
+### Image Naming
+
+The expected instance image names currently follow the official SWE-bench
+harness convention:
+
+```text
+sweb.eval.x86_64.<instance_id>:latest
+```
+
+For example:
+
+```text
+sweb.eval.x86_64.astropy__astropy-12907:latest
+```
+
+This is still true on Apple Silicon / ARM machines. The harness defaults to the
+`x86_64` image naming convention, and Docker Desktop handles the underlying
+emulation/runtime behavior.
+
+## Requirements
+
+You should have the following available on the host:
+
+- `uv`
+- `python3`
+- `docker`
+- a working Docker daemon / Docker Desktop context
+- network access to Hugging Face for SWE-bench dataset loading
+- AWS credentials with access to Bedrock if you want to generate predictions
+
+Optional but recommended:
+
+- `HUGGINGFACE_HUB_TOKEN`
+
+If `HUGGINGFACE_HUB_TOKEN` is set, the harness wrapper will also expose it to
+the official SWE-bench tooling as `HF_TOKEN`.
+
+## CLI
+
+The current CLI entrypoint is:
 
 ```bash
-# From the monorepo root
-uv sync --all-packages
+uv run --package eval python -m eval.cli ...
 ```
 
-This installs `lighthouse-eval` with all dependencies:
-- `pydantic` / `pydantic-settings` for data models
-- `httpx` for async HTTP (Lighthouse search service)
-- `boto3` for AWS Bedrock
-- `datasets` for loading HuggingFace benchmarks
-- `pyyaml` for config loading
-- `pytest` / `pytest-json-report` / `pytest-asyncio` for test execution
+Available commands today:
 
-### Preferred Runtime
+- `show-slice`
+- `prepare-images`
+- `generate-baseline`
+- `evaluate`
 
-For benchmark smoke runs, the preferred path is the opt-in `eval` container in
-`docker-compose.yml`. It keeps the evaluation Python environment reproducible,
-mounts benchmark roots and the workspace cache, and talks to the host Docker
-daemon through `/var/run/docker.sock` for SWE-bench-style execution.
+### `show-slice`
 
-### Environment Variables
+Print a selected SWE-bench slice without preparing any Docker images.
 
-The primary entrypoint for LLM access is **AWS Bedrock**, using the `bedrock/<model-id>` naming convention in configs. Credentials are resolved via the standard boto3 chain — no explicit variables are required if the execution environment is already authenticated (e.g. instance profile, SSO, or a configured AWS profile).
+Supported arguments:
 
-| Variable | Required For | Description |
-|---|---|---|
-| `AWS_ACCESS_KEY_ID` | Bedrock (`bedrock/*`) | AWS access key (if not using instance profile / SSO) |
-| `AWS_SECRET_ACCESS_KEY` | Bedrock (`bedrock/*`) | AWS secret key (if not using instance profile / SSO) |
-| `AWS_DEFAULT_REGION` | Bedrock (`bedrock/*`) | AWS region (e.g. `us-east-1`) |
+- `--dataset-name`
+- `--split`
+- `--max-instances`
+- `--instance-id`
 
-These are only needed when running actual evaluations (not for dry-runs or dataset loading).
+### `prepare-images`
 
----
+Load a selected SWE-bench slice and prepare the required SWE-bench Docker
+images for that slice.
 
-## Usage Guide
+Supported arguments:
 
-### Running an Evaluation
+- `--dataset-name`
+- `--split`
+- `--max-instances`
+- `--instance-id`
+- `--workdir`
+- `--max-workers`
+
+### `generate-baseline`
+
+Load a selected SWE-bench slice, generate one baseline patch per task with
+Bedrock, and write the results to a predictions `.jsonl` file.
+
+Supported arguments:
+
+- `--dataset-name`
+- `--split`
+- `--max-instances`
+- `--instance-id`
+- `--model`
+- `--output`
+- `--region-name`
+- `--temperature`
+- `--max-tokens`
+- `--overwrite`
+
+### `evaluate`
+
+Load a selected SWE-bench slice, run the official harness against an existing
+predictions file, and print the resulting report path and run log directory.
+
+Supported arguments:
+
+- `--dataset-name`
+- `--split`
+- `--max-instances`
+- `--instance-id`
+- `--predictions`
+- `--run-id`
+- `--workdir`
+- `--max-workers`
+- `--timeout-seconds`
+- `--cache-level`
+
+## Run Book
+
+### 1. Show The Slice
+
+From the repo root:
 
 ```bash
-cd evaluation/
-
-# Dry run — loads dataset and prints first task, no LLM calls
-uv run python scripts/run_eval.py -v run --config configs/swebench.yaml --dry-run
-
-# Full run
-uv run python scripts/run_eval.py run --config configs/swebench.yaml
+cd /Users/hermes/Desktop/csc490/Lighthouse
+uv run --package eval python -m eval.cli show-slice --max-instances 3
 ```
 
-For the first baseline smoke pass across all targeted datasets, use the
-`configs/smoke/` configs. They are `none`-provider only, `num_runs: 1`, and
-cap each dataset to 3 instances.
+Expected output shape:
+
+```text
+SWE-bench slice: 3 instance(s) from princeton-nlp/SWE-bench_Lite [test]
+1. astropy__astropy-12907
+   repo: astropy/astropy
+   base_commit: ...
+   version: ...
+2. astropy__astropy-14182
+   repo: astropy/astropy
+   base_commit: ...
+   version: ...
+3. astropy__astropy-14365
+   repo: astropy/astropy
+   base_commit: ...
+   version: ...
+```
+
+This confirms:
+
+- the dataset is reachable
+- the slice selection logic is working
+- the chosen instance ids are the ones you expect
+
+### 2. Prepare Images For One Instance
+
+The recommended first manual image-prep test is a single instance:
 
 ```bash
-# From the repo root, inside the opt-in eval container
-docker compose --profile eval run --rm \
-  eval python evaluation/scripts/run_eval.py \
-  run --config evaluation/configs/smoke/swebench.yaml
+cd /Users/hermes/Desktop/csc490/Lighthouse
+uv run --package eval python -m eval.cli prepare-images \
+  --instance-id astropy__astropy-12907 \
+  --max-workers 1
 ```
 
-Artifacts are written back to the host under `evaluation/results/...`, and
-prepared benchmark workspaces are cached under `evaluation/.cache/workspaces/`.
+Expected output shape at the beginning:
 
-The CLI has two subcommands:
+```text
+SWE-bench slice: 1 instance(s) from princeton-nlp/SWE-bench_Lite [test]
+1. astropy__astropy-12907
+   repo: astropy/astropy
+   base_commit: ...
+   version: ...
 
-| Command | Description |
-|---|---|
-| `run --config <path> [--dry-run]` | Load config, load dataset, run evaluations, save results + reports |
-| `report --results <path>` | Re-generate reports from an existing JSONL results file |
-
-### Writing a Config File
-
-Configs are YAML files with this structure:
-
-```yaml
-models:
-  - "bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0"
-
-context_providers:
-  - "none"              # baseline: no context
-  - "static:oracle"     # oracle: ground-truth context from dataset
-  - "lighthouse"        # real retrieval (requires indexed repos)
-
-dataset:
-  adapter: "swebench"
-  source: "princeton-nlp/SWE-bench_Lite"
-  split: "test"
-  max_instances: 50     # optional: cap tasks for faster iteration
-
-num_runs: 3             # repetitions per combination for variance estimation
-search_service_url: "http://localhost:8002"
-output_dir: "results/swebench/"
-workspace_cache_dir: "../.cache/workspaces"
-concurrency: 4
-
-metadata:
-  index_registry: "datasets/swebench/index_registry.json"
+Preparing 1 SWE-bench image(s)
+Using Docker endpoint: unix://...
+Harness workdir: /Users/hermes/Desktop/csc490/Lighthouse/.cache/eval/swebench_harness
+Instance ids:
+  - astropy__astropy-12907
 ```
 
-### Using External Benchmarks
+Then, depending on cache state, you should see either:
 
-All supported benchmarks load from HuggingFace (or local clones) via adapters. See `configs/` for ready-made configs for each. Quick examples:
+- fresh build output from the official harness, or
+- a fast path where the harness reports that the images already exist
 
-```yaml
-# SWE-bench Lite (repo-level repair, Docker recommended)
-dataset:
-  adapter: "swebench"
-  source: "princeton-nlp/SWE-bench_Lite"
-  split: "test"
+Typical harness progress includes lines such as:
 
-# CrossCodeEval (cross-file completion with oracle context)
-dataset:
-  adapter: "crosscodeeval"
-  source: "amazon-science/cceval"
-  split: "test"
+- `Building base image (...)`
+- `Total environment images to build: ...`
+- `Building instance images for ... instances`
+- `Streaming harness log: ...`
 
-# BugsInPy (requires a local clone)
-dataset:
-  adapter: "bugsinpy"
-  path: "/path/to/bugsinpy-clone"
+Expected success at the end:
+
+```text
+Verified image: sweb.eval.x86_64.astropy__astropy-12907:latest
+Prepared images:
+  - sweb.eval.x86_64.astropy__astropy-12907:latest
 ```
 
-The first time you use a HuggingFace adapter, the dataset will be downloaded and cached automatically.
-
-For test-execution tracks, the runner now prepares a cached base workspace for
-each task before evaluation starts. That prep phase is fail-fast: missing
-benchmark roots, missing checkout tooling, or missing SWE-bench Docker images
-abort the run before any LLM call is made.
-
-### Generating Reports
-
-Reports are generated automatically after a run. To regenerate from saved results:
+Host-side verification:
 
 ```bash
-uv run python scripts/run_eval.py report --results results/swebench/results_1234567890.jsonl
+docker image inspect sweb.eval.x86_64.astropy__astropy-12907:latest >/dev/null && echo "image ready"
 ```
 
-This produces:
-- `report.json` -- machine-readable per-track summaries
-- `report.md` -- human-readable markdown tables
+### 3. Prepare Images For The 3-Instance Smoke Slice
 
-Reports include separate sections for each evaluation track (test execution, match, retrieval diagnostics), with mean, stddev, 95% CI, and comparability class annotations.
-
----
-
-## Adapters Reference
-
-| Adapter | Source | Track | Output Format | Oracle Context |
-|---|---|---|---|---|
-| `swebench` | HuggingFace | test_execution | patch | No |
-| `bugsinpy` | Local clone | test_execution | patch | No |
-| `pybughive` | Local clone | test_execution | patch | No |
-| `crosscodeeval` | HuggingFace / JSONL | match | completion | Yes |
-| `repobench` | HuggingFace | match | completion | Yes |
-| `repoqa` | HuggingFace | match (BLEU) | completion | Yes |
-| `custom` | Local YAML | any | any | Optional |
-
-Adapters with oracle context enable three-way comparison: no context vs. oracle vs. Lighthouse retrieval. The delta between oracle and Lighthouse directly measures retrieval quality.
-
----
-
-## Wiring in Lighthouse Retrieval
-
-The Lighthouse search service runs at `http://localhost:8002` by default (see `docker-compose.yml`). To include it in an evaluation, add `"lighthouse"` to `context_providers` and optionally configure `search_service_url`.
-
-```yaml
-context_providers:
-  - "none"
-  - "lighthouse"
-
-search_service_url: "http://localhost:8002"
-```
-
-When running inside the `eval` container on the Compose network, use
-`http://search:8002` instead of `http://localhost:8002`.
-
-### Configuring Search Methods
-
-The eval config supports the `lighthouse:<method>` naming pattern for selecting
-named retrieval methods. Today the implemented path is the default hybrid
-search; as additional search methods are added to the search service and eval
-client, they can be exposed through the same provider syntax.
-
-```yaml
-context_providers:
-  - "none"                 # baseline
-  - "lighthouse"           # current default
-  - "lighthouse:hybrid"    # explicit equivalent of the default
-```
-
-Each configured variant becomes a separate column in reports. Future search
-methods should reuse this naming convention once support is added end to end.
-
-`LighthouseProvider` sends `POST /search` with:
-
-```json
-[
-  {
-    "method": "hybrid",
-    "query": "<task description>",
-    "top_k": 10,
-    "github_repo_id": "<from task.metadata, if present>",
-    "branch": "<from task.metadata, if present>"
-  }
-]
-```
-
-If the service is unavailable, it logs a warning and returns empty context (so runs don't crash).
-
----
-
-## Pre-indexing Datasets
-
-`lighthouse` context is only meaningful for tasks tied to repositories that are already indexed by the ingestion service.
-
-Before running evals with `lighthouse`, run:
+After the single-instance test succeeds, prepare the slice we have been using
+for smoke work:
 
 ```bash
-# Dry run: resolves repos via GitHub API and prints what would be indexed (no ingestion calls)
-uv run python scripts/index_dataset.py \
-  --config configs/swebench.yaml \
-  --github-token "$GITHUB_TOKEN" \
-  --dry-run
-
-# Full run: index and wait for completion
-uv run python scripts/index_dataset.py \
-  --config configs/swebench.yaml \
-  --ingestion-url http://localhost:8001 \
-  --github-token "$GITHUB_TOKEN" \
-  --output datasets/swebench/index_registry.json
+cd /Users/hermes/Desktop/csc490/Lighthouse
+uv run --package eval python -m eval.cli prepare-images \
+  --max-instances 3 \
+  --max-workers 1
 ```
 
-What this does:
-- Loads the dataset adapter from your config
-- Calls `adapter.get_repos(...)` to discover referenced repos
-- Calls `POST /index` on ingestion service
-- Polls `GET /status/{github_repo_id}` until all requested branches are `indexed`
-- Writes `index_registry.json` mapping `owner/repo -> github_repo_id + branch`
+This selects the first three instances from the SWE-bench Lite `test` split,
+which currently are:
 
-`run_eval.py` auto-loads `index_registry.json` from:
-- `metadata.index_registry` in config (if set), else
-- `<dataset.path>/index_registry.json` (for local datasets)
+- `astropy__astropy-12907`
+- `astropy__astropy-14182`
+- `astropy__astropy-14365`
 
-It then injects `github_repo_id` and `branch` into each task's `metadata` before evaluation.
+If the first image was already built during the single-instance test, the
+harness should usually skip rebuilding it and only build what is still missing.
 
----
+Expected success at the end:
 
-## Current Limitations
+```text
+Verified image: sweb.eval.x86_64.astropy__astropy-12907:latest
+Verified image: sweb.eval.x86_64.astropy__astropy-14182:latest
+Verified image: sweb.eval.x86_64.astropy__astropy-14365:latest
+Prepared images:
+  - sweb.eval.x86_64.astropy__astropy-12907:latest
+  - sweb.eval.x86_64.astropy__astropy-14182:latest
+  - sweb.eval.x86_64.astropy__astropy-14365:latest
+```
 
-**Not yet validated at full benchmark scale with live LLM calls.** The framework now prepares cached benchmark workspaces and supports real smoke runs, but large benchmark sweeps with live LLM traffic will still be the first place that rate limits, timeout tuning, and prompt-format edge cases show up.
+Host-side verification:
 
-**Heavyweight benchmark assets are still bring-your-own.** SWE-bench still requires existing Docker images, and BugsInPy/PyBugHive still require local benchmark roots plus any benchmark-specific checkout tooling. The runner validates these prerequisites early, but it does not install tooling or build/pull images automatically.
+```bash
+docker image inspect \
+  sweb.eval.x86_64.astropy__astropy-12907:latest \
+  sweb.eval.x86_64.astropy__astropy-14182:latest \
+  sweb.eval.x86_64.astropy__astropy-14365:latest >/dev/null && echo "images ready"
+```
 
-**Eval container is preferred, not mandatory.** Host-run evaluation still works, but the documented smoke path is the opt-in Compose `eval` service because it provides a more reproducible environment for benchmark prep and execution.
+### 4. Generate Baseline Predictions
 
-**Generation is Bedrock-only today.** The evaluation runner currently accepts
-`bedrock/<model-id>` models only. If we add more generator backends later, they
-should be documented explicitly.
+Once the slice is selected and the image-prep command is behaving as expected,
+generate a baseline predictions file.
 
-**Custom/local datasets are not Lighthouse-indexable yet.** The ingestion API indexes GitHub repositories (`github_repo_id`, `repo_url`, `full_name`). Local-only workspaces in `custom` datasets currently support `none` and `static:oracle`, but not `lighthouse`, until local indexing support is added.
+For the first manual check, use one instance and write to a throwaway path:
 
-**No caching of LLM responses.** Each run re-queries the LLM API. For expensive models or large datasets, this can be costly. Response caching would significantly reduce iteration costs.
+```bash
+cd /Users/hermes/Desktop/csc490/Lighthouse
+uv run --package eval python -m eval.cli generate-baseline \
+  --instance-id astropy__astropy-12907 \
+  --output .cache/eval/runs/baseline-1.jsonl
+```
 
-**Single-process execution.** The runner uses `asyncio` concurrency within a single process. For very large benchmark runs (1000+ tasks x multiple models), distributed execution across machines is not supported.
+The default model is currently:
 
----
+```text
+bedrock/us.amazon.nova-lite-v1:0
+```
 
-## Future Work
+The default Bedrock region is currently:
 
-**Custom datasets:**
-- Curated multi-file, multi-repo, and library-integration tasks with real GitHub repos
-- Mutation-based dataset generation (AST-level operators: cross-file ref, API contract, invariant break)
-- Task scaffolding script for quickly adding new curated tasks
+```text
+us-east-1
+```
 
-**Execution environment improvements:**
-- Better benchmark-specific setup/install discovery for BugsInPy and PyBugHive
-- More aggressive workspace reuse across tasks from the same repository
-- Optional automation for building or pulling missing SWE-bench images
+If you want a different Bedrock model, override it explicitly:
 
-**LLM response caching:**
-- Cache `(model, prompt_hash) -> raw_response` to avoid redundant API calls across runs
-- Invalidate on prompt template changes
+```bash
+uv run --package eval python -m eval.cli generate-baseline \
+  --instance-id astropy__astropy-12907 \
+  --model bedrock/<your-model-id> \
+  --output .cache/eval/runs/baseline-1.jsonl
+```
 
-**Distributed execution:**
-- Split `models x providers x tasks` matrix across workers
-- Centralized result collection and reporting
+Expected output shape:
 
-**Additional reporting:**
-- Per-task breakdown (which specific tasks improve most with context?)
-- Statistical significance tests (paired t-test, bootstrap CI)
-- Visualization dashboards (pass rate curves, retrieval quality heatmaps)
+```text
+SWE-bench slice: 1 instance(s) from princeton-nlp/SWE-bench_Lite [test]
+1. astropy__astropy-12907
+   repo: astropy/astropy
+   base_commit: ...
+   version: ...
+Model: bedrock/us.amazon.nova-lite-v1:0
+Bedrock region: us-east-1
+Output file: /Users/hermes/Desktop/csc490/Lighthouse/.cache/eval/runs/baseline-1.jsonl
+[1/1] Generating baseline patch for astropy__astropy-12907
+    wrote ... patch chars
+Wrote 1 prediction(s) to /Users/hermes/Desktop/csc490/Lighthouse/.cache/eval/runs/baseline-1.jsonl
+```
 
-**Indexing workflow improvements:**
-- Add incremental refresh support to `index_dataset.py` (skip already-indexed repos/branches)
-- Validate that every task with `lighthouse` has a matching registry entry before run start
-- Support per-dataset branch mapping when benchmarks pin non-default branches
+Then inspect the file directly:
 
-**Retrieval method support:**
-- Add additional named search methods beyond the current hybrid path
-- Keep the eval-side provider syntax and request shaping aligned with search-service capabilities
+```bash
+sed -n '1,5p' .cache/eval/runs/baseline-1.jsonl
+```
 
-**More adapters:**
-- SWE-bench++ (multi-language, filter to Python)
-- Aider benchmark (edit-format evaluation)
+Each JSONL row currently includes:
 
-**Integration tests:**
-- End-to-end test with a mock LLM server returning canned responses
-- Adapter integration tests that load a small slice of each benchmark
-- Regression tests for prompt template changes
+- `instance_id`
+- `model_name_or_path`
+- `model_patch`
+- `full_output`
+
+To inspect just the generated patch:
+
+```bash
+python3 - <<'PY'
+import json
+from pathlib import Path
+
+row = json.loads(Path(".cache/eval/runs/baseline-1.jsonl").read_text().splitlines()[0])
+print(row["model_patch"])
+PY
+```
+
+To verify that the patch begins like a unified diff:
+
+```bash
+python3 - <<'PY'
+import json
+from pathlib import Path
+
+row = json.loads(Path(".cache/eval/runs/baseline-1.jsonl").read_text().splitlines()[0])
+patch = row["model_patch"]
+print("starts_with_unified_diff =", patch.startswith("--- a/"))
+print("instance_id =", row["instance_id"])
+PY
+```
+
+For the 3-instance smoke slice:
+
+```bash
+cd /Users/hermes/Desktop/csc490/Lighthouse
+uv run --package eval python -m eval.cli generate-baseline \
+  --max-instances 3 \
+  --output .cache/eval/runs/baseline-3.jsonl
+```
+
+Then verify the file has three rows:
+
+```bash
+wc -l .cache/eval/runs/baseline-3.jsonl
+```
+
+### 5. Evaluate Predictions
+
+Once you have a predictions file, run the official SWE-bench harness through
+the new wrapper.
+
+For a single-instance manual test:
+
+```bash
+cd /Users/hermes/Desktop/csc490/Lighthouse
+uv run --package eval python -m eval.cli evaluate \
+  --instance-id astropy__astropy-12907 \
+  --predictions .cache/eval/runs/baseline-1.jsonl \
+  --run-id baseline-1-smoke \
+  --max-workers 1
+```
+
+Use a fresh `--run-id` for each new evaluation attempt so the harness does not
+reuse prior per-instance reports from the same run id.
+
+Expected output shape at the beginning:
+
+```text
+SWE-bench slice: 1 instance(s) from princeton-nlp/SWE-bench_Lite [test]
+1. astropy__astropy-12907
+   repo: astropy/astropy
+   base_commit: ...
+   version: ...
+Evaluating 1 SWE-bench prediction(s)
+Run id: baseline-1-smoke
+Using Docker endpoint: unix://...
+Harness workdir: /Users/hermes/Desktop/csc490/Lighthouse/.cache/eval/swebench_harness
+Predictions file: /Users/hermes/Desktop/csc490/Lighthouse/.cache/eval/runs/baseline-1.jsonl
+Instance ids:
+  - astropy__astropy-12907
+```
+
+During the run you should see newly discovered harness log files and per-log
+stream output, for example:
+
+- `Streaming harness log: run_evaluation/...`
+- `[harness:run_evaluation/.../run_instance.log] ...`
+
+At the end, the official harness should print a summary similar to:
+
+```text
+Total instances: 1
+Instances submitted: 1
+Instances completed: 1
+Instances resolved: ...
+Instances unresolved: ...
+Report written to bedrock__us.amazon.nova-lite-v1:0.baseline-1-smoke.json
+```
+
+and the wrapper should print:
+
+```text
+Evaluation report: /Users/hermes/Desktop/csc490/Lighthouse/.cache/eval/swebench_harness/bedrock__us.amazon.nova-lite-v1:0.baseline-1-smoke.json
+Run log directory: /Users/hermes/Desktop/csc490/Lighthouse/.cache/eval/swebench_harness/logs/run_evaluation/baseline-1-smoke/bedrock__us.amazon.nova-lite-v1:0
+```
+
+Then inspect the report:
+
+```bash
+cat .cache/eval/swebench_harness/bedrock__us.amazon.nova-lite-v1:0.baseline-1-smoke.json
+```
+
+To inspect the per-instance report produced by the harness:
+
+```bash
+cat .cache/eval/swebench_harness/logs/run_evaluation/baseline-1-smoke/bedrock__us.amazon.nova-lite-v1:0/astropy__astropy-12907/report.json
+```
+
+For the 3-instance smoke slice:
+
+```bash
+cd /Users/hermes/Desktop/csc490/Lighthouse
+uv run --package eval python -m eval.cli evaluate \
+  --max-instances 3 \
+  --predictions .cache/eval/runs/baseline-3.jsonl \
+  --run-id baseline-3-smoke \
+  --max-workers 1
+```
+
+## Artifacts And Logs
+
+### Harness Work Directory
+
+By default the harness wrapper uses:
+
+```text
+/Users/hermes/Desktop/csc490/Lighthouse/.cache/eval/swebench_harness
+```
+
+You can override this with `--workdir`.
+
+### Build Logs
+
+Live-tailed build logs are discovered under:
+
+```text
+/Users/hermes/Desktop/csc490/Lighthouse/.cache/eval/swebench_harness/logs/build_images
+```
+
+Typical log files include:
+
+- base image build logs
+- environment image build logs
+- instance image build logs
+- instance preparation logs
+
+### Prediction Files
+
+The baseline generator writes JSONL to the path you pass via `--output`.
+
+For example:
+
+```text
+/Users/hermes/Desktop/csc490/Lighthouse/.cache/eval/runs/baseline-1.jsonl
+```
+
+### Evaluation Reports
+
+The official harness summary report is written in the harness work directory.
+
+For example:
+
+```text
+/Users/hermes/Desktop/csc490/Lighthouse/.cache/eval/swebench_harness/bedrock__us.amazon.nova-lite-v1:0.baseline-1-smoke.json
+```
+
+Per-instance run logs and `report.json` files are written under:
+
+```text
+/Users/hermes/Desktop/csc490/Lighthouse/.cache/eval/swebench_harness/logs/run_evaluation/<run-id>/<model-name>/
+```
+
+## Troubleshooting
+
+### Docker Endpoint Could Not Be Resolved
+
+If `prepare-images` fails before the harness starts, check that the Docker CLI
+can talk to your active daemon:
+
+```bash
+docker ps
+docker context inspect
+```
+
+The wrapper resolves the Docker SDK endpoint from the current Docker context and
+passes it through as `DOCKER_HOST`.
+
+### Hugging Face Warnings About Unauthenticated Requests
+
+Set:
+
+```bash
+export HUGGINGFACE_HUB_TOKEN=...
+```
+
+The wrapper will forward that value as `HF_TOKEN` for the harness if `HF_TOKEN`
+is not already set.
+
+### Bedrock Generation Fails Before Writing Any Predictions
+
+Check that your AWS credentials and region are configured for Bedrock access:
+
+```bash
+aws sts get-caller-identity
+echo "$AWS_DEFAULT_REGION"
+```
+
+If needed, pass an explicit Bedrock region:
+
+```bash
+uv run --package eval python -m eval.cli generate-baseline \
+  --instance-id astropy__astropy-12907 \
+  --region-name us-east-1 \
+  --output .cache/eval/runs/baseline-1.jsonl
+```
+
+If you see an error saying that the model identifier is invalid, the most common
+cause is that a region-specific foundation-model id was used where an inference
+profile id is needed. The package default uses the US cross-region inference
+profile form:
+
+```text
+bedrock/us.amazon.nova-lite-v1:0
+```
+
+Amazon Nova models commonly require an inference-profile id for `Converse`. For
+example, `amazon.nova-lite-v1:0` may fail while `us.amazon.nova-lite-v1:0`
+works.
+
+If you previously ran the command with the older raw foundation-model id, rerun
+with `--overwrite` or remove the previous output file first.
+
+### Evaluation Fails Before Any Instance Runs
+
+Check that:
+
+- the predictions file exists
+- the required SWE-bench images are already prepared
+- Docker is reachable from the current shell
+
+Useful checks:
+
+```bash
+docker ps
+docker image inspect sweb.eval.x86_64.astropy__astropy-12907:latest >/dev/null && echo "image ready"
+ls -l .cache/eval/runs/baseline-1.jsonl
+```
+
+### The Command Succeeds Quickly But Nothing Is Rebuilt
+
+That usually means the harness found the images already present and skipped the
+build.
+
+Check explicitly:
+
+```bash
+docker image inspect sweb.eval.x86_64.astropy__astropy-12907:latest
+```
+
+### A Build Appears Stuck
+
+The harness can spend a while in base, environment, or instance image creation.
+Inspect the logs under:
+
+```text
+.cache/eval/swebench_harness/logs/build_images
+```
+
+If the wrapper is running, it should also print newly discovered log file paths
+and stream them live.
