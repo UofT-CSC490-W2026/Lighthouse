@@ -4,7 +4,7 @@ import random
 import uuid
 from datetime import datetime, timezone
 
-from db import Chunk, DatabaseManager, Repository, StagingChunk, User
+from db import Chunk, DatabaseManager, Repository, StagingChunk, StagingWikiPage, User, WikiGeneration, WikiPage
 
 
 def _rand_id() -> str:
@@ -91,4 +91,75 @@ def create_staging_chunk(
     with db_manager.connection_context():
         return StagingChunk.create(
             **make_staging_chunk(batch_id, seq_index, repository_id, **overrides)
+        )
+
+
+def make_wiki_generation(repository_id: str, **overrides) -> dict:
+    defaults = {
+        "repository_id": repository_id,
+        "branch": "main",
+        "status": "pending",
+    }
+    defaults.update(overrides)
+    return defaults
+
+
+def create_wiki_generation(
+    db_manager: DatabaseManager, repository: Repository, **overrides
+) -> WikiGeneration:
+    with db_manager.connection_context():
+        return WikiGeneration.create(**make_wiki_generation(repository.id, **overrides))
+
+
+def make_wiki_page(wiki_generation_id: str, repository_id: str, **overrides) -> dict:
+    slug = f"page-{_rand_id()}"
+    defaults = {
+        "wiki_generation_id": wiki_generation_id,
+        "repository_id": repository_id,
+        "branch": "main",
+        "slug": slug,
+        "title": f"Test Page {slug}",
+        "content": f"# {slug}\n\nTest wiki page content.",
+        "section_path": "overview",
+    }
+    defaults.update(overrides)
+    return defaults
+
+
+def create_wiki_page(
+    db_manager: DatabaseManager,
+    wiki_generation: WikiGeneration,
+    repository: Repository,
+    **overrides,
+) -> WikiPage:
+    with db_manager.connection_context():
+        return WikiPage.create(
+            **make_wiki_page(wiki_generation.id, repository.id, **overrides)
+        )
+
+
+def make_staging_wiki_page(
+    batch_id: str, seq_index: int, repository_id: str, **overrides
+) -> dict:
+    slug = f"page-{_rand_id()}"
+    defaults = {
+        "batch_id": batch_id,
+        "seq_index": seq_index,
+        "repository_id": repository_id,
+        "branch": "main",
+        "slug": slug,
+        "title": f"Staging Page {slug}",
+        "content": "",
+        "section_path": "overview",
+    }
+    defaults.update(overrides)
+    return defaults
+
+
+def create_staging_wiki_page(
+    db_manager: DatabaseManager, batch_id: str, seq_index: int, repository_id: str, **overrides
+) -> StagingWikiPage:
+    with db_manager.connection_context():
+        return StagingWikiPage.create(
+            **make_staging_wiki_page(batch_id, seq_index, repository_id, **overrides)
         )

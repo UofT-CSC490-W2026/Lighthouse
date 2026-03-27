@@ -10,8 +10,11 @@ from db import (
     Repository,
     Session,
     StagingChunk,
+    StagingWikiPage,
     User,
     UserHiddenRepository,
+    WikiGeneration,
+    WikiPage,
 )
 
 ALL_MODELS = [
@@ -20,6 +23,9 @@ ALL_MODELS = [
     IndexedBranch,
     StagingChunk,
     Chunk,
+    WikiPage,
+    StagingWikiPage,
+    WikiGeneration,
     Repository,
     User,
 ]

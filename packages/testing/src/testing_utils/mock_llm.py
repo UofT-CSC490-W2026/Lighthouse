@@ -32,7 +32,6 @@ class MockLLMProvider(LLMProvider):
                             "title": "Getting Started",
                             "slug": "getting-started",
                             "description": "How to get started with the project.",
-                            "importance": 1,
                             "source_file_hints": ["README.md"],
                         }
                     ],
