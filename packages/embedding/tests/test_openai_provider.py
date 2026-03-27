@@ -54,7 +54,6 @@ def test_embed_batch_multiple_batches(mock_openai_cls):
     assert len(result) == 3000
     assert mock_client.embeddings.create.call_count == 2
 
-    # First call gets 2048 texts, second gets 952
     first_call_input = mock_client.embeddings.create.call_args_list[0].kwargs["input"]
     second_call_input = mock_client.embeddings.create.call_args_list[1].kwargs["input"]
     assert len(first_call_input) == 2048

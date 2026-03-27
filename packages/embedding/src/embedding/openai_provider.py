@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import openai
-from shared.config import EMBEDDING_MODEL
+from shared.config import OPENAI_EMBEDDING_MODEL
 
 from .base_provider import EmbeddingProvider
 
@@ -11,8 +11,8 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
 
     BATCH_SIZE = 2048
 
-    def __init__(self, api_key: str, model: str = EMBEDDING_MODEL) -> None:
-        self.client = openai.OpenAI(api_key=api_key)
+    def __init__(self, api_key: str | None = None, model: str = OPENAI_EMBEDDING_MODEL) -> None:
+        self.client = openai.OpenAI(api_key=api_key) if api_key else openai.OpenAI()
         self.model = model
 
     def embed_batch(self, texts: list[str]) -> list[list[float]]:
