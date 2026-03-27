@@ -17,7 +17,11 @@ TEST_EMBEDDING_DIMENSION = 8
 
 @pytest.fixture
 def search_settings(pg_dsn, milvus_uri):
-    return SearchSettings(postgres_dsn=pg_dsn, milvus_uri=milvus_uri, openai_api_key="test")
+    return SearchSettings(
+        postgres_dsn=pg_dsn,
+        milvus_uri=milvus_uri,
+        embedding_dimension=TEST_EMBEDDING_DIMENSION,
+    )
 
 
 @pytest.fixture
