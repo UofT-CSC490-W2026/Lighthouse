@@ -180,7 +180,10 @@ class PytestEvaluator:
             proc.kill()
             await proc.communicate()
             raise
-        return stdout.decode(errors="replace"), stderr.decode(errors="replace"), proc.returncode
+        returncode = proc.returncode
+        if returncode is None:
+            raise RuntimeError("Local test command exited without a return code.")
+        return stdout.decode(errors="replace"), stderr.decode(errors="replace"), returncode
 
     @staticmethod
     async def _run_docker_command(
@@ -214,7 +217,10 @@ class PytestEvaluator:
             proc.kill()
             await proc.communicate()
             raise
-        return stdout.decode(errors="replace"), stderr.decode(errors="replace"), proc.returncode
+        returncode = proc.returncode
+        if returncode is None:
+            raise RuntimeError("Docker test command exited without a return code.")
+        return stdout.decode(errors="replace"), stderr.decode(errors="replace"), returncode
 
     @staticmethod
     def _materialize_test_paths(test_paths: list[Path], workspace: Path) -> list[Path]:

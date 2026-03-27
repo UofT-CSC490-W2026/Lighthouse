@@ -22,6 +22,7 @@ from lighthouse_eval.datasets.schema import (
     Task,
     TestExecutionMetrics,
 )
+from lighthouse_eval.execution.preparation import prepare_dataset_for_run
 from lighthouse_eval.execution.workspace import (
     cleanup_workspace,
     create_workspace,
@@ -95,10 +96,12 @@ async def _run_single_generation(
     provider_name: str,
 ) -> EvalResult:
     """Execute one (task, model, provider, run) combination."""
+    spec = task.test_spec
     if _requires_materialized_workspace(task):
+        backend = spec.execution_backend if spec is not None else None
         raise RuntimeError(
             f"Task {task.id} requires a materialized workspace for "
-            f"execution_backend={task.test_spec.execution_backend!r}, but none is configured."
+            f"execution_backend={backend!r}, but none is configured."
         )
 
     t0 = time.perf_counter()
@@ -166,6 +169,7 @@ async def run_evaluation(
     dataset: Dataset,
     *,
     adapter=None,
+    adapter_config: dict | None = None,
 ) -> list[EvalResult]:
     """Run the full evaluation matrix and return all results.
 
@@ -174,6 +178,13 @@ async def run_evaluation(
     tasks on ``context_providers x tasks x num_runs``, respecting
     ``config.concurrency`` for parallelism.
     """
+    prepare_dataset_for_run(
+        config,
+        dataset,
+        adapter=adapter,
+        adapter_config=adapter_config,
+    )
+
     results: list[EvalResult] = []
     sem = asyncio.Semaphore(config.concurrency)
     retrieval_tasks = [
@@ -255,7 +266,15 @@ async def run_evaluation(
                 log.info("Progress: %d / %d", completed, total_combos)
         except Exception:
             completed += 1
-            log.exception("Evaluation failed for one combination (%d / %d)", completed, total_combos)
+            for task_future in tasks:
+                task_future.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            log.exception(
+                "Evaluation aborted after one combination failed (%d / %d)",
+                completed,
+                total_combos,
+            )
+            raise
 
     log.info("Evaluation complete: %d results collected", len(results))
     return results
