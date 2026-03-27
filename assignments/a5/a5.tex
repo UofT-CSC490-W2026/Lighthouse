@@ -174,8 +174,24 @@
 % coverage of your project. Create a github workflow to generate your test coverage automatically on your
 % readme and PRs. You can reference the example in pytest-cov or other open source projects
 
-Quickly reference where the code coverage is.
+We use \texttt{pytest-cov} to measure line coverage across all Python source packages.
+Coverage is automated via a GitHub Actions workflow at
+\bluehref{https://github.com/UofT-CSC490-W2026/Lighthouse/blob/a5/.github/workflows/tests.yml}{.github/workflows/tests.yml},
+which runs on every push to \texttt{main} and on every pull request.
 
+The workflow performs the following steps:
+\begin{enumerate}
+  \item Runs \texttt{uv run pytest --cov --cov-report=xml --cov-report=term-missing} to
+    execute all 293 tests and produce a coverage report.
+  \item Parses the generated \texttt{coverage.xml} to extract the overall line coverage
+    percentage and generate a colored badge.
+  \item \textbf{On pushes to main:} updates the
+    \bluehref{https://github.com/UofT-CSC490-W2026/Lighthouse/blob/main/README.md}{README.md}
+    coverage badge in-place (between \texttt{coverage:start} / \texttt{coverage:end} markers)
+    and commits the change automatically.
+  \item \textbf{On pull requests:} posts (or updates) a comment on the PR with the current
+    coverage percentage, so reviewers can see coverage impact at a glance.
+\end{enumerate}
 
 % ================================================================================
 \section{Test Coverage Breadth}
