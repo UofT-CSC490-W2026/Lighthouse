@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Literal, cast
 
 from pydantic import BaseModel, Discriminator, Field, Tag
 
@@ -136,8 +136,20 @@ class Completion(_CandidateBase):
 
 def _candidate_discriminator(v: object) -> str:
     if isinstance(v, dict):
-        return v.get("kind", OutputFormat.file)  # type: ignore[return-value]
-    return getattr(v, "kind", OutputFormat.file)
+        raw = cast(dict[str, object], v)
+        kind = raw.get("kind")
+        if isinstance(kind, OutputFormat):
+            return kind.value
+        if isinstance(kind, str):
+            return kind
+        return OutputFormat.file.value
+
+    kind = getattr(v, "kind", OutputFormat.file)
+    if isinstance(kind, OutputFormat):
+        return kind.value
+    if isinstance(kind, str):
+        return kind
+    return OutputFormat.file.value
 
 
 CandidateEdit = Annotated[

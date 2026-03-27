@@ -62,6 +62,10 @@ def _aggregate_test_execution(
 
     summaries: list[TestExecutionSummary] = []
     for (comp_class, model, provider), group in sorted(groups.items()):
+        if model is None:
+            raise ValueError(
+                f"Test-execution results must have a model name, but got None for {comp_class}."
+            )
         rates = [
             r.native_metrics.pass_rate
             for r in group
@@ -99,6 +103,10 @@ def _aggregate_match(results: list[EvalResult]) -> list[MatchSummary]:
 
     summaries: list[MatchSummary] = []
     for (comp_class, model, provider), group in sorted(groups.items()):
+        if model is None:
+            raise ValueError(
+                f"Match results must have a model name, but got None for {comp_class}."
+            )
         metrics = [
             r.native_metrics
             for r in group
