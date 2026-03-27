@@ -332,11 +332,11 @@ These tests target the embed batching loop, which uses
 Off-by-one errors in this loop would cause chunks to be silently skipped or duplicated.
 
 \begin{enumerate}
-  \item \textbf{test\_single\_chunk\_produces\_one\_embed\_batch} ---
+  \item \textbf{test\_single\_chunk\_produces\_one\_embed\_batch} -
     \texttt{chunk\_count=1} produces exactly 1 embed call at offset 0.
     Tests the lower boundary of the batching loop.
 
-  \item \textbf{test\_exactly\_512\_chunks\_one\_batch} ---
+  \item \textbf{test\_exactly\_512\_chunks\_one\_batch} -
     \texttt{chunk\_count=512} (exactly \texttt{EMBED\_BATCH\_SIZE}) produces exactly 1 batch.
     This is the upper boundary for a single batch; a fencepost error would produce 0 or 2 batches.
 
@@ -344,7 +344,7 @@ Off-by-one errors in this loop would cause chunks to be silently skipped or dupl
     \texttt{chunk\_count=513} is the smallest value that requires 2 batches.
     Verifies offsets are \texttt{[0, 512]}.
 
-  \item \textbf{test\_large\_chunk\_count\_batch\_offsets} ---
+  \item \textbf{test\_large\_chunk\_count\_batch\_offsets} -
     \texttt{chunk\_count=2049} produces 5 batches with offsets
     \texttt{[0, 512, 1024, 1536, 2048]}.
     Validates batch arithmetic at scale.
@@ -357,16 +357,16 @@ The key invariant: \texttt{cleanup\_staging} is called if and only if \texttt{ba
 was set (i.e., \texttt{chunk\_files} succeeded).
 
 \begin{enumerate}[resume]
-  \item \textbf{test\_delete\_failure\_triggers\_cleanup} ---
+  \item \textbf{test\_delete\_failure\_triggers\_cleanup} -
     \texttt{delete\_existing\_chunks} fails \emph{after} \texttt{batch\_id} is assigned.
     Verifies both \texttt{status="failed"} and \texttt{cleanup\_staging} are called.
     This failure point was not covered by existing e2e tests.
 
-  \item \textbf{test\_store\_failure\_triggers\_cleanup} ---
+  \item \textbf{test\_store\_failure\_triggers\_cleanup} -
     \texttt{store\_chunks} fails after embedding succeeds.
     Embedded staging rows must be cleaned up to avoid dangling data.
 
-  \item \textbf{test\_chunk\_files\_failure\_no\_cleanup} ---
+  \item \textbf{test\_chunk\_files\_failure\_no\_cleanup} -
     \texttt{chunk\_files} raises \emph{before} \texttt{batch\_id} is assigned.
     Verifies \texttt{cleanup\_staging} is \textbf{not} called (there is nothing to clean),
     validating the \texttt{if batch\_id is not None} guard in the exception handler.
@@ -378,17 +378,17 @@ These tests verify that input parameters are correctly threaded through to the r
 Silent parameter drops would cause production failures with no error signal.
 
 \begin{enumerate}[resume]
-  \item \textbf{test\_github\_token\_propagated} ---
+  \item \textbf{test\_github\_token\_propagated} -
     A \texttt{github\_token} must reach both \texttt{update\_branch\_status} (for private
     repo branch creation via GitHub API) and \texttt{git\_clone\_or\_fetch} (for
     authenticated clone). Dropping the token causes silent 401 errors on private repos.
 
-  \item \textbf{test\_custom\_strategies\_propagated} ---
-    Custom \texttt{chunker\_strategy="ast"} and \texttt{embedding\_strategy="cohere"} must
+  \item \textbf{test\_custom\_strategies\_propagated} -
+    Custom \texttt{chunker\_strategy="ast"} and\\ \texttt{embedding\_strategy="cohere"} must
     be forwarded to \texttt{chunk\_files} and \texttt{embed\_chunk\_batch} respectively.
     If silently replaced by defaults, the user gets wrong results with no error.
 
-  \item \textbf{test\_latest\_commit\_in\_final\_status} ---
+  \item \textbf{test\_latest\_commit\_in\_final\_status} -
     The final \texttt{update\_branch\_status(status="indexed")} must include
     \texttt{latest\_commit} from the git output, while the initial
     \texttt{status="indexing"} call must have \texttt{latest\_commit=None}.
@@ -398,12 +398,12 @@ Silent parameter drops would cause production failures with no error signal.
 \subsection{Cleanup Correctness and Return Value Tests}
 
 \begin{enumerate}[resume]
-  \item \textbf{test\_cleanup\_receives\_correct\_batch\_id} ---
+  \item \textbf{test\_cleanup\_receives\_correct\_batch\_id} -
     On failure after chunking, \texttt{cleanup\_staging} must receive the exact
     \texttt{batch\_id="batch-001"} returned by \texttt{chunk\_files}. A wrong batch ID
     would leak staging rows while potentially purging unrelated data.
 
-  \item \textbf{test\_return\_value\_format} ---
+  \item \textbf{test\_return\_value\_format} -
     With \texttt{full\_name="myorg/myrepo"} and \texttt{branch="feature/cool"}, the return
     string must be \texttt{"Indexed myorg/myrepo/feature/cool at abc123"}. Branch names
     with slashes must not be truncated. This serves as a regression test for string
@@ -421,6 +421,6 @@ Silent parameter drops would cause production failures with no error signal.
 % • The test cases you created to prevent this bug from reoccurring
 % Link your video in your a5.pdf
 
-Ingestion service. First one was what if multiple indices happen. Second one was incremental index deleting some stuff.
+Ingestion service. First one was incremental index gap. Second one was incremental index failure after delete what happens.
 
 \end{document}
