@@ -326,7 +326,9 @@ def _flatten_structure_pages(
 ) -> list[dict]:
     """Recursively flatten a WikiStructure dict into a flat list of page defs."""
     pages = []
-    for section in structure.get("sections", []):
+    # Top-level uses "sections", nested levels use "subsections"
+    sections = structure.get("sections", []) or structure.get("subsections", [])
+    for section in sections:
         current_path = f"{section_path}/{section['slug']}" if section_path else section["slug"]
         for page in section.get("pages", []):
             pages.append({
