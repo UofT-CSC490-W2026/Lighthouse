@@ -12,6 +12,10 @@ dependencies = [
   "pyyaml>=6.0",
 ]
 
+[project.scripts]
+lighthouse-eval = "lighthouse_eval.cli.run_eval:main"
+lighthouse-eval-index = "lighthouse_eval.cli.index_dataset:main"
+
 [tool.uv.sources]
 shared = { workspace = true }
 
