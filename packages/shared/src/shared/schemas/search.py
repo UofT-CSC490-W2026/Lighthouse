@@ -31,3 +31,30 @@ class SearchResult(BaseModel):
     snippets: list[CodeSnippet] = Field(default_factory=list)
     query: str
     total_results: int = 0
+
+
+class WikiSearchRequest(BaseModel):
+    """Request payload for wiki search."""
+
+    query: str
+    github_repo_id: int
+    branch: str = Field(default="main", min_length=1)
+    top_k: int = Field(default=5, ge=1, le=50)
+
+
+class WikiSnippet(BaseModel):
+    """A single wiki page snippet returned by wiki search."""
+
+    page_title: str
+    slug: str
+    section_path: str
+    content_snippet: str
+    score: float = 0.0
+
+
+class WikiSearchResult(BaseModel):
+    """Response payload from wiki search."""
+
+    snippets: list[WikiSnippet] = Field(default_factory=list)
+    query: str
+    total_results: int = 0

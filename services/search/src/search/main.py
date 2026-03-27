@@ -5,14 +5,15 @@ from contextlib import asynccontextmanager
 
 from db import DatabaseManager
 from fastapi import FastAPI
-from shared.config import MILVUS_COLLECTION_NAME
-from shared.schemas.search import SearchRequest, SearchResult
+from shared.config import MILVUS_COLLECTION_NAME, WIKI_MILVUS_COLLECTION_NAME
+from shared.schemas.search import SearchRequest, SearchResult, WikiSearchRequest, WikiSearchResult
 from vectordb import MilvusClient
 
 from search.config import SearchSettings
 from embedding import EmbeddingProvider, OpenAIEmbeddingProvider
 from search.strategies.hybrid_strategy import HybridSearchStrategy
 from search.strategies.search_strategy import SearchStrategy
+from search.strategies.wiki_search_strategy import HybridWikiSearchStrategy
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -40,15 +41,26 @@ def create_app(
 
         emb = _embedder or OpenAIEmbeddingProvider(api_key=s.openai_api_key)
 
+        wiki_milvus = MilvusClient(
+            uri=s.milvus_uri,
+            collection_name=WIKI_MILVUS_COLLECTION_NAME,
+        )
+
         app.state.strategy = HybridSearchStrategy(
             db_manager=db_manager,
             milvus=milvus,
+            embedder=emb,
+        )
+        app.state.wiki_strategy = HybridWikiSearchStrategy(
+            db_manager=db_manager,
+            milvus=wiki_milvus,
             embedder=emb,
         )
 
         logger.info("Search service initialized")
         yield
 
+        wiki_milvus.close()
         milvus.close()
         db_manager.close()
 
@@ -61,6 +73,12 @@ app = create_app()
 @app.post("/search", response_model=SearchResult)
 async def search(request: SearchRequest) -> SearchResult:
     strategy: SearchStrategy[SearchRequest, SearchResult] = app.state.strategy
+    return await strategy.search(request)
+
+
+@app.post("/search/wiki", response_model=WikiSearchResult)
+async def search_wiki(request: WikiSearchRequest) -> WikiSearchResult:
+    strategy: SearchStrategy[WikiSearchRequest, WikiSearchResult] = app.state.wiki_strategy
     return await strategy.search(request)
 
 
