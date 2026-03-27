@@ -1,0 +1,218 @@
+\documentclass[a4paper,12pt]{article}
+
+\usepackage{a4wide}
+\usepackage{amsfonts}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{csquotes}
+\usepackage{lipsum}
+\usepackage{bm}
+\usepackage{tabularx}
+\usepackage{longtable}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{tikz}
+\usepackage{float}
+\usetikzlibrary{positioning, arrows.meta, shapes.geometric, fit}
+
+\usepackage{graphicx}  % For including images
+\usepackage{xcolor}  % For a colorfull presentation
+\usepackage{listings}  % For presenting code 
+
+\usepackage{algorithm}
+\usepackage[noend]{algpseudocode}
+\makeatletter
+\def\BState{\State\hskip-\ALG@thistlm}
+\makeatletter
+\usepackage[normalem]{ulem}
+\usepackage{array}
+\usepackage{hyperref}
+% \usepackage[hyphens]{url}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue,
+  urlcolor=blue,
+  citecolor=blue
+}
+\newcommand{\bluehref}[2]{\href{#1}{\textcolor{blue}{\uline{#2}}}}
+\makeatletter
+\newcommand*{\citelinktext}[2]{%
+  \hyper@@link[cite]{}{cite.#1}{#2}}
+\makeatother
+
+\usepackage{booktabs} 
+\usepackage{enumitem}
+\usepackage{bbm}
+\usepackage{tcolorbox}
+
+\usepackage{minted}
+\usepackage{subcaption}
+
+\usepackage[font=small,labelfont=bf]{caption}
+
+\usepackage{fullpage,amsmath,amsthm,amssymb}
+\newtheorem*{solution}{Solution}
+\newtheorem*{part1}{Part 1}
+\newtheorem*{part2}{Part 2}
+
+\newcommand{\Cov}{\mathrm{Cov}}
+\newcommand{\Var}{\mathrm{Var}}
+\newcommand{\rank}{\mathrm{rank}}
+\newcommand{\Span}{\mathrm{span}}
+\newcommand{\clip}{\mathrm{clip}}
+\newcommand{\Dim}{\mathrm{dim}}
+
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\newcolumntype{R}[1]{>{\raggedright\arraybackslash}p{#1}}
+
+\tcbset{
+  colback=gray!3,
+  colframe=black!20,
+  boxsep=1mm,
+  left=1mm,
+  right=1mm,
+  top=1mm,
+  bottom=1mm,
+}
+
+\usepackage{changepage}
+\setlength{\parindent}{0pt}
+
+\newenvironment{restoretext}%
+    {
+     \begin{adjustwidth}{}{\leftmargin}%
+    }{\end{adjustwidth}
+     }
+
+% Definition of a style for code, matter of taste
+\lstdefinestyle{mystyle}{
+  language=Python,
+  basicstyle=\ttfamily\footnotesize,
+  backgroundcolor=\color[HTML]{F7F7F7},
+  rulecolor=\color[HTML]{EEEEEE},
+  identifierstyle=\color[HTML]{24292E},
+  emphstyle=\color[HTML]{005CC5},
+  keywordstyle=\color[HTML]{D73A49},
+  commentstyle=\color[HTML]{6A737D},
+  stringstyle=\color[HTML]{032F62},
+  emph={@property,self,range,True,False},
+  morekeywords={super,with,as,lambda},
+  literate=%
+    {+}{{{\color[HTML]{D73A49}+}}}1
+    {-}{{{\color[HTML]{D73A49}-}}}1
+    {*}{{{\color[HTML]{D73A49}*}}}1
+    {/}{{{\color[HTML]{D73A49}/}}}1
+    {=}{{{\color[HTML]{D73A49}=}}}1
+    {/=}{{{\color[HTML]{D73A49}=}}}1,
+  breakatwhitespace=false,
+  breaklines=true,
+  captionpos=b,
+  keepspaces=true,
+  numbers=none,
+  showspaces=false,
+  showstringspaces=false,
+  showtabs=false,
+  tabsize=4,
+  frame=single,
+}
+\lstset{style=mystyle}
+
+\begin{document}
+\begin{titlepage}
+    \centering
+    \vspace*{1cm}
+    
+    \Huge
+    \textbf{CSC490: Assignment 5}
+    
+    \vspace{0.5cm}
+    
+    \vspace{1.5cm}
+    
+    \textbf{Team Members}
+    
+    \vspace{0.8cm}
+    
+    \large
+    \begin{tabular}{ll}
+        \textbf{Name} & \textbf{Student ID} \\
+        \midrule
+        Aarya Prakash & 1008790257 \\
+        Derek Huynh & 1008849052 \\
+        Merrick Liu & 1008951920 \\
+        Rhys Balevicius & 1000801974 \\
+    \end{tabular}
+    
+    \vfill
+    
+    \large
+    University of Toronto\\
+    Department of Computer Science    
+\end{titlepage}
+
+\section{Context for Our Project: Lighthouse}
+
+% ================================================================================
+\section{Profiling Execution time}
+% Profile 5 important functions in your codebase using https://docs.python.org/3/library/profile.html.
+% Analyze your functions and find ways to improve them.
+
+\textbf{Things to Profile: } 
+
+\begin{enumerate}
+    \item Search strategy (Hybrid, ...)
+    \item Chunking strategy (Code, documentation)
+    \item The MCP handler?
+    \item Some of the temporal workflows? The could try to profile the indexing workflows one is pretty beefy
+\end{enumerate}
+
+
+% ================================================================================
+\section{Showing Code Coverage}
+% Using pytest-cov (https://github.com/pytest-dev/pytest-cov) or a similar library, show the code
+% coverage of your project. Create a github workflow to generate your test coverage automatically on your
+% readme and PRs. You can reference the example in pytest-cov or other open source projects
+
+Quickly reference where the code coverage is.
+
+
+% ================================================================================
+\section{Test Coverage Breadth}
+% Let’s make sure our code is well tested. You’ll recieve 0.20 marks for each 1% of code coverage up to 20
+% marks based on part one.
+
+Talk here about what we considered part of coverage.
+
+% ================================================================================
+\section{Test Coverage Depth}
+% Choose your most complex module in your codebase. Create at least 10 unit tests for this module that
+% test edge cases, failure modes and important use cases. Link the tests and edge cases, and explain why
+% you chose these tests in comments of that module. We’ll try to find addtional edge cases that exist to
+% cause an error! Make sure to write positive tests and negative tests (ones that throw errors or gracefully
+% handle incorrect inputs)
+
+Ingestion is th emost complex part.
+
+% ================================================================================
+\section{Two Memorable Bugs}
+% Record a video walkthrough of two of the most memorable bugs you encountered during your project.
+% For each bug, include:
+% • What the bug was and how you discovered it
+% • The debugging process you used to identify the root cause
+% • How you fixed the bug
+% • What you learned from the experience
+% • The test cases you created to prevent this bug from reoccurring
+% Link your video in your a5.pdf
+
+Ingestion service. First one was what if multiple indices happen. Second one was incremental index deleting some stuff.
+
+
+% ================================================================================
+% \begin{thebibliography}{9}
+% \bibitem{deepseekmath} Shao, Z., et al. (2024). DeepSeekMath: Pushing the Limits of Mathematical Reasoning in Open Language Models. arXiv preprint arXiv:2402.03300.
+% \bibitem{nanochat-discussion}
+% Karpathy, A. (2025). Nanochat Discussion \#1: Introducing nanochat: The best ChatGPT that \$100 can buy. GitHub Discussions. Available at: \url{https://github.com/karpathy/nanochat/discussions/1} (accessed March 11, 2026).
+
+% \end{thebibliography}
+\end{document}
