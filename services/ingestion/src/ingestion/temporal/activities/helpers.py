@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from db import DatabaseManager
-from shared.config import EMBEDDING_DIMENSION, MILVUS_COLLECTION_NAME
+from shared.config import MILVUS_COLLECTION_NAME, default_embedding_dimension
 from vectordb import MilvusClient
 
 from ...utilities.config import IngestionSettings
@@ -37,5 +37,8 @@ def make_milvus(settings: IngestionSettings) -> MilvusClient:
         uri=settings.milvus_uri,
         collection_name=MILVUS_COLLECTION_NAME,
     )
-    milvus.ensure_collection(dimension=EMBEDDING_DIMENSION)
+    dimension = settings.embedding_dimension or default_embedding_dimension(
+        settings.embedding_strategy
+    )
+    milvus.ensure_collection(dimension=dimension)
     return milvus

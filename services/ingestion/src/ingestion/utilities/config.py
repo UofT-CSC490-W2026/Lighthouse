@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
+from shared.config import DEFAULT_EMBEDDING_STRATEGY
 from shared.ssm import ssm_settings_sources
 
 SSM_PARAMETER_ENV_VAR = "INGESTION_SETTINGS_SSM_PARAMETER"
@@ -17,7 +18,9 @@ class IngestionSettings(BaseSettings):
     temporal_address: str = "localhost:7233"
     temporal_task_queue: str = "ingestion"
     chunker_strategy: str = "sliding_window"
-    embedding_strategy: str = "openai"
+    embedding_strategy: str = DEFAULT_EMBEDDING_STRATEGY
+    embedding_model: str | None = None
+    embedding_dimension: int | None = None
 
     model_config = {"env_prefix": "", "env_file": ".env", "extra": "ignore"}
 
