@@ -10,11 +10,11 @@ members = [
   "services/ingestion",
   "services/search",
   "services/mcp_server",
+  "packages/eval",
   "packages/shared",
   "packages/vectordb",
   "packages/db",
   "packages/embedding",
-  "evaluation",
   "packages/testing",
 ]
 
