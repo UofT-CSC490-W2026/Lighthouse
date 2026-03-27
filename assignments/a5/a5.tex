@@ -182,7 +182,38 @@ Quickly reference where the code coverage is.
 % Let’s make sure our code is well tested. You’ll recieve 0.20 marks for each 1% of code coverage up to 20
 % marks based on part one.
 
-Talk here about what we considered part of coverage.
+Our test suite consists of 293 tests (unit, integration, and end-to-end) achieving
+\textbf{100\% line coverage} across 2{,}418 source lines.
+
+\subsection{What We Measure}
+
+Coverage is configured in
+\bluehref{https://github.com/UofT-CSC490-W2026/Lighthouse/blob/a5/pyproject.toml}{pyproject.toml}
+under \texttt{[tool.coverage.run].source} and includes all Python backend code:
+
+\begin{itemize}
+  \item \texttt{packages/db/src} --- Peewee ORM models and database utilities
+  \item \texttt{packages/vectordb/src} --- Milvus vector database client wrapper
+  \item \texttt{packages/embedding/src} --- Embedding provider abstraction (OpenAI, mock)
+  \item \texttt{packages/shared/src} --- Shared data models and utilities
+  \item \texttt{services/ingestion/src} --- Temporal workflows, activities, and chunking pipelines
+  \item \texttt{services/search/src} --- Search strategies (hybrid search)
+  \item \texttt{services/mcp\_server/src} --- MCP server, HTTP/MCP routers, auth, and decorators
+\end{itemize}
+
+\subsection{What We Exclude and Why}
+
+\textbf{\texttt{services/web/}} is excluded from coverage measurement. This service is a
+TypeScript/React frontend that currently serves as a debugging UI for internal development.
+It is not part of our Python test suite and is being actively redesigned in the coming week,
+so investing in test coverage for code that will be replaced would not be productive.
+Once the new frontend stabilizes, we plan to add Playwright or similar end-to-end tests
+for it separately.
+
+We also use standard \texttt{exclude\_lines} patterns in our coverage configuration to
+skip lines that are not meaningfully testable: \texttt{TYPE\_CHECKING} blocks,
+\texttt{raise NotImplementedError} stubs, ellipsis-only bodies, and
+\texttt{if \_\_name\_\_ == "\_\_main\_\_"} guards.
 
 % ================================================================================
 \section{Test Coverage Depth}
