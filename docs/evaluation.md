@@ -1,5 +1,8 @@
 # Lighthouse Evaluation Framework
 
+This document is the canonical guide for the evaluation framework implemented
+under `evaluation/`.
+
 A modular evaluation framework for measuring whether retrieval-augmented context improves LLM code generation. Designed to answer the question: *does the context Lighthouse surfaces actually help coding agents complete tasks?*
 
 ## Table of Contents
@@ -31,12 +34,13 @@ A modular evaluation framework for measuring whether retrieval-augmented context
 The framework compares **baseline** performance (model receives only the task prompt) against **augmented** performance (model receives the task prompt plus context retrieved by Lighthouse). For a given configuration of models, context providers, and datasets, it:
 
 1. Loads tasks from an external benchmark via a **DatasetAdapter**.
-2. For each `(model, context_provider, task, run)` combination:
+2. Prepares benchmark workspaces for test-execution tasks before any LLM call.
+3. For each runnable `(model, context_provider, task, run)` combination:
    - Retrieves context using a **ContextProvider** (none, oracle, or Lighthouse).
-   - Generates a code solution using a **CodeGenerator** (Bedrock, OpenAI, Anthropic).
+   - Generates a code solution using a **CodeGenerator** (currently AWS Bedrock).
    - Applies the generated output to a temporary workspace as a **CandidateEdit**.
    - Scores the result with a typed **Evaluator** matching the task's evaluation track.
-3. Aggregates results into per-track reports with mean, stddev, 95% CI, and delta-over-baseline.
+4. Aggregates results into per-track reports with mean, stddev, 95% CI, and delta-over-baseline.
 
 All tasks are **Python-only**. The `Task.language` field is `Literal["python"]` and Pydantic will reject anything else.
 
@@ -64,6 +68,7 @@ CLI (run_eval.py)
     v
 EvalRunner
     |---> DatasetAdapter.load()     --> Dataset[Task]
+    |---> prepare_dataset_for_run() --> cached base workspaces
     |---> ContextProvider.get_context()
     |---> CodeGenerator.generate()  --> CandidateEdit
     |---> CandidateEdit.apply(workspace)
@@ -71,7 +76,9 @@ EvalRunner
     |---> EvalReport (per-track summaries)
 ```
 
-The runner iterates over `models x context_providers x tasks x num_runs` with bounded async concurrency.
+The runner prepares test-execution tasks once, then iterates over generation tasks on
+`models x context_providers x tasks x num_runs` and retrieval-diagnostic tasks on
+`context_providers x tasks x num_runs` with bounded async concurrency.
 
 ### Core Abstractions
 
@@ -147,9 +154,11 @@ Every `EvalResult` copies the task's provenance. Reports group by `comparability
 ```
 evaluation/
   pyproject.toml                          # Package config, deps, build system
-  README.md                               # This file
 
   src/lighthouse_eval/
+    cli/
+      run_eval.py                         # Main CLI implementation
+      index_dataset.py                    # Dataset indexing CLI implementation
     config.py                             # EvalConfig, DatasetConfig
     runner.py                             # EvalRunner orchestration loop
 
@@ -182,6 +191,7 @@ evaluation/
       base.py                             # CandidateEdit discriminated union
 
     execution/
+      preparation.py                      # Benchmark preflight + cached workspace prep
       workspace.py                        # Workspace creation, cleanup, evaluator dispatch
       evaluators/
         base.py                           # Evaluator protocol
@@ -194,8 +204,8 @@ evaluation/
       results.py                          # EvalReport, aggregation, markdown/JSON output
 
   scripts/
-    run_eval.py                           # CLI entry point
-    index_dataset.py                      # Pre-index repos and write index_registry.json
+    run_eval.py                           # Compatibility wrapper for CLI entry point
+    index_dataset.py                      # Compatibility wrapper for indexing CLI
 
   configs/                                # YAML config files (one per dataset)
     swebench.yaml
@@ -204,7 +214,13 @@ evaluation/
     crosscodeeval.yaml
     repobench.yaml
     repoqa.yaml
+    smoke/                                # Small baseline smoke-run configs
+
+  Dockerfile                              # Optional eval container image
 ```
+
+The evaluation package source lives under `evaluation/`; this guide lives at
+`docs/evaluation.md`.
 
 ---
 
@@ -224,6 +240,13 @@ This installs `lighthouse-eval` with all dependencies:
 - `datasets` for loading HuggingFace benchmarks
 - `pyyaml` for config loading
 - `pytest` / `pytest-json-report` / `pytest-asyncio` for test execution
+
+### Preferred Runtime
+
+For benchmark smoke runs, the preferred path is the opt-in `eval` container in
+`docker-compose.yml`. It keeps the evaluation Python environment reproducible,
+mounts benchmark roots and the workspace cache, and talks to the host Docker
+daemon through `/var/run/docker.sock` for SWE-bench-style execution.
 
 ### Environment Variables
 
@@ -252,6 +275,20 @@ uv run python scripts/run_eval.py -v run --config configs/swebench.yaml --dry-ru
 # Full run
 uv run python scripts/run_eval.py run --config configs/swebench.yaml
 ```
+
+For the first baseline smoke pass across all targeted datasets, use the
+`configs/smoke/` configs. They are `none`-provider only, `num_runs: 1`, and
+cap each dataset to 3 instances.
+
+```bash
+# From the repo root, inside the opt-in eval container
+docker compose --profile eval run --rm \
+  eval python evaluation/scripts/run_eval.py \
+  run --config evaluation/configs/smoke/swebench.yaml
+```
+
+Artifacts are written back to the host under `evaluation/results/...`, and
+prepared benchmark workspaces are cached under `evaluation/.cache/workspaces/`.
 
 The CLI has two subcommands:
 
@@ -282,6 +319,7 @@ dataset:
 num_runs: 3             # repetitions per combination for variance estimation
 search_service_url: "http://localhost:8002"
 output_dir: "results/swebench/"
+workspace_cache_dir: "../.cache/workspaces"
 concurrency: 4
 
 metadata:
@@ -312,6 +350,11 @@ dataset:
 ```
 
 The first time you use a HuggingFace adapter, the dataset will be downloaded and cached automatically.
+
+For test-execution tracks, the runner now prepares a cached base workspace for
+each task before evaluation starts. That prep phase is fail-fast: missing
+benchmark roots, missing checkout tooling, or missing SWE-bench Docker images
+abort the run before any LLM call is made.
 
 ### Generating Reports
 
@@ -357,31 +400,38 @@ context_providers:
 search_service_url: "http://localhost:8002"
 ```
 
+When running inside the `eval` container on the Compose network, use
+`http://search:8002` instead of `http://localhost:8002`.
+
 ### Configuring Search Methods
 
-The search service supports multiple named retrieval methods that can be compared independently or combined. Specify them with the `lighthouse:<method>` syntax:
+The eval config supports the `lighthouse:<method>` naming pattern for selecting
+named retrieval methods. Today the implemented path is the default hybrid
+search; as additional search methods are added to the search service and eval
+client, they can be exposed through the same provider syntax.
 
 ```yaml
 context_providers:
   - "none"                 # baseline
-  - "lighthouse"           # default (all methods combined)
-  - "lighthouse:doc"       # only doc-based retrieval
-  - "lighthouse:ast"       # only AST-based retrieval
-  - "lighthouse:doc,ast"   # both, fused via RRF
+  - "lighthouse"           # current default
+  - "lighthouse:hybrid"    # explicit equivalent of the default
 ```
 
-Each variant becomes a separate column in reports. New methods are registered server-side in `services/search/src/search/main.py` and are immediately available without any client changes.
+Each configured variant becomes a separate column in reports. Future search
+methods should reuse this naming convention once support is added end to end.
 
 `LighthouseProvider` sends `POST /search` with:
 
 ```json
-{
-  "query": "<task description>",
-  "top_k": 10,
-  "search_methods": ["doc"],
-  "github_repo_id": "<from task.metadata, if present>",
-  "branch": "<from task.metadata, if present>"
-}
+[
+  {
+    "method": "hybrid",
+    "query": "<task description>",
+    "top_k": 10,
+    "github_repo_id": "<from task.metadata, if present>",
+    "branch": "<from task.metadata, if present>"
+  }
+]
 ```
 
 If the service is unavailable, it logs a warning and returns empty context (so runs don't crash).
@@ -426,11 +476,15 @@ It then injects `github_repo_id` and `branch` into each task's `metadata` before
 
 ## Current Limitations
 
-**Not yet validated end-to-end with live LLM calls.** The framework has been smoke-tested with dry-runs, dataset loading, adapter instantiation, and unit-level evaluator logic. Full end-to-end runs with real LLM API calls have not yet been performed. The first real run will likely surface issues in response parsing, workspace materialization edge cases, or timeout tuning.
+**Not yet validated at full benchmark scale with live LLM calls.** The framework now prepares cached benchmark workspaces and supports real smoke runs, but large benchmark sweeps with live LLM traffic will still be the first place that rate limits, timeout tuning, and prompt-format edge cases show up.
 
-**SWE-bench and BugsInPy adapters assume local infrastructure.** SWE-bench needs Docker with per-instance images (~120GB disk). BugsInPy and PyBugHive need local clones of their respective repositories with `bugsinpy-checkout` or equivalent tooling installed. The adapters load task metadata but do not automate environment provisioning.
+**Heavyweight benchmark assets are still bring-your-own.** SWE-bench still requires existing Docker images, and BugsInPy/PyBugHive still require local benchmark roots plus any benchmark-specific checkout tooling. The runner validates these prerequisites early, but it does not install tooling or build/pull images automatically.
 
-**Test execution in sandboxed workspaces.** `PytestEvaluator` runs `pytest` as a subprocess in a temp directory. It does not install dependencies, set up virtualenvs, or run Docker containers. For benchmarks that need specific environments (SWE-bench, BugsInPy, PyBugHive), additional workspace setup logic is needed.
+**Eval container is preferred, not mandatory.** Host-run evaluation still works, but the documented smoke path is the opt-in Compose `eval` service because it provides a more reproducible environment for benchmark prep and execution.
+
+**Generation is Bedrock-only today.** The evaluation runner currently accepts
+`bedrock/<model-id>` models only. If we add more generator backends later, they
+should be documented explicitly.
 
 **Custom/local datasets are not Lighthouse-indexable yet.** The ingestion API indexes GitHub repositories (`github_repo_id`, `repo_url`, `full_name`). Local-only workspaces in `custom` datasets currently support `none` and `static:oracle`, but not `lighthouse`, until local indexing support is added.
 
@@ -448,9 +502,9 @@ It then injects `github_repo_id` and `branch` into each task's `metadata` before
 - Task scaffolding script for quickly adding new curated tasks
 
 **Execution environment improvements:**
-- Docker-based workspace execution for SWE-bench, BugsInPy, PyBugHive
-- Automatic dependency installation in sandboxed workspaces
-- Per-adapter workspace setup hooks (e.g. `bugsinpy-checkout`)
+- Better benchmark-specific setup/install discovery for BugsInPy and PyBugHive
+- More aggressive workspace reuse across tasks from the same repository
+- Optional automation for building or pulling missing SWE-bench images
 
 **LLM response caching:**
 - Cache `(model, prompt_hash) -> raw_response` to avoid redundant API calls across runs
@@ -469,6 +523,10 @@ It then injects `github_repo_id` and `branch` into each task's `metadata` before
 - Add incremental refresh support to `index_dataset.py` (skip already-indexed repos/branches)
 - Validate that every task with `lighthouse` has a matching registry entry before run start
 - Support per-dataset branch mapping when benchmarks pin non-default branches
+
+**Retrieval method support:**
+- Add additional named search methods beyond the current hybrid path
+- Keep the eval-side provider syntax and request shaping aligned with search-service capabilities
 
 **More adapters:**
 - SWE-bench++ (multi-language, filter to Python)
