@@ -152,8 +152,6 @@ def evaluate_swebench_predictions(
     logs_root.mkdir(parents=True, exist_ok=True)
 
     instance_ids = [task.instance_id for task in tasks]
-    model_name = read_prediction_model_name(predictions_path)
-    model_dir_name = model_name.replace("/", "__")
 
     print(f"Evaluating {len(instance_ids)} SWE-bench prediction(s)")
     print(f"Run id: {run_id}")
@@ -219,14 +217,32 @@ def evaluate_swebench_predictions(
     if result.returncode != 0:
         raise RuntimeError(f"SWE-bench evaluation failed with exit code {result.returncode}.")
 
-    report_path = workdir / f"{model_dir_name}.{run_id}.json"
-    if not report_path.is_file():
-        raise RuntimeError(f"Expected evaluation report is missing: {report_path}")
+    outputs = resolve_evaluation_output_paths(
+        predictions_path=predictions_path,
+        run_id=run_id,
+        workdir=workdir,
+    )
+    if not outputs.report_path.is_file():
+        raise RuntimeError(f"Expected evaluation report is missing: {outputs.report_path}")
+    return outputs
 
-    run_log_dir = workdir / "logs" / "run_evaluation" / run_id / model_dir_name
+
+def resolve_evaluation_output_paths(
+    *,
+    predictions_path: Path,
+    run_id: str,
+    workdir: Path = DEFAULT_HARNESS_WORKDIR,
+) -> HarnessEvaluationResult:
+    predictions_path = predictions_path.resolve()
+    if not predictions_path.is_file():
+        raise FileNotFoundError(f"Predictions file not found: {predictions_path}")
+
+    workdir = workdir.resolve()
+    model_name = read_prediction_model_name(predictions_path)
+    model_dir_name = model_name.replace("/", "__")
     return HarnessEvaluationResult(
-        report_path=report_path,
-        run_log_dir=run_log_dir,
+        report_path=workdir / f"{model_dir_name}.{run_id}.json",
+        run_log_dir=workdir / "logs" / "run_evaluation" / run_id / model_dir_name,
     )
 
 

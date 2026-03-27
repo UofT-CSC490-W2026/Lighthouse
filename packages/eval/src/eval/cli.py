@@ -20,6 +20,7 @@ from eval.harness import (
     prepare_swebench_images,
 )
 from eval.predictions import generate_baseline_predictions
+from eval.summary import HarnessRunSummary, summarize_swebench_run
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -210,6 +211,26 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Harness image cache level",
     )
 
+    summarize = subparsers.add_parser(
+        "summarize",
+        help="Print a human-readable summary for a SWE-bench harness run",
+    )
+    summarize.add_argument(
+        "--predictions",
+        required=True,
+        help="Path to the predictions .jsonl or .json file used for the run",
+    )
+    summarize.add_argument(
+        "--run-id",
+        required=True,
+        help="Harness run identifier",
+    )
+    summarize.add_argument(
+        "--workdir",
+        default=str(DEFAULT_HARNESS_WORKDIR),
+        help="Working directory for SWE-bench harness artifacts and logs",
+    )
+
     return parser
 
 
@@ -316,6 +337,16 @@ def _cmd_evaluate(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_summarize(args: argparse.Namespace) -> int:
+    summary = summarize_swebench_run(
+        predictions_path=Path(args.predictions),
+        run_id=args.run_id,
+        workdir=Path(args.workdir),
+    )
+    _print_run_summary(summary)
+    return 0
+
+
 def _validate_slice_selection(args: argparse.Namespace) -> None:
     if args.max_instances is not None and args.max_instances < 1:
         raise ValueError("--max-instances must be at least 1")
@@ -332,6 +363,35 @@ def _print_slice(tasks: list[SWEBenchTask], dataset_name: str, split: str) -> No
         print(f"   version: {task.version}")
 
 
+def _print_run_summary(summary: HarnessRunSummary) -> None:
+    print(f"Harness report: {summary.outputs.report_path}")
+    print(f"Run log directory: {summary.outputs.run_log_dir}")
+    print(f"Total instances: {summary.total_instances}")
+    print(f"Submitted instances: {summary.submitted_instances}")
+    print(f"Completed instances: {summary.completed_instances}")
+    print(f"Resolved instances: {summary.resolved_instances}")
+    print(f"Unresolved instances: {summary.unresolved_instances}")
+    print(f"Empty patch instances: {summary.empty_patch_instances}")
+    print(f"Error instances: {summary.error_instances}")
+
+    if not summary.instances:
+        print("No per-instance reports were found under the run log directory.")
+        return
+
+    print("Per-instance results:")
+    for instance in summary.instances:
+        print(f"- {instance.instance_id}: {instance.status}")
+        print(f"  patch applied: {'yes' if instance.patch_successfully_applied else 'no'}")
+        print(
+            "  FAIL_TO_PASS: "
+            f"{len(instance.fail_to_pass_successes)} passed, "
+            f"{len(instance.fail_to_pass_failures)} failed"
+        )
+        print(f"  PASS_TO_PASS failures: {len(instance.pass_to_pass_failures)}")
+        for test_name in instance.fail_to_pass_failures:
+            print(f"  failing FAIL_TO_PASS test: {test_name}")
+
+
 def main() -> int:
     parser = _build_parser()
     args = parser.parse_args()
@@ -344,6 +404,8 @@ def main() -> int:
         return _cmd_generate_baseline(args)
     if args.command == "evaluate":
         return _cmd_evaluate(args)
+    if args.command == "summarize":
+        return _cmd_summarize(args)
 
     parser.error(f"Unknown command: {args.command}")
     return 2
