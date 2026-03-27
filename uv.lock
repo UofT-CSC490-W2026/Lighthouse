@@ -843,12 +843,14 @@ name = "embedding"
 version = "0.1.0"
 source = { editable = "packages/embedding" }
 dependencies = [
+    { name = "boto3" },
     { name = "openai" },
     { name = "shared" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "boto3", specifier = ">=1.35" },
     { name = "openai", specifier = ">=1.0" },
     { name = "shared", editable = "packages/shared" },
 ]
@@ -1784,15 +1786,15 @@ dependencies = [
     { name = "httpx" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
+    { name = "pytest" },
+    { name = "pytest-json-report" },
     { name = "pyyaml" },
     { name = "shared" },
 ]
 
 [package.dev-dependencies]
 dev = [
-    { name = "pytest" },
     { name = "pytest-asyncio" },
-    { name = "pytest-json-report" },
     { name = "ruff" },
 ]
 
@@ -1803,15 +1805,15 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.27" },
     { name = "pydantic", specifier = ">=2.0" },
     { name = "pydantic-settings", specifier = ">=2.0" },
+    { name = "pytest", specifier = ">=9.0.2" },
+    { name = "pytest-json-report", specifier = ">=1.5" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "shared", editable = "packages/shared" },
 ]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "pytest", specifier = ">=9.0.2" },
     { name = "pytest-asyncio", specifier = ">=0.24" },
-    { name = "pytest-json-report", specifier = ">=1.5" },
     { name = "ruff", specifier = ">=0.15.7" },
 ]
 

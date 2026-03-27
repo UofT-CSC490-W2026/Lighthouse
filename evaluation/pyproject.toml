@@ -10,6 +10,8 @@ dependencies = [
   "boto3>=1.35",
   "datasets>=3.0",
   "pyyaml>=6.0",
+  "pytest>=9.0.2",
+  "pytest-json-report>=1.5",
 ]
 
 [project.scripts]
@@ -21,8 +23,6 @@ shared = { workspace = true }
 
 [dependency-groups]
 dev = [
-  "pytest>=9.0.2",
-  "pytest-json-report>=1.5",
   "pytest-asyncio>=0.24",
   "ruff>=0.15.7",
 ]
