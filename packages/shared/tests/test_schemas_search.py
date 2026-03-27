@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from shared.schemas.search import CodeSnippet, SearchRequest, SearchResult
+from shared.schemas.search import CodeSnippet, HybridRequest, SearchResult
 
 
 # ── SearchRequest ──────────────────────────────────────────────────
@@ -9,7 +9,7 @@ from shared.schemas.search import CodeSnippet, SearchRequest, SearchResult
 
 @pytest.mark.unit
 def test_search_request_defaults():
-    req = SearchRequest(query="find auth", github_repo_id=1)
+    req = HybridRequest(query="find auth", github_repo_id=1)
     assert req.branch == "main"
     assert req.top_k == 10
 
@@ -17,19 +17,19 @@ def test_search_request_defaults():
 @pytest.mark.unit
 def test_search_request_top_k_zero_raises():
     with pytest.raises(ValidationError):
-        SearchRequest(query="q", github_repo_id=1, top_k=0)
+        HybridRequest(query="q", github_repo_id=1, top_k=0)
 
 
 @pytest.mark.unit
 def test_search_request_top_k_101_raises():
     with pytest.raises(ValidationError):
-        SearchRequest(query="q", github_repo_id=1, top_k=101)
+        HybridRequest(query="q", github_repo_id=1, top_k=101)
 
 
 @pytest.mark.unit
 def test_search_request_empty_branch_raises():
     with pytest.raises(ValidationError):
-        SearchRequest(query="q", github_repo_id=1, branch="")
+        HybridRequest(query="q", github_repo_id=1, branch="")
 
 
 # ── CodeSnippet ────────────────────────────────────────────────────
