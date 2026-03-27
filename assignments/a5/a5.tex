@@ -282,7 +282,7 @@ deleting old chunks, embedding chunks in parallel batches, storing results to th
 tables and vector database, and updating the branch status. It includes conditional
 early-exit logic (when no chunks are produced), parallel fan-out for embedding batches
 (using \texttt{asyncio.gather}), and a two-phase error handler that marks the branch as
-failed and conditionally cleans up staging data only when a \texttt{batch\_id} has been assigned.
+failed and conditionally cleans up staging data only when a \texttt{batch\_id} has been assigned. \\
 
 All 12 tests are located in
 \bluehref{https://github.com/UofT-CSC490-W2026/Lighthouse/blob/a5/services/ingestion/tests/unit/test\_index\_branch\_workflow.py}{services/ingestion/tests/unit/test\_index\_branch\_workflow.py} and use Temporal's
