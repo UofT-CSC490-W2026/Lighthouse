@@ -13,6 +13,8 @@ from .search_strategy import SearchStrategy
 
 logger = logging.getLogger(__name__)
 
+class BranchNotIndexedError(RuntimeError):
+    """Raised when a requested branch is not indexed for a repository."""
 
 class HybridSearchStrategy(SearchStrategy[SearchRequest, SearchResult]):
     """Hybrid search combining vector similarity and PostgreSQL full-text search."""
@@ -39,15 +41,141 @@ class HybridSearchStrategy(SearchStrategy[SearchRequest, SearchResult]):
             )
             if repo:
                 repo_id = repo.id
+                if not self._is_branch_indexed(repo.id, request.branch):
+                    raise BranchNotIndexedError(
+                        f"Branch requested not indexed or does not exist: \"{request.branch}\""
+                    )
 
-        # Build filters for Milvus
+        attempt = self._search_for_branch(
+            request=request,
+            repo_id=repo_id,
+            branch=request.branch,
+        )
+        logger.info(
+            "Search attempt repo=%s github_repo_id=%s branch=%s vector=%d keyword=%d fused=%d snippets=%d keyword_mode=%s",
+            repo_id,
+            request.github_repo_id,
+            request.branch,
+            attempt["vector_count"],
+            attempt["keyword_count"],
+            attempt["fused_count"],
+            len(attempt["snippets"]),
+            attempt["keyword_mode"],
+        )
+        return SearchResult(
+            snippets=attempt["snippets"],
+            query=request.query,
+            total_results=attempt["fused_count"],
+        )
+
+    def _keyword_search(
+        self,
+        query: str,
+        top_k: int,
+        repo_id: str | None,
+        branch: str | None,
+    ) -> tuple[list[dict], str]:
+        """Execute PostgreSQL full-text search on chunks.content."""
+        with self.db_manager.connection_context():
+            # Build raw SQL for full-text search (Peewee's ORM doesn't
+            # handle tsvector/tsquery parameterization cleanly)
+            conditions = [
+                "to_tsvector('english', content) @@ plainto_tsquery('english', %s)"
+            ]
+            params: list[str] = [query, query]  # one for WHERE, one for ts_rank
+
+            if repo_id:
+                conditions.append("repository_id = %s")
+                params.append(repo_id)
+            if branch:
+                conditions.append("branch = %s")
+                params.append(branch)
+
+            where_clause = " AND ".join(conditions)
+            sql = f"""
+                SELECT id, file_path,
+                       ts_rank(to_tsvector('english', content),
+                               plainto_tsquery('english', %s)) as rank
+                FROM chunks
+                WHERE {where_clause}
+                ORDER BY rank DESC
+                LIMIT %s
+            """
+            params.append(str(top_k * 2))
+
+            results = []
+            for row in Chunk.raw(sql, *params):
+                results.append(
+                    {
+                        "chunk_id": row.id,
+                        "score": float(row.rank),
+                    }
+                )
+            if results:
+                return results, "fts"
+
+        # ILIKE lexical fallback intentionally disabled for now.
+        return [], "none"
+
+    # def _keyword_search_lexical(
+    #     self,
+    #     query: str,
+    #     top_k: int,
+    #     repo_id: str | None,
+    #     branch: str | None,
+    # ) -> list[dict]:
+    #     """Fallback keyword search using ILIKE tokens when FTS has no matches."""
+    #     terms = self._extract_terms(query)
+    #     if not terms:
+    #         return []
+    #
+    #     like_values = [f"%{term}%" for term in terms]
+    #     score_expr = " + ".join(
+    #         "(CASE WHEN content ILIKE %s THEN 1 ELSE 0 END)" for _ in like_values
+    #     )
+    #     like_expr = " OR ".join("content ILIKE %s" for _ in like_values)
+    #
+    #     conditions: list[str] = [f"({like_expr})"]
+    #     condition_params: list[str] = [*like_values]
+    #     if repo_id:
+    #         conditions.append("repository_id = %s")
+    #         condition_params.append(repo_id)
+    #     if branch:
+    #         conditions.append("branch = %s")
+    #         condition_params.append(branch)
+    #
+    #     sql = f"""
+    #         SELECT id, file_path, ({score_expr})::float AS rank
+    #         FROM chunks
+    #         WHERE {" AND ".join(conditions)}
+    #         ORDER BY rank DESC
+    #         LIMIT %s
+    #     """
+    #     params = [*like_values, *condition_params, str(top_k * 2)]
+    #
+    #     with self.db_manager.connection_context():
+    #         results: list[dict] = []
+    #         for row in Chunk.raw(sql, *params):
+    #             results.append(
+    #                 {
+    #                     "chunk_id": row.id,
+    #                     "score": float(row.rank),
+    #                 }
+    #             )
+    #         return results
+
+    def _search_for_branch(
+        self,
+        request: SearchRequest,
+        repo_id: str | None,
+        branch: str | None,
+    ) -> dict:
         filters: dict[str, str] = {}
         if repo_id:
             filters["repository_id"] = repo_id
-        if request.branch:
-            filters["branch"] = request.branch
+        if branch:
+            filters["branch"] = branch
 
-        # 1. Vector search
         vector_results: list[dict] = []
         try:
             query_embedding = self.embedder.embed_single(request.query)
@@ -68,24 +196,31 @@ class HybridSearchStrategy(SearchStrategy[SearchRequest, SearchResult]):
         except Exception:
             logger.exception("Vector search failed, falling back to keyword-only")
 
-        # 2. Keyword search
-        keyword_results = self._keyword_search(request, repo_id)
-
-        # 3. Reciprocal Rank Fusion
+        keyword_results, keyword_mode = self._keyword_search(
+            query=request.query,
+            top_k=request.top_k,
+            repo_id=repo_id,
+            branch=branch,
+        )
         fused = self._rrf_fusion(vector_results, keyword_results, k=60)
-
-        # 4. Get top_k chunk IDs and fetch full content
         top_chunk_ids = [r["chunk_id"] for r in fused[: request.top_k]]
+        snippets = self._load_snippets(top_chunk_ids, fused)
 
-        if not top_chunk_ids:
-            return SearchResult(snippets=[], query=request.query, total_results=0)
+        return {
+            "branch": branch,
+            "keyword_mode": keyword_mode,
+            "vector_count": len(vector_results),
+            "keyword_count": len(keyword_results),
+            "fused_count": len(fused),
+            "snippets": snippets,
+        }
 
-        # Fetch full chunks from postgres
+    def _load_snippets(self, chunk_ids: list[str], fused: list[dict]) -> list[CodeSnippet]:
+        if not chunk_ids:
+            return []
+
         with self.db_manager.connection_context():
-            chunks = (
-                Chunk.select()
-                .where(Chunk.id.in_(top_chunk_ids)) #type: ignore
-            )
+            chunks = Chunk.select().where(Chunk.id.in_(chunk_ids))  # type: ignore[arg-type]
             chunk_map = {c.id: c for c in chunks}
 
         # Build ordered snippets matching fusion order
@@ -94,7 +229,7 @@ class HybridSearchStrategy(SearchStrategy[SearchRequest, SearchResult]):
             for row in fused[: request.top_k]
         }
         snippets: list[CodeSnippet] = []
-        for chunk_id in top_chunk_ids:
+        for chunk_id in chunk_ids:
             chunk = chunk_map.get(chunk_id)
             if chunk is None:
                 continue
@@ -108,17 +243,12 @@ class HybridSearchStrategy(SearchStrategy[SearchRequest, SearchResult]):
                     score=score_map.get(chunk_id, 0.0),
                 )
             )
+        return snippets
 
-        return SearchResult(
-            snippets=snippets,
-            query=request.query,
-            total_results=len(fused),
-        )
-
-    def _keyword_search(
-        self, request: SearchRequest, repo_id: str | None
-    ) -> list[dict]:
-        """Execute PostgreSQL full-text search on chunks.content."""
+    def _is_branch_indexed(self, repo_id: str, branch: str) -> bool:
+        requested_branch = branch.strip()
+        if not requested_branch:
+            return False
         with self.db_manager.connection_context():
             # Build raw SQL for full-text search (Peewee's ORM doesn't
             # handle tsvector/tsquery parameterization cleanly)

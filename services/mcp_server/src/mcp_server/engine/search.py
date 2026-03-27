@@ -133,7 +133,13 @@ class SearchEngine:
         except httpx.HTTPStatusError as exc:
             self.log.error("Search service returned %s: %s", exc.response.status_code, exc.response.text)
             status = "error"
-            message = f"Search service error: {exc.response.status_code}"
+
+            # Careful that the exception's reponse text does not reveal any privileged info, maybe
+            # a TODO is have a delineation between internal logging exception text and a desired
+            # informative user facing message that the llm could respond to (i.e branch not found)
+            # Would probably be via a custom FastAPI exception class, with "internal" and "user_message" keys
+            # in the json: https://fastapi.tiangolo.com/tutorial/handling-errors/#install-custom-exception-handlers
+            message = f"{exc.response.status_code} Search service error: {exc.response.text}"
         except httpx.RequestError as exc:
             self.log.error("Failed to reach search service: %s", exc)
             status = "error"

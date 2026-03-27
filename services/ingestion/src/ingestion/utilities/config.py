@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
+from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
 from shared.ssm import ssm_settings_sources
 from shared.config import EMBEDDING_MODEL
 
@@ -22,7 +22,8 @@ class IngestionSettings(BaseSettings):
     embedding_strategy: str = "openai"
     embedding_model: str = EMBEDDING_MODEL
 
-    model_config = {"env_prefix": "", "env_file": ".env", "extra": "ignore"}
+    #model_config = {"env_prefix": "", "env_file": ".env", "extra": "ignore"}
+    model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8', env_prefix="", extra="ignore")
 
     @classmethod
     def settings_customise_sources(
