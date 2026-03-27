@@ -18,6 +18,7 @@ class IngestionSettings(BaseSettings):
     temporal_task_queue: str = "ingestion"
     chunker_strategy: str = "sliding_window"
     embedding_strategy: str = "openai"
+    llm_strategy: str = "openai"
 
     model_config = {"env_prefix": "", "env_file": ".env", "extra": "ignore"}
 
