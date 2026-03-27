@@ -71,10 +71,7 @@ class HybridSearchStrategy(SearchStrategy[HybridRequest, SearchResult]):
 
         # Fetch full chunks from postgres
         with self.db_manager.connection_context():
-            chunks = (
-                Chunk.select()
-                .where(Chunk.id.in_(top_chunk_ids)) #type: ignore
-            )
+            chunks = Chunk.select().where(Chunk.id.in_(top_chunk_ids))
             chunk_map = {c.id: c for c in chunks}
 
         # Build ordered snippets matching fusion order

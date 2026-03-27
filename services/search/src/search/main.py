@@ -4,13 +4,17 @@ import logging
 from contextlib import asynccontextmanager
 
 from db import DatabaseManager
+from embedding import EmbeddingProvider, EmbeddingStrategy, get_embedding_provider
 from fastapi import FastAPI
-from shared.config import MILVUS_COLLECTION_NAME
+from shared.config import (
+    MILVUS_COLLECTION_NAME,
+    default_embedding_dimension,
+    default_embedding_model,
+)
 from shared.schemas.search import SearchMethod, SearchRequest, SearchResult
 from vectordb import MilvusClient
 
 from search.config import SearchSettings
-from embedding import EmbeddingProvider, OpenAIEmbeddingProvider
 from search.registry import StrategyRegistry
 from search.strategies.hybrid_strategy import HybridSearchStrategy
 
@@ -38,7 +42,21 @@ def create_app(
             collection_name=MILVUS_COLLECTION_NAME,
         )
 
-        emb = _embedder or OpenAIEmbeddingProvider(api_key=s.openai_api_key)
+        strategy = EmbeddingStrategy(s.embedding_strategy.strip().lower())
+        provider_kwargs: dict[str, object] = {
+            "model": s.embedding_model or default_embedding_model(strategy.value),
+        }
+        if strategy == EmbeddingStrategy.BEDROCK:
+            provider_kwargs["dimensions"] = (
+                s.embedding_dimension or default_embedding_dimension(strategy.value)
+            )
+        elif s.openai_api_key:
+            provider_kwargs["api_key"] = s.openai_api_key
+
+        emb = _embedder or get_embedding_provider(
+            strategy,
+            **provider_kwargs,
+        )
 
         registry = StrategyRegistry()
         registry.register(
