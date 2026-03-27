@@ -24,9 +24,6 @@ class SlidingWindowChunker(Chunker):
         lines = content.splitlines(keepends=True)
         total = len(lines)
 
-        if total == 0:
-            return []
-
         # If file fits in one chunk, return as-is
         if total <= self.max_lines:
             chunk_content = "".join(lines)
