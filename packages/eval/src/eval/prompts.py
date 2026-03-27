@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from shared.schemas.search import CodeSnippet
+
 from eval.slice import SWEBenchTask
 
 
@@ -29,4 +31,61 @@ def build_baseline_user_message(task: SWEBenchTask) -> str:
         "- Keep the patch minimal and focused on fixing the bug.",
         "- Do not include any explanations.",
     ]
+    return "\n".join(parts)
+
+
+def build_lighthouse_user_message(
+    task: SWEBenchTask,
+    snippets: list[CodeSnippet],
+) -> str:
+    parts = [
+        "SWE-bench task",
+        "",
+        f"Instance ID: {task.instance_id}",
+        f"Repository: {task.repo}",
+        f"Base commit: {task.base_commit}",
+        f"Version: {task.version}",
+        "",
+        "Problem statement:",
+        task.problem_statement.strip(),
+        "",
+        "Retrieved code context from Lighthouse:",
+    ]
+
+    if not snippets:
+        parts.extend(
+            [
+                "- No code snippets were retrieved for this task.",
+                "",
+            ]
+        )
+    else:
+        for index, snippet in enumerate(snippets, start=1):
+            parts.extend(
+                [
+                    f"Snippet {index}:",
+                    f"- File: {snippet.file_path}",
+                    f"- Lines: {snippet.start_line}-{snippet.end_line}",
+                ]
+            )
+            if snippet.reason:
+                parts.append(f"- Reason: {snippet.reason}")
+            parts.extend(
+                [
+                    "",
+                    snippet.content.rstrip(),
+                    "",
+                ]
+            )
+
+    parts.extend(
+        [
+            "Output requirements:",
+            "- Return ONLY a unified diff patch.",
+            "- Use standard unified diff patch headers with `a/...` and `b/...` paths.",
+            "- Use the retrieved code context when it is helpful, but do not assume it is complete.",
+            "- Keep the patch minimal and focused on fixing the bug.",
+            "- Do not include any explanations.",
+        ]
+    )
     return "\n".join(parts)
