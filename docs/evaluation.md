@@ -9,6 +9,9 @@ after each step, before adding more datasets or more retrieval-aware behavior.
 For the broader roadmap, see `docs/eval-package-plan.md`. This document only
 covers the package as it exists today.
 
+Unless otherwise noted, all paths shown below are relative to the repository
+root.
+
 ## Scope
 
 Current scope:
@@ -18,6 +21,7 @@ Current scope:
 - prepare SWE-bench Docker images for that slice
 - generate baseline SWE-bench prediction JSONL with Bedrock
 - evaluate predictions with the official SWE-bench harness
+- summarize harness results in a small human-readable report
 
 Current non-scope:
 
@@ -49,6 +53,7 @@ packages/eval/
     bedrock.py
     prompts.py
     predictions.py
+    summary.py
 ```
 
 ### `slice.py`
@@ -116,6 +121,23 @@ It uses only benchmark metadata from the selected task:
 `predictions.py` turns model responses into harness-compatible JSONL rows and
 writes them incrementally to disk.
 
+### `summary.py`
+
+`summary.py` reads the harness outputs back from disk.
+
+It locates:
+
+- the aggregate run report written at the harness workdir root
+- the per-instance `report.json` files under `logs/run_evaluation/...`
+
+It then turns those files into a smaller summary view containing:
+
+- aggregate counts such as resolved and unresolved instances
+- per-instance status
+- whether the generated patch applied
+- how many `FAIL_TO_PASS` tests passed or failed
+- any remaining failing `FAIL_TO_PASS` test names
+
 ### Image Naming
 
 The expected instance image names currently follow the official SWE-bench
@@ -167,6 +189,7 @@ Available commands today:
 - `prepare-images`
 - `generate-baseline`
 - `evaluate`
+- `summarize`
 
 ### `show-slice`
 
@@ -229,6 +252,17 @@ Supported arguments:
 - `--timeout-seconds`
 - `--cache-level`
 
+### `summarize`
+
+Read an existing SWE-bench harness run and print a compact human-readable
+summary.
+
+Supported arguments:
+
+- `--predictions`
+- `--run-id`
+- `--workdir`
+
 ## Run Book
 
 ### 1. Show The Slice
@@ -236,7 +270,6 @@ Supported arguments:
 From the repo root:
 
 ```bash
-cd /Users/hermes/Desktop/csc490/Lighthouse
 uv run --package eval python -m eval.cli show-slice --max-instances 3
 ```
 
@@ -269,7 +302,6 @@ This confirms:
 The recommended first manual image-prep test is a single instance:
 
 ```bash
-cd /Users/hermes/Desktop/csc490/Lighthouse
 uv run --package eval python -m eval.cli prepare-images \
   --instance-id astropy__astropy-12907 \
   --max-workers 1
@@ -286,7 +318,7 @@ SWE-bench slice: 1 instance(s) from princeton-nlp/SWE-bench_Lite [test]
 
 Preparing 1 SWE-bench image(s)
 Using Docker endpoint: unix://...
-Harness workdir: /Users/hermes/Desktop/csc490/Lighthouse/.cache/eval/swebench_harness
+Harness workdir: .cache/eval/swebench_harness
 Instance ids:
   - astropy__astropy-12907
 ```
@@ -323,7 +355,6 @@ After the single-instance test succeeds, prepare the slice we have been using
 for smoke work:
 
 ```bash
-cd /Users/hermes/Desktop/csc490/Lighthouse
 uv run --package eval python -m eval.cli prepare-images \
   --max-instances 3 \
   --max-workers 1
@@ -368,7 +399,6 @@ generate a baseline predictions file.
 For the first manual check, use one instance and write to a throwaway path:
 
 ```bash
-cd /Users/hermes/Desktop/csc490/Lighthouse
 uv run --package eval python -m eval.cli generate-baseline \
   --instance-id astropy__astropy-12907 \
   --output .cache/eval/runs/baseline-1.jsonl
@@ -405,10 +435,10 @@ SWE-bench slice: 1 instance(s) from princeton-nlp/SWE-bench_Lite [test]
    version: ...
 Model: bedrock/us.amazon.nova-lite-v1:0
 Bedrock region: us-east-1
-Output file: /Users/hermes/Desktop/csc490/Lighthouse/.cache/eval/runs/baseline-1.jsonl
+Output file: .cache/eval/runs/baseline-1.jsonl
 [1/1] Generating baseline patch for astropy__astropy-12907
     wrote ... patch chars
-Wrote 1 prediction(s) to /Users/hermes/Desktop/csc490/Lighthouse/.cache/eval/runs/baseline-1.jsonl
+Wrote 1 prediction(s) to .cache/eval/runs/baseline-1.jsonl
 ```
 
 Then inspect the file directly:
@@ -453,7 +483,6 @@ PY
 For the 3-instance smoke slice:
 
 ```bash
-cd /Users/hermes/Desktop/csc490/Lighthouse
 uv run --package eval python -m eval.cli generate-baseline \
   --max-instances 3 \
   --output .cache/eval/runs/baseline-3.jsonl
@@ -473,7 +502,6 @@ the new wrapper.
 For a single-instance manual test:
 
 ```bash
-cd /Users/hermes/Desktop/csc490/Lighthouse
 uv run --package eval python -m eval.cli evaluate \
   --instance-id astropy__astropy-12907 \
   --predictions .cache/eval/runs/baseline-1.jsonl \
@@ -495,8 +523,8 @@ SWE-bench slice: 1 instance(s) from princeton-nlp/SWE-bench_Lite [test]
 Evaluating 1 SWE-bench prediction(s)
 Run id: baseline-1-smoke
 Using Docker endpoint: unix://...
-Harness workdir: /Users/hermes/Desktop/csc490/Lighthouse/.cache/eval/swebench_harness
-Predictions file: /Users/hermes/Desktop/csc490/Lighthouse/.cache/eval/runs/baseline-1.jsonl
+Harness workdir: .cache/eval/swebench_harness
+Predictions file: .cache/eval/runs/baseline-1.jsonl
 Instance ids:
   - astropy__astropy-12907
 ```
@@ -521,8 +549,8 @@ Report written to bedrock__us.amazon.nova-lite-v1:0.baseline-1-smoke.json
 and the wrapper should print:
 
 ```text
-Evaluation report: /Users/hermes/Desktop/csc490/Lighthouse/.cache/eval/swebench_harness/bedrock__us.amazon.nova-lite-v1:0.baseline-1-smoke.json
-Run log directory: /Users/hermes/Desktop/csc490/Lighthouse/.cache/eval/swebench_harness/logs/run_evaluation/baseline-1-smoke/bedrock__us.amazon.nova-lite-v1:0
+Evaluation report: .cache/eval/swebench_harness/bedrock__us.amazon.nova-lite-v1:0.baseline-1-smoke.json
+Run log directory: .cache/eval/swebench_harness/logs/run_evaluation/baseline-1-smoke/bedrock__us.amazon.nova-lite-v1:0
 ```
 
 Then inspect the report:
@@ -540,13 +568,48 @@ cat .cache/eval/swebench_harness/logs/run_evaluation/baseline-1-smoke/bedrock__u
 For the 3-instance smoke slice:
 
 ```bash
-cd /Users/hermes/Desktop/csc490/Lighthouse
 uv run --package eval python -m eval.cli evaluate \
   --max-instances 3 \
   --predictions .cache/eval/runs/baseline-3.jsonl \
   --run-id baseline-3-smoke \
   --max-workers 1
 ```
+
+### 6. Summarize A Completed Run
+
+Once an evaluation has finished, you can print a compact summary without
+opening the raw harness JSON files manually.
+
+For the same single-instance run:
+
+```bash
+uv run --package eval python -m eval.cli summarize \
+  --predictions .cache/eval/runs/baseline-1.jsonl \
+  --run-id baseline-1-smoke
+```
+
+Expected output shape:
+
+```text
+Harness report: .cache/eval/swebench_harness/bedrock__us.amazon.nova-lite-v1:0.baseline-1-smoke.json
+Run log directory: .cache/eval/swebench_harness/logs/run_evaluation/baseline-1-smoke/bedrock__us.amazon.nova-lite-v1:0
+Total instances: 1
+Submitted instances: 1
+Completed instances: 1
+Resolved instances: 0
+Unresolved instances: 1
+Empty patch instances: 0
+Error instances: 0
+Per-instance results:
+- astropy__astropy-12907: unresolved
+  patch applied: yes
+  FAIL_TO_PASS: 0 passed, 2 failed
+  PASS_TO_PASS failures: 0
+  failing FAIL_TO_PASS test: astropy/modeling/tests/test_separable.py::...
+```
+
+This is meant to be a convenience layer over the official harness artifacts,
+not a replacement for them. The raw JSON files are still the source of truth.
 
 ## Artifacts And Logs
 
@@ -555,7 +618,7 @@ uv run --package eval python -m eval.cli evaluate \
 By default the harness wrapper uses:
 
 ```text
-/Users/hermes/Desktop/csc490/Lighthouse/.cache/eval/swebench_harness
+.cache/eval/swebench_harness
 ```
 
 You can override this with `--workdir`.
@@ -565,7 +628,7 @@ You can override this with `--workdir`.
 Live-tailed build logs are discovered under:
 
 ```text
-/Users/hermes/Desktop/csc490/Lighthouse/.cache/eval/swebench_harness/logs/build_images
+.cache/eval/swebench_harness/logs/build_images
 ```
 
 Typical log files include:
@@ -582,7 +645,7 @@ The baseline generator writes JSONL to the path you pass via `--output`.
 For example:
 
 ```text
-/Users/hermes/Desktop/csc490/Lighthouse/.cache/eval/runs/baseline-1.jsonl
+.cache/eval/runs/baseline-1.jsonl
 ```
 
 ### Evaluation Reports
@@ -592,13 +655,13 @@ The official harness summary report is written in the harness work directory.
 For example:
 
 ```text
-/Users/hermes/Desktop/csc490/Lighthouse/.cache/eval/swebench_harness/bedrock__us.amazon.nova-lite-v1:0.baseline-1-smoke.json
+.cache/eval/swebench_harness/bedrock__us.amazon.nova-lite-v1:0.baseline-1-smoke.json
 ```
 
 Per-instance run logs and `report.json` files are written under:
 
 ```text
-/Users/hermes/Desktop/csc490/Lighthouse/.cache/eval/swebench_harness/logs/run_evaluation/<run-id>/<model-name>/
+.cache/eval/swebench_harness/logs/run_evaluation/<run-id>/<model-name>/
 ```
 
 ## Troubleshooting
@@ -675,6 +738,21 @@ Useful checks:
 docker ps
 docker image inspect sweb.eval.x86_64.astropy__astropy-12907:latest >/dev/null && echo "image ready"
 ls -l .cache/eval/runs/baseline-1.jsonl
+```
+
+### Summarize Cannot Find The Report
+
+Check that:
+
+- you are using the same `--run-id` that was passed to `evaluate`
+- you are pointing at the same predictions file used for that run
+- you are using the same harness `--workdir`
+
+Useful checks:
+
+```bash
+ls -l .cache/eval/swebench_harness/*.json
+find .cache/eval/swebench_harness/logs/run_evaluation -maxdepth 3 -type d
 ```
 
 ### The Command Succeeds Quickly But Nothing Is Rebuilt
