@@ -19,7 +19,20 @@ from eval.harness import (
     evaluate_swebench_predictions,
     prepare_swebench_images,
 )
-from eval.predictions import generate_baseline_predictions
+from eval.indexing import (
+    DEFAULT_INGESTION_URL,
+    DEFAULT_REPO_REGISTRY_OUTPUT,
+    DEFAULT_STATUS_POLL_INTERVAL_SECONDS,
+    DEFAULT_STATUS_TIMEOUT_SECONDS,
+    index_swebench_repositories,
+)
+from eval.lighthouse import (
+    DEFAULT_LIGHTHOUSE_BRANCH,
+    DEFAULT_SEARCH_SERVICE_URL,
+    DEFAULT_SEARCH_TOP_K,
+    build_lighthouse_messages,
+)
+from eval.predictions import generate_baseline_predictions, generate_predictions
 from eval.summary import HarnessRunSummary, summarize_swebench_run
 
 
@@ -92,6 +105,60 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Maximum parallel harness workers",
     )
 
+    index_repos = subparsers.add_parser(
+        "index-repos",
+        help="Index the repositories referenced by a selected SWE-bench slice",
+    )
+    index_repos.add_argument(
+        "--dataset-name",
+        default=DEFAULT_DATASET_NAME,
+        help="Hugging Face dataset name to load",
+    )
+    index_repos.add_argument(
+        "--split",
+        default=DEFAULT_SPLIT,
+        help="Dataset split to load",
+    )
+    index_repos.add_argument(
+        "--max-instances",
+        type=int,
+        default=None,
+        help="Index repositories for the first N instances in dataset order",
+    )
+    index_repos.add_argument(
+        "--instance-id",
+        action="append",
+        default=[],
+        help="Explicit SWE-bench instance id to include; may be repeated",
+    )
+    index_repos.add_argument(
+        "--ingestion-url",
+        default=DEFAULT_INGESTION_URL,
+        help="Base URL for the Lighthouse ingestion service",
+    )
+    index_repos.add_argument(
+        "--github-token",
+        default=None,
+        help="Optional GitHub token for metadata lookup and ingestion",
+    )
+    index_repos.add_argument(
+        "--output",
+        default=str(DEFAULT_REPO_REGISTRY_OUTPUT),
+        help="Path to the repo registry JSON file to write",
+    )
+    index_repos.add_argument(
+        "--status-poll-interval",
+        type=float,
+        default=DEFAULT_STATUS_POLL_INTERVAL_SECONDS,
+        help="Seconds between ingestion status polls",
+    )
+    index_repos.add_argument(
+        "--status-timeout-seconds",
+        type=float,
+        default=DEFAULT_STATUS_TIMEOUT_SECONDS,
+        help="Maximum total wait time for indexing completion",
+    )
+
     generate_baseline = subparsers.add_parser(
         "generate-baseline",
         help="Generate baseline SWE-bench prediction JSONL with Bedrock",
@@ -149,6 +216,92 @@ def _build_parser() -> argparse.ArgumentParser:
         "--overwrite",
         action="store_true",
         help="Overwrite an existing predictions file",
+    )
+
+    generate_lighthouse = subparsers.add_parser(
+        "generate-lighthouse",
+        help="Generate SWE-bench prediction JSONL with Lighthouse retrieval context",
+    )
+    generate_lighthouse.add_argument(
+        "--dataset-name",
+        default=DEFAULT_DATASET_NAME,
+        help="Hugging Face dataset name to load",
+    )
+    generate_lighthouse.add_argument(
+        "--split",
+        default=DEFAULT_SPLIT,
+        help="Dataset split to load",
+    )
+    generate_lighthouse.add_argument(
+        "--max-instances",
+        type=int,
+        default=None,
+        help="Generate predictions for the first N instances in dataset order",
+    )
+    generate_lighthouse.add_argument(
+        "--instance-id",
+        action="append",
+        default=[],
+        help="Explicit SWE-bench instance id to include; may be repeated",
+    )
+    generate_lighthouse.add_argument(
+        "--model",
+        default=DEFAULT_BASELINE_MODEL,
+        help="Bedrock model in the form bedrock/<model-id>",
+    )
+    generate_lighthouse.add_argument(
+        "--output",
+        required=True,
+        help="Path to the predictions .jsonl file to write",
+    )
+    generate_lighthouse.add_argument(
+        "--region-name",
+        default=DEFAULT_BASELINE_REGION,
+        help="AWS region for Bedrock generation",
+    )
+    generate_lighthouse.add_argument(
+        "--temperature",
+        type=float,
+        default=DEFAULT_TEMPERATURE,
+        help="Sampling temperature for Bedrock generation",
+    )
+    generate_lighthouse.add_argument(
+        "--max-tokens",
+        type=int,
+        default=DEFAULT_MAX_TOKENS,
+        help="Maximum response tokens for Bedrock generation",
+    )
+    generate_lighthouse.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Overwrite an existing predictions file",
+    )
+    generate_lighthouse.add_argument(
+        "--search-url",
+        default=DEFAULT_SEARCH_SERVICE_URL,
+        help="Base URL for the Lighthouse search service",
+    )
+    generate_lighthouse.add_argument(
+        "--repo-registry",
+        default=None,
+        help="Path to a JSON file mapping owner/repo to github_repo_id and branch",
+    )
+    generate_lighthouse.add_argument(
+        "--github-repo-id",
+        type=int,
+        default=None,
+        help="GitHub repo id override when all selected tasks are from one repository",
+    )
+    generate_lighthouse.add_argument(
+        "--branch",
+        default=DEFAULT_LIGHTHOUSE_BRANCH,
+        help="Branch override when using --github-repo-id",
+    )
+    generate_lighthouse.add_argument(
+        "--top-k",
+        type=int,
+        default=DEFAULT_SEARCH_TOP_K,
+        help="Number of Lighthouse snippets to request per task",
     )
 
     evaluate = subparsers.add_parser(
@@ -274,6 +427,29 @@ def _cmd_prepare_images(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_index_repos(args: argparse.Namespace) -> int:
+    _validate_slice_selection(args)
+
+    tasks = load_swebench_slice(
+        dataset_name=args.dataset_name,
+        split=args.split,
+        max_instances=args.max_instances,
+        instance_ids=args.instance_id,
+    )
+
+    _print_slice(tasks, args.dataset_name, args.split)
+    output_path = index_swebench_repositories(
+        tasks=tasks,
+        ingestion_url=args.ingestion_url,
+        output_path=Path(args.output),
+        github_token=args.github_token,
+        poll_interval_seconds=args.status_poll_interval,
+        timeout_seconds=args.status_timeout_seconds,
+    )
+    print(f"Repository registry: {output_path}")
+    return 0
+
+
 def _cmd_generate_baseline(args: argparse.Namespace) -> int:
     _validate_slice_selection(args)
     if args.max_tokens < 1:
@@ -305,6 +481,65 @@ def _cmd_generate_baseline(args: argparse.Namespace) -> int:
         generator=generator,
         output_path=output_path,
         overwrite=args.overwrite,
+    )
+    print(f"Wrote {len(predictions)} prediction(s) to {output_path.resolve()}")
+    return 0
+
+
+def _cmd_generate_lighthouse(args: argparse.Namespace) -> int:
+    _validate_slice_selection(args)
+    if args.max_tokens < 1:
+        raise ValueError("--max-tokens must be at least 1")
+    if args.temperature < 0:
+        raise ValueError("--temperature must be non-negative")
+    if args.top_k < 1:
+        raise ValueError("--top-k must be at least 1")
+    if args.github_repo_id is None and not args.repo_registry:
+        raise ValueError(
+            "Provide either --repo-registry or --github-repo-id for Lighthouse generation."
+        )
+
+    tasks = load_swebench_slice(
+        dataset_name=args.dataset_name,
+        split=args.split,
+        max_instances=args.max_instances,
+        instance_ids=args.instance_id,
+    )
+
+    output_path = Path(args.output)
+    _print_slice(tasks, args.dataset_name, args.split)
+    print(f"Model: {args.model}")
+    print(f"Bedrock region: {args.region_name}")
+    print(f"Search service URL: {args.search_url}")
+    if args.repo_registry:
+        print(f"Repository registry: {Path(args.repo_registry).resolve()}")
+    elif args.github_repo_id is not None:
+        print(f"GitHub repo id override: {args.github_repo_id}")
+        print(f"Branch override: {args.branch}")
+    print(f"Output file: {output_path.resolve()}")
+
+    messages = build_lighthouse_messages(
+        tasks=tasks,
+        search_service_url=args.search_url,
+        top_k=args.top_k,
+        repo_registry_path=Path(args.repo_registry) if args.repo_registry else None,
+        github_repo_id=args.github_repo_id,
+        branch=args.branch,
+    )
+
+    generator = BedrockPatchGenerator(
+        model_name=args.model,
+        region_name=args.region_name,
+        temperature=args.temperature,
+        max_tokens=args.max_tokens,
+    )
+    predictions = generate_predictions(
+        tasks=tasks,
+        generator=generator,
+        output_path=output_path,
+        overwrite=args.overwrite,
+        build_user_message=lambda task: messages[task.instance_id],
+        progress_label="Generating Lighthouse patch for",
     )
     print(f"Wrote {len(predictions)} prediction(s) to {output_path.resolve()}")
     return 0
@@ -400,8 +635,12 @@ def main() -> int:
         return _cmd_show_slice(args)
     if args.command == "prepare-images":
         return _cmd_prepare_images(args)
+    if args.command == "index-repos":
+        return _cmd_index_repos(args)
     if args.command == "generate-baseline":
         return _cmd_generate_baseline(args)
+    if args.command == "generate-lighthouse":
+        return _cmd_generate_lighthouse(args)
     if args.command == "evaluate":
         return _cmd_evaluate(args)
     if args.command == "summarize":
