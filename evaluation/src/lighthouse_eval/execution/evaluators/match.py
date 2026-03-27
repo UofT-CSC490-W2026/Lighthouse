@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
 
 from lighthouse_eval.candidates.base import Completion, _CandidateBase
-from lighthouse_eval.datasets.schema import EvaluatorKind, MatchMetrics, Task
+from lighthouse_eval.datasets.schema import EvaluatorKind, MatchMetrics, OutputFormat, Task
 
 
 def _normalise(text: str, *, strip: bool, case: bool) -> str:
@@ -70,10 +71,53 @@ def _bleu_score(hypothesis: str, reference: str) -> float:
     return math.exp(score)
 
 
-def _extract_generated_text(candidate: _CandidateBase) -> str:
-    if isinstance(candidate, Completion):
-        return candidate.text
-    raise TypeError(f"MatchEvaluator expects Completion candidate, got {type(candidate).__name__}")
+def _resolve_workspace_read_path(workspace: Path, relative_path: str) -> Path:
+    path = Path(relative_path)
+    if path.is_absolute():
+        raise ValueError(f"Match ground_truth paths must be relative: {relative_path!r}")
+
+    workspace_root = workspace.resolve()
+    target = (workspace / path).resolve(strict=False)
+    try:
+        target.relative_to(workspace_root)
+    except ValueError as exc:
+        raise ValueError(f"Match ground_truth path escapes workspace: {relative_path!r}") from exc
+    return target
+
+
+def _serialise_file_map(file_map: Mapping[str, str]) -> str:
+    parts: list[str] = []
+    for path in sorted(file_map):
+        parts.append(f"===== {path} =====")
+        parts.append(file_map[path])
+    return "\n".join(parts)
+
+
+def _extract_generated_payload(
+    task: Task,
+    candidate: _CandidateBase,
+    workspace: Path,
+) -> tuple[str, str]:
+    spec = task.match_spec
+    if spec is None:
+        raise ValueError(f"Task {task.id} has no match_spec")
+
+    if task.output_format == OutputFormat.completion:
+        if not isinstance(candidate, Completion):
+            raise TypeError(
+                f"Completion match task {task.id} expects Completion candidate, "
+                f"got {type(candidate).__name__}"
+            )
+        return candidate.text, spec.ground_truth["_completion"]
+
+    generated_files: dict[str, str] = {}
+    expected_files: dict[str, str] = {}
+    for rel_path, expected_content in spec.ground_truth.items():
+        target = _resolve_workspace_read_path(workspace, rel_path)
+        generated_files[rel_path] = target.read_text(encoding="utf-8") if target.exists() else ""
+        expected_files[rel_path] = expected_content
+
+    return _serialise_file_map(generated_files), _serialise_file_map(expected_files)
 
 
 class ExactMatchEvaluator:
@@ -88,8 +132,7 @@ class ExactMatchEvaluator:
         if spec is None:
             raise ValueError(f"Task {task.id} has no match_spec")
 
-        generated = _extract_generated_text(candidate)
-        expected = spec.ground_truth.get("_completion", "")
+        generated, expected = _extract_generated_payload(task, candidate, workspace)
 
         gen_n = _normalise(generated, strip=spec.strip_whitespace, case=spec.case_sensitive)
         exp_n = _normalise(expected, strip=spec.strip_whitespace, case=spec.case_sensitive)
@@ -113,8 +156,7 @@ class EditSimilarityEvaluator:
         if spec is None:
             raise ValueError(f"Task {task.id} has no match_spec")
 
-        generated = _extract_generated_text(candidate)
-        expected = spec.ground_truth.get("_completion", "")
+        generated, expected = _extract_generated_payload(task, candidate, workspace)
 
         gen_n = _normalise(generated, strip=spec.strip_whitespace, case=spec.case_sensitive)
         exp_n = _normalise(expected, strip=spec.strip_whitespace, case=spec.case_sensitive)
@@ -138,8 +180,7 @@ class BLEUEvaluator:
         if spec is None:
             raise ValueError(f"Task {task.id} has no match_spec")
 
-        generated = _extract_generated_text(candidate)
-        expected = spec.ground_truth.get("_completion", "")
+        generated, expected = _extract_generated_payload(task, candidate, workspace)
 
         gen_n = _normalise(generated, strip=spec.strip_whitespace, case=spec.case_sensitive)
         exp_n = _normalise(expected, strip=spec.strip_whitespace, case=spec.case_sensitive)

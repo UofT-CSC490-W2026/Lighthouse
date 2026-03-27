@@ -116,7 +116,8 @@ def parse_response(raw: str, task: Task) -> CandidateEdit:
     text = _strip_markdown_fences(raw)
 
     if task.output_format == OutputFormat.completion:
-        return Completion(text=text)
+        target_file = task.target_files[0] if task.target_files else None
+        return Completion(text=text, target_file=target_file)
 
     if task.output_format == OutputFormat.patch:
         return UnifiedPatch(diff=text)
