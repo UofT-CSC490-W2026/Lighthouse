@@ -429,13 +429,13 @@ Silent parameter drops would cause production failures with no error signal.
 
 \subsection{Links}
 \begin{itemize}
-    \item Here is a \bluehref{https://www.youtube.com/watch?v=Hd2-Akz6Ht4}{video walk through} of the two memorable bugs.
+    \item Here is a \bluehref{https://youtu.be/lVmJs_g7dEQ}{video walk through} of the two memorable bugs.
     \item Here is a \bluehref{https://docs.google.com/presentation/d/1oTm824FbHy6FvsnDb1Oj1ypalQ6g7qS3t5RsoxHJR8k/edit?usp=sharing}{link} to the slides shown in the video.
 \end{itemize}
 
 \subsection{Summary}
 
-\textbf{Context:} The \texttt{IncrementalIndexWorkflow} is a Temporal workflow
+\textbf{Context:} The \bluehref{https://github.com/UofT-CSC490-W2026/Lighthouse/blob/a5/services/ingestion/src/ingestion/temporal/workflows/incremental.py}{\texttt{IncrementalIndexWorkflow}} is a Temporal workflow
 triggered by GitHub webhooks that re-indexes changed repository files into the search
 pipeline. On each invocation it clones the updated branch, chunks modified files,
 generates embeddings, and writes results into Postgres and Milvus so that search
