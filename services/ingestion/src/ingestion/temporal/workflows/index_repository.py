@@ -53,6 +53,7 @@ class IndexRepositoryWorkflow:
                         full_name=input.full_name,
                         branch=branch,
                         github_token=input.github_token,
+                        embedding_strategy=input.embedding_strategy,
                     ),
                     id=f"index-branch-{input.github_repo_id}-{branch}",
                 )
