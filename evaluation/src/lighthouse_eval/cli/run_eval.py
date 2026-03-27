@@ -28,6 +28,30 @@ def _load_config(path: Path):
     return EvalConfig(**raw)
 
 
+def _resolve_config_path(path: Path | None, *, config_path: Path) -> Path | None:
+    if path is None or path.is_absolute():
+        return path
+    return (config_path.parent / path).resolve()
+
+
+def _normalize_paths(config, config_path: Path) -> None:
+    config.workspace_cache_dir = _resolve_config_path(
+        config.workspace_cache_dir,
+        config_path=config_path,
+    )
+    if config.dataset.path is not None:
+        config.dataset.path = _resolve_config_path(
+            config.dataset.path,
+            config_path=config_path,
+        )
+
+
+def _adapter_config(config) -> dict:
+    adapter_config = config.dataset.model_dump()
+    adapter_config.update(adapter_config.pop("options", {}))
+    return adapter_config
+
+
 def _load_index_registry(config, config_path: Path) -> dict[str, dict]:
     metadata_path = config.metadata.get("index_registry")
     if metadata_path:
@@ -96,6 +120,7 @@ def _cmd_run(args: argparse.Namespace) -> None:
     from lighthouse_eval.runner import run_evaluation, save_results
 
     config = _load_config(args.config)
+    _normalize_paths(config, args.config.resolve())
     log = logging.getLogger("run_eval")
     log.info("Loaded config from %s", args.config)
     log.info(
@@ -108,8 +133,7 @@ def _cmd_run(args: argparse.Namespace) -> None:
 
     adapter_cls = get_adapter(config.dataset.adapter)
     adapter = adapter_cls()
-    adapter_config = config.dataset.model_dump()
-    adapter_config.update(adapter_config.pop("options", {}))
+    adapter_config = _adapter_config(config)
     dataset = adapter.load(adapter_config)
     registry = _load_index_registry(config, args.config)
     _inject_repo_ids_from_registry(config, dataset, registry, logger=log)
@@ -132,7 +156,14 @@ def _cmd_run(args: argparse.Namespace) -> None:
             log.info("  description=%s", task.description[:120])
         return
 
-    results = asyncio.run(run_evaluation(config, dataset, adapter=adapter))
+    results = asyncio.run(
+        run_evaluation(
+            config,
+            dataset,
+            adapter=adapter,
+            adapter_config=adapter_config,
+        )
+    )
 
     results_path = save_results(results, config.output_dir)
     log.info("Results written to %s", results_path)

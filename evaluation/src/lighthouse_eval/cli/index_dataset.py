@@ -28,6 +28,26 @@ def _load_config(path: Path):
     return EvalConfig(**raw)
 
 
+def _resolve_config_path(path: Path | None, *, config_path: Path) -> Path | None:
+    if path is None or path.is_absolute():
+        return path
+    return (config_path.parent / path).resolve()
+
+
+def _normalize_paths(config, config_path: Path) -> None:
+    if config.dataset.path is not None:
+        config.dataset.path = _resolve_config_path(
+            config.dataset.path,
+            config_path=config_path,
+        )
+
+
+def _adapter_config(config) -> dict:
+    adapter_config = config.dataset.model_dump()
+    adapter_config.update(adapter_config.pop("options", {}))
+    return adapter_config
+
+
 def _wait_until_indexed(
     client: httpx.Client,
     ingestion_url: str,
@@ -100,10 +120,10 @@ def main() -> None:
     from lighthouse_eval.datasets.adapters import get_adapter
 
     config = _load_config(args.config)
+    _normalize_paths(config, args.config.resolve())
     adapter_cls = get_adapter(config.dataset.adapter)
     adapter = adapter_cls()
-    adapter_config = config.dataset.model_dump()
-    adapter_config.update(adapter_config.pop("options", {}))
+    adapter_config = _adapter_config(config)
     if args.github_token:
         adapter_config["github_token"] = args.github_token
 
