@@ -52,6 +52,10 @@ class EvalConfig(BaseModel):
         default=Path("results"),
         description="Directory to write result artifacts.",
     )
+    workspace_cache_dir: Path = Field(
+        default=Path(".cache/workspaces"),
+        description="Directory to cache prepared benchmark workspaces.",
+    )
     concurrency: int = Field(
         default=4,
         ge=1,

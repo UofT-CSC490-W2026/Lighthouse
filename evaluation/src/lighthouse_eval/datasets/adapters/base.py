@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from pydantic import BaseModel, Field
 from lighthouse_eval.context.base import ContextProvider
-from lighthouse_eval.datasets.schema import Dataset
+from lighthouse_eval.datasets.schema import Dataset, Task
 from lighthouse_eval.execution.evaluators.base import Evaluator
 
 
@@ -60,3 +61,22 @@ class DatasetAdapter(Protocol):
     def get_oracle_provider(self) -> ContextProvider | None: ...
 
     def get_repos(self, config: dict[str, Any]) -> list[RepoInfo]: ...
+
+
+@runtime_checkable
+class RuntimePreparingAdapter(Protocol):
+    """Optional adapter hooks for benchmark runtime preparation."""
+
+    def validate_runtime(
+        self,
+        config: dict[str, Any],
+        dataset: Dataset,
+        cache_root: Path,
+    ) -> None: ...
+
+    def prepare_task_workspace(
+        self,
+        task: Task,
+        config: dict[str, Any],
+        cache_root: Path,
+    ) -> Path: ...

@@ -32,6 +32,7 @@ class TestSpec(BaseModel):
     )
     test_paths: list[Path] = Field(default_factory=list)
     test_commands: list[str] = Field(default_factory=list)
+    setup_commands: list[str] = Field(default_factory=list)
     expected_to_pass: list[str] = Field(
         default_factory=list,
         description="Tests that should transition from failing to passing (SWE-bench FAIL_TO_PASS).",
@@ -42,6 +43,7 @@ class TestSpec(BaseModel):
     )
     docker_image: str | None = None
     timeout_seconds: int = 300
+    setup_timeout_seconds: int | None = None
 
     @model_validator(mode="after")
     def _validate_execution_backend(self) -> TestSpec:
@@ -70,6 +72,9 @@ class TestSpec(BaseModel):
         elif self.execution_backend == "local_pytest":
             if not (self.test_commands or self.test_paths):
                 raise ValueError("local_pytest requires test_commands or test_paths.")
+
+        if self.setup_timeout_seconds is None:
+            self.setup_timeout_seconds = self.timeout_seconds
 
         return self
 
