@@ -27,6 +27,8 @@ The service is currently built around:
 - activity-based steps for git, chunking, embedding, storage, and branch updates
 - PostgreSQL tables for repository, branch, final chunk, and staging chunk state
 - Milvus storage for vector embeddings
+- a configurable embedding provider with Bedrock as the default and OpenAI as
+  an optional override
 
 Important current limitations:
 
@@ -324,13 +326,15 @@ object from AWS Systems Manager Parameter Store and use it as a settings source.
 
 - `postgres_dsn`
 - `milvus_uri`
-- `openai_api_key`
+- `embedding_strategy`
+- `embedding_model`
+- `embedding_dimension`
+- `openai_api_key` when `EMBEDDING_STRATEGY=openai`
 - `github_webhook_secret`
 - `clone_base_dir`
 - `temporal_address`
 - `temporal_task_queue`
 - `chunker_strategy`
-- `embedding_strategy`
 
 ## Runtime and Operational Notes
 
@@ -342,6 +346,8 @@ Important implementation details:
 - embedding work is batched inside workflows using `EMBED_BATCH_SIZE`
 - branch status updates are persisted through dedicated activities rather than
   inline workflow state
+- switching embedding strategy, embedding model, or embedding dimension requires
+  re-indexing so Milvus matches the active vector shape
 
 ## Current Limitations and Follow-Up Work
 
