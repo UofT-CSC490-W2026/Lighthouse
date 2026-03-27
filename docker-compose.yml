@@ -242,28 +242,6 @@ services:
       timeout: 5s
       retries: 5
 
-  eval:
-    profiles: ["eval"]
-    build:
-      context: .
-      dockerfile: evaluation/Dockerfile
-    working_dir: /workspace
-    environment:
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
-      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
-      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-}
-      AWS_PROFILE: ${AWS_PROFILE:-}
-      BUGSINPY_ROOT: /benchmarks/bugsinpy
-      PYBUGHIVE_ROOT: /benchmarks/pybughive
-    volumes:
-      - .:/workspace
-      - ./evaluation/.cache:/workspace/evaluation/.cache
-      - ${BUGSINPY_ROOT:-./evaluation/datasets/bugsinpy}:/benchmarks/bugsinpy
-      - ${PYBUGHIVE_ROOT:-./evaluation/datasets/pybughive}:/benchmarks/pybughive
-      - /var/run/docker.sock:/var/run/docker.sock
-      - ${HOME}/.aws:/root/.aws:ro
-
 volumes:
   postgres_data:
   etcd_data:
