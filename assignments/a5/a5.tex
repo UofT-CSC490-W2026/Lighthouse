@@ -159,7 +159,7 @@ codebase. A developer selects GitHub repositories to index, Lighthouse ingests a
 indexes them, and the developer adds the Lighthouse MCP server to their AI coding
 agent. When the agent is working on a task and needs context that falls outside its
 immediate working scope, it queries Lighthouse to retrieve relevant code snippets,
-interfaces, and documentation.
+interfaces, and documentation.\\
 
 The system is composed of several services: an \textbf{ingestion service} that clones
 repositories, chunks source files, generates embeddings, and stores them in Postgres
@@ -258,7 +258,7 @@ TypeScript/React frontend that currently serves as a debugging UI for internal d
 It is not part of our Python test suite and is being actively redesigned in the coming week,
 so investing in test coverage for code that will be replaced would not be productive.
 Once the new frontend stabilizes, we plan to add Playwright or similar end-to-end tests
-for it separately.
+for it separately.\\
 
 We also use standard \texttt{exclude\_lines} patterns in our coverage configuration to
 skip lines that are not meaningfully testable: \texttt{TYPE\_CHECKING} blocks,
@@ -274,6 +274,7 @@ skip lines that are not meaningfully testable: \texttt{TYPE\_CHECKING} blocks,
 % handle incorrect inputs)
 
 Our most complex module is the \texttt{IndexBranchWorkflow} in the ingestion service
+
 (\bluehref{https://github.com/UofT-CSC490-W2026/Lighthouse/blob/a5/services/ingestion/src/ingestion/temporal/workflows/index\_branch.py}{services/ingestion/src/ingestion/temporal/workflows/index\_branch.py}).
 This Temporal workflow orchestrates 7 distinct activities through a multi-step pipeline:
 marking a branch as indexing, cloning the repository, chunking files into a staging table,
