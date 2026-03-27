@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from shared.config import DEFAULT_EMBEDDING_STRATEGY
 
 EMBED_BATCH_SIZE = 512
 
@@ -78,7 +79,7 @@ class EmbedBatchInput:
     batch_id: str
     offset: int
     limit: int
-    embedding_strategy: str = "openai"
+    embedding_strategy: str = DEFAULT_EMBEDDING_STRATEGY
 
 
 @dataclass
@@ -101,6 +102,7 @@ class IndexRepoInput:
     full_name: str
     branches: list[str]
     github_token: str | None = None
+    embedding_strategy: str = DEFAULT_EMBEDDING_STRATEGY
 
 
 @dataclass
@@ -112,7 +114,7 @@ class IndexBranchInput:
     branch: str
     github_token: str | None = None
     chunker_strategy: str = "sliding_window"
-    embedding_strategy: str = "openai"
+    embedding_strategy: str = DEFAULT_EMBEDDING_STRATEGY
 
 
 @dataclass
@@ -122,3 +124,4 @@ class IncrementalIndexInput:
     branch: str
     before_commit: str
     after_commit: str
+    embedding_strategy: str = DEFAULT_EMBEDDING_STRATEGY

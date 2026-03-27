@@ -162,6 +162,7 @@ class IncrementalIndexWorkflow:
                                 batch_id=batch_id,
                                 offset=offset,
                                 limit=EMBED_BATCH_SIZE,
+                                embedding_strategy=input.embedding_strategy,
                             ),
                             start_to_close_timeout=timedelta(minutes=5),
                             retry_policy=_EMBED_RETRY,
