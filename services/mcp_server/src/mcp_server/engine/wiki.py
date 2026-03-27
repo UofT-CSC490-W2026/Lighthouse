@@ -8,7 +8,7 @@ import httpx
 from fastapi import Body
 from pydantic import BaseModel, Field, ValidationError
 from shared.schemas.search import WikiSearchRequest, WikiSearchResult
-from shared.schemas.wiki import GenerateWikiRequest, WikiStatusResponse
+from shared.schemas.wiki import GenerateWikiRequest
 
 from db import Repository, WikiGeneration, WikiPage
 
