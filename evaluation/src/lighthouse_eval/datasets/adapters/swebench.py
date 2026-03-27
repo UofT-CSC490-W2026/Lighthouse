@@ -82,6 +82,7 @@ class SWEBenchAdapter:
         )
 
         test_spec = TestSpec(
+            execution_backend="docker_pytest",
             test_commands=["python -m pytest --tb=short -q"],
             expected_to_pass=fail_to_pass,
             expected_to_stay_passing=pass_to_pass,

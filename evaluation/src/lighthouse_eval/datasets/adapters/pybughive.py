@@ -114,6 +114,7 @@ class PyBugHiveAdapter:
             test_commands = ["python -m pytest --tb=short -q"]
 
         test_spec = TestSpec(
+            execution_backend="command_sequence",
             test_commands=test_commands,
             timeout_seconds=data.get("timeout_seconds", 300),
         )

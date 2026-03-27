@@ -5,6 +5,7 @@ import logging
 import time
 from pathlib import Path
 
+from lighthouse_eval.candidates.base import Completion
 from lighthouse_eval.codegen.bedrock import BedrockGenerator
 from lighthouse_eval.config import EvalConfig
 from lighthouse_eval.context.base import ContextProvider, ContextSnippet
@@ -14,6 +15,7 @@ from lighthouse_eval.context.static import StaticProvider
 from lighthouse_eval.datasets.schema import (
     Dataset,
     EvalResult,
+    EvaluatorKind,
     MatchMetrics,
     NativeMetrics,
     RetrievalMetrics,
@@ -73,7 +75,17 @@ def _normalized_score(metrics: NativeMetrics) -> float | None:
         return metrics.precision_at_k
 
 
-async def _run_single(
+def _requires_materialized_workspace(task: Task) -> bool:
+    spec = task.test_spec
+    return (
+        task.evaluator_kind == EvaluatorKind.test_execution
+        and spec is not None
+        and spec.execution_backend in {"docker_pytest", "command_sequence"}
+        and task.workspace_path is None
+    )
+
+
+async def _run_single_generation(
     task: Task,
     generator: BedrockGenerator,
     provider: ContextProvider,
@@ -83,6 +95,12 @@ async def _run_single(
     provider_name: str,
 ) -> EvalResult:
     """Execute one (task, model, provider, run) combination."""
+    if _requires_materialized_workspace(task):
+        raise RuntimeError(
+            f"Task {task.id} requires a materialized workspace for "
+            f"execution_backend={task.test_spec.execution_backend!r}, but none is configured."
+        )
+
     t0 = time.perf_counter()
     context: list[ContextSnippet] = await provider.get_context(task)
     candidate = await generator.generate(task, context)
@@ -114,6 +132,35 @@ async def _run_single(
     )
 
 
+async def _run_single_retrieval(
+    task: Task,
+    provider: ContextProvider,
+    run_index: int,
+    provider_name: str,
+) -> EvalResult:
+    """Execute one retrieval-diagnostic combination without invoking an LLM."""
+    t0 = time.perf_counter()
+    context: list[ContextSnippet] = await provider.get_context(task)
+    evaluator = resolve_evaluator(task, context)
+    native_metrics = await evaluator.evaluate(task, Completion(text=""), Path("."))
+    eval_ms = (time.perf_counter() - t0) * 1000.0
+
+    return EvalResult(
+        task_id=task.id,
+        provenance=task.provenance,
+        evaluator_kind=task.evaluator_kind,
+        model=None,
+        context_provider=provider_name,
+        run_index=run_index,
+        native_metrics=native_metrics,
+        normalized_score=_normalized_score(native_metrics),
+        generated_output={},
+        context_used=[s.model_dump() for s in context],
+        generation_latency_ms=0.0,
+        evaluation_latency_ms=eval_ms,
+    )
+
+
 async def run_evaluation(
     config: EvalConfig,
     dataset: Dataset,
@@ -122,24 +169,39 @@ async def run_evaluation(
 ) -> list[EvalResult]:
     """Run the full evaluation matrix and return all results.
 
-    Iterates over ``models x context_providers x tasks x num_runs``,
-    respecting ``config.concurrency`` for parallelism.
+    Iterates over generation tasks on
+    ``models x context_providers x tasks x num_runs`` and retrieval-diagnostic
+    tasks on ``context_providers x tasks x num_runs``, respecting
+    ``config.concurrency`` for parallelism.
     """
     results: list[EvalResult] = []
     sem = asyncio.Semaphore(config.concurrency)
+    retrieval_tasks = [
+        task
+        for task in dataset.tasks
+        if task.evaluator_kind == EvaluatorKind.retrieval_diagnostic
+    ]
+    generation_tasks = [
+        task
+        for task in dataset.tasks
+        if task.evaluator_kind != EvaluatorKind.retrieval_diagnostic
+    ]
     total_combos = (
         len(config.models)
         * len(config.context_providers)
-        * len(dataset.tasks)
+        * len(generation_tasks)
         * config.num_runs
+        + len(config.context_providers) * len(retrieval_tasks) * config.num_runs
     )
     completed = 0
 
     log.info(
-        "Starting evaluation: %d model(s) x %d provider(s) x %d task(s) x %d run(s) = %d total",
+        "Starting evaluation: %d generation task(s), %d retrieval task(s), "
+        "%d model(s), %d provider(s), %d run(s) = %d total",
+        len(generation_tasks),
+        len(retrieval_tasks),
         len(config.models),
         len(config.context_providers),
-        len(dataset.tasks),
         config.num_runs,
         total_combos,
     )
@@ -150,13 +212,19 @@ async def run_evaluation(
 
     tasks: list[asyncio.Task] = []
 
+    providers = {
+        provider_name: create_provider(provider_name, config, adapter)
+        for provider_name in config.context_providers
+    }
+
     for model_name in config.models:
+        if not generation_tasks:
+            break
         generator = create_generator(model_name)
-        for provider_name in config.context_providers:
-            provider = create_provider(provider_name, config, adapter)
-            for task in dataset.tasks:
+        for provider_name, provider in providers.items():
+            for task in generation_tasks:
                 for run_idx in range(config.num_runs):
-                    coro = _run_single(
+                    coro = _run_single_generation(
                         task=task,
                         generator=generator,
                         provider=provider,
@@ -166,6 +234,17 @@ async def run_evaluation(
                         provider_name=provider_name,
                     )
                     tasks.append(asyncio.create_task(_bounded(coro)))
+
+    for provider_name, provider in providers.items():
+        for task in retrieval_tasks:
+            for run_idx in range(config.num_runs):
+                coro = _run_single_retrieval(
+                    task=task,
+                    provider=provider,
+                    run_index=run_idx,
+                    provider_name=provider_name,
+                )
+                tasks.append(asyncio.create_task(_bounded(coro)))
 
     for fut in asyncio.as_completed(tasks):
         try:

@@ -44,7 +44,7 @@ def _ci_95(mean: float, stddev: float, n: int) -> tuple[float, float]:
     return (mean - margin, mean + margin)
 
 
-_GroupKey = tuple[str, str, str]  # (comparability_class, model, context_provider)
+_GroupKey = tuple[str, str | None, str]  # (comparability_class, model, context_provider)
 _GroupKey2 = tuple[str, str]  # (comparability_class, context_provider)
 
 

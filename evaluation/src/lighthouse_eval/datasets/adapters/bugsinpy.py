@@ -126,6 +126,7 @@ class BugsInPyAdapter:
             test_commands = [run_test_path.read_text(encoding="utf-8", errors="replace").strip()]
 
         test_spec = TestSpec(
+            execution_backend="command_sequence",
             test_commands=test_commands,
             docker_image=f"bugsinpy:{project}_{bug_id}",
             timeout_seconds=300,

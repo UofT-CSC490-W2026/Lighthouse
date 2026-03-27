@@ -4,7 +4,7 @@ import enum
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class EvaluatorKind(str, enum.Enum):
@@ -27,6 +27,9 @@ class OutputFormat(str, enum.Enum):
 class TestSpec(BaseModel):
     """Spec for tasks evaluated by running a test suite."""
 
+    execution_backend: Literal["local_pytest", "docker_pytest", "command_sequence"] | None = (
+        None
+    )
     test_paths: list[Path] = Field(default_factory=list)
     test_commands: list[str] = Field(default_factory=list)
     expected_to_pass: list[str] = Field(
@@ -39,6 +42,36 @@ class TestSpec(BaseModel):
     )
     docker_image: str | None = None
     timeout_seconds: int = 300
+
+    @model_validator(mode="after")
+    def _validate_execution_backend(self) -> TestSpec:
+        if self.execution_backend is None:
+            if self.docker_image:
+                self.execution_backend = "docker_pytest"
+            elif self.test_commands:
+                self.execution_backend = "command_sequence"
+            elif self.test_paths:
+                self.execution_backend = "local_pytest"
+
+        if self.execution_backend is None:
+            raise ValueError(
+                "TestSpec must declare a runnable backend via execution_backend, "
+                "test_commands, or test_paths."
+            )
+
+        if self.execution_backend == "docker_pytest":
+            if not self.docker_image:
+                raise ValueError("docker_pytest requires docker_image to be set.")
+            if not (self.test_commands or self.test_paths):
+                raise ValueError("docker_pytest requires test_commands or test_paths.")
+        elif self.execution_backend == "command_sequence":
+            if not self.test_commands:
+                raise ValueError("command_sequence requires at least one test command.")
+        elif self.execution_backend == "local_pytest":
+            if not (self.test_commands or self.test_paths):
+                raise ValueError("local_pytest requires test_commands or test_paths.")
+
+        return self
 
 
 class MatchSpec(BaseModel):
@@ -58,6 +91,7 @@ class MatchSpec(BaseModel):
 class ContextSnippetRef(BaseModel):
     """Lightweight reference to a ground-truth context snippet."""
 
+    snippet_id: str | None = None
     file_path: str
     content: str
     start_line: int | None = None
@@ -128,6 +162,30 @@ class Task(BaseModel):
 
     metadata: dict[str, Any] = Field(default_factory=dict)
 
+    @model_validator(mode="after")
+    def _validate_match_spec_compatibility(self) -> Task:
+        if self.evaluator_kind != EvaluatorKind.match or self.match_spec is None:
+            return self
+
+        ground_truth_keys = list(self.match_spec.ground_truth)
+        if self.output_format == OutputFormat.completion:
+            if ground_truth_keys != ["_completion"]:
+                raise ValueError(
+                    "Completion match tasks must provide exactly one ground_truth entry: "
+                    "'_completion'."
+                )
+            return self
+
+        if not ground_truth_keys or "_completion" in self.match_spec.ground_truth:
+            raise ValueError(
+                "Non-completion match tasks must provide file-keyed ground_truth entries."
+            )
+
+        if self.output_format == OutputFormat.file and len(ground_truth_keys) != 1:
+            raise ValueError("File match tasks must provide exactly one ground_truth file.")
+
+        return self
+
 
 class Dataset(BaseModel):
     """An ordered collection of tasks from a single source."""
@@ -192,7 +250,7 @@ class EvalResult(BaseModel):
     provenance: TaskProvenance
     evaluator_kind: EvaluatorKind
 
-    model: str
+    model: str | None
     context_provider: str
     run_index: int
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 from lighthouse_eval.candidates.base import _CandidateBase
@@ -20,6 +21,13 @@ def _snippet_matches(retrieved: ContextSnippet, gold: ContextSnippetRef) -> bool
     if retrieved.file_path != gold.file_path:
         return False
     return gold.content.strip() in retrieved.content.strip()
+
+
+def _stable_gold_id(gold: ContextSnippetRef, index: int) -> str:
+    if gold.snippet_id:
+        return gold.snippet_id
+    digest = hashlib.sha1(gold.content.encode("utf-8")).hexdigest()
+    return f"{gold.file_path}:{gold.start_line}:{gold.end_line}:{digest}:{index}"
 
 
 class RetrievalDiagnosticEvaluator:
@@ -46,31 +54,43 @@ class RetrievalDiagnosticEvaluator:
         if spec is None:
             raise ValueError(f"Task {task.id} has no retrieval_spec")
 
-        gold_snippets = spec.ground_truth_snippets
+        gold_snippets = list(spec.ground_truth_snippets)
+        for index in spec.gold_indices:
+            if 0 <= index < len(task.oracle_context):
+                gold_snippets.append(task.oracle_context[index])
+
+        gold_by_id: dict[str, ContextSnippetRef] = {}
+        for index, gold in enumerate(gold_snippets):
+            gold_by_id[_stable_gold_id(gold, index)] = gold
+
         k = spec.k
         retrieved = self._last_context[:k]
-        num_gold = len(gold_snippets)
+        num_gold = len(gold_by_id)
 
         if num_gold == 0:
             return RetrievalMetrics(
                 k=k, num_gold_snippets=0, num_retrieved=len(retrieved),
             )
 
-        hits_at_rank: list[bool] = []
-        for r in retrieved:
-            hits_at_rank.append(
-                any(_snippet_matches(r, g) for g in gold_snippets)
-            )
+        matched_gold_ids: set[str] = set()
+        first_hit_rank: int | None = None
+        for rank, retrieved_snippet in enumerate(retrieved, start=1):
+            matching_ids = {
+                gold_id
+                for gold_id, gold in gold_by_id.items()
+                if _snippet_matches(retrieved_snippet, gold)
+            }
+            if matching_ids and first_hit_rank is None:
+                first_hit_rank = rank
+            matched_gold_ids.update(matching_ids)
 
-        num_hits = sum(hits_at_rank)
+        num_hits = len(matched_gold_ids)
         precision = num_hits / k if k > 0 else 0.0
-        recall = num_hits / num_gold if num_gold > 0 else 0.0
+        recall = min(num_hits / num_gold if num_gold > 0 else 0.0, 1.0)
 
         mrr = 0.0
-        for i, hit in enumerate(hits_at_rank):
-            if hit:
-                mrr = 1.0 / (i + 1)
-                break
+        if first_hit_rank is not None:
+            mrr = 1.0 / first_hit_rank
 
         return RetrievalMetrics(
             precision_at_k=precision,

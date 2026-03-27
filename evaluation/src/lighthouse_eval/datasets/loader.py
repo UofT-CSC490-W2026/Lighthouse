@@ -106,15 +106,11 @@ def _load_dir_task(
     tests_dir = task_dir / "tests"
     if tests_dir.is_dir() and evaluator_kind == EvaluatorKind.test_execution:
         test_paths = sorted(tests_dir.glob("test_*.py"))
-        test_commands = task_meta.get("test_commands", [])
-        if not test_commands and test_paths:
-            test_commands = [
-                f"python -m pytest {tests_dir} -q --tb=short "
-                f"--json-report --json-report-file=.report.json"
-            ]
         test_spec = TestSpec(
             test_paths=test_paths,
-            test_commands=test_commands,
+            test_commands=task_meta.get("test_commands", []),
+            execution_backend=task_meta.get("execution_backend", "local_pytest"),
+            docker_image=task_meta.get("docker_image"),
             timeout_seconds=task_meta.get("timeout_seconds", 300),
         )
 
