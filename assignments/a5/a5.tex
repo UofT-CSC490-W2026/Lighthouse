@@ -193,7 +193,7 @@ Talk here about what we considered part of coverage.
 % handle incorrect inputs)
 
 Our most complex module is the \texttt{IndexBranchWorkflow} in the ingestion service
-(\texttt{services/ingestion/src/ingestion/temporal/workflows/index\_branch.py}).
+(\bluehref{https://github.com/UofT-CSC490-W2026/Lighthouse/blob/a5/services/ingestion/src/ingestion/temporal/workflows/index\_branch.py}{services/ingestion/src/ingestion/temporal/workflows/index\_branch.py}).
 This Temporal workflow orchestrates 7 distinct activities through a multi-step pipeline:
 marking a branch as indexing, cloning the repository, chunking files into a staging table,
 deleting old chunks, embedding chunks in parallel batches, storing results to the final
@@ -203,7 +203,7 @@ early-exit logic (when no chunks are produced), parallel fan-out for embedding b
 failed and conditionally cleans up staging data only when a \texttt{batch\_id} has been assigned.
 
 All 12 tests are located in
-\texttt{services/ingestion/tests/unit/test\_index\_branch\_workflow.py} and use Temporal's
+\bluehref{https://github.com/UofT-CSC490-W2026/Lighthouse/blob/a5/services/ingestion/tests/unit/test\_index\_branch\_workflow.py}{services/ingestion/tests/unit/test\_index\_branch\_workflow.py} and use Temporal's
 \texttt{WorkflowEnvironment} with mocked activities. This isolates the workflow's
 orchestration logic from external dependencies (Postgres, Milvus, git, OpenAI), allowing
 us to test decision-making, parameter threading, and failure handling in under one second.
