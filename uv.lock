@@ -958,6 +958,8 @@ source = { editable = "packages/eval" }
 dependencies = [
     { name = "boto3" },
     { name = "datasets" },
+    { name = "httpx" },
+    { name = "shared" },
     { name = "swebench" },
 ]
 
@@ -965,6 +967,8 @@ dependencies = [
 requires-dist = [
     { name = "boto3", specifier = ">=1.42.77" },
     { name = "datasets", specifier = ">=4.8.4" },
+    { name = "httpx", specifier = ">=0.28.1" },
+    { name = "shared", editable = "packages/shared" },
     { name = "swebench", specifier = ">=4.1.0" },
 ]
 
