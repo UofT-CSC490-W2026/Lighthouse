@@ -13,11 +13,16 @@ from shared.schemas.ingestion import (
     IndexRequest,
     IndexStatusResponse,
 )
+from shared.schemas.wiki import (
+    GenerateWikiAcceptedResponse,
+    GenerateWikiRequest,
+    WikiStatusResponse,
+)
 from temporalio.client import Client
 
 from .utilities import IngestionSettings
-from .temporal import IncrementalIndexWorkflow, IndexRepositoryWorkflow
-from .temporal.activities import IncrementalIndexInput, IndexRepoInput
+from .temporal import GenerateWikiWorkflow, IncrementalIndexWorkflow, IndexRepositoryWorkflow
+from .temporal.activities import GenerateWikiInput, IncrementalIndexInput, IndexRepoInput
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -167,6 +172,95 @@ async def get_status(github_repo_id: int):
 
             return IndexStatusResponse(
                 github_repo_id=github_repo_id, branches=branch_statuses
+            )
+    finally:
+        db.close()
+
+
+@app.post("/generate-wiki", response_model=GenerateWikiAcceptedResponse)
+async def generate_wiki(request: GenerateWikiRequest):
+    """Kick off wiki generation for an already-indexed repository."""
+    from db import DatabaseManager, Repository
+
+    settings: IngestionSettings = app.state.settings
+    temporal: Client = app.state.temporal_client
+
+    db = DatabaseManager(settings.postgres_dsn)
+    db.connect()
+    try:
+        with db.connection_context():
+            repo = Repository.get_or_none(
+                Repository.github_repo_id == request.github_repo_id
+            )
+            if repo is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Repository {request.github_repo_id} not found",
+                )
+
+        workflow_id = f"wiki-{request.github_repo_id}-{request.branch}"
+        await temporal.start_workflow(
+            GenerateWikiWorkflow.run,
+            GenerateWikiInput(
+                repository_id=repo.id,
+                github_repo_id=request.github_repo_id,
+                full_name=repo.full_name,
+                branch=request.branch,
+                llm_strategy=settings.llm_strategy,
+                embedding_strategy=settings.embedding_strategy,
+            ),
+            id=workflow_id,
+            task_queue=settings.temporal_task_queue,
+        )
+        logger.info("Started wiki generation workflow %s", workflow_id)
+
+        return GenerateWikiAcceptedResponse(workflow_id=workflow_id)
+    finally:
+        db.close()
+
+
+@app.get("/wiki-status/{github_repo_id:int}", response_model=WikiStatusResponse)
+async def get_wiki_status(github_repo_id: int, branch: str = "main"):
+    """Return the latest wiki generation status for a repository."""
+    from db import DatabaseManager, Repository, WikiGeneration
+
+    settings: IngestionSettings = app.state.settings
+    db = DatabaseManager(settings.postgres_dsn)
+    db.connect()
+
+    try:
+        with db.connection_context():
+            repo = Repository.get_or_none(
+                Repository.github_repo_id == github_repo_id
+            )
+            if repo is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Repository {github_repo_id} not found",
+                )
+
+            generation = (
+                WikiGeneration.select()
+                .where(
+                    (WikiGeneration.repository == repo)
+                    & (WikiGeneration.branch == branch)
+                )
+                .order_by(WikiGeneration.created_at.desc())
+                .first()
+            )
+
+            if generation is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"No wiki generation found for {github_repo_id}/{branch}",
+                )
+
+            return WikiStatusResponse(
+                github_repo_id=github_repo_id,
+                branch=branch,
+                status=generation.status,
+                wiki_title=generation.wiki_title,
+                page_count=generation.page_count,
             )
     finally:
         db.close()
