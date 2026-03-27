@@ -1,0 +1,21 @@
+models:
+  - "bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0"
+
+context_providers:
+  - "none"
+
+dataset:
+  adapter: "crosscodeeval"
+  source: "amazon-science/cceval"
+  split: "test"
+  max_instances: 3
+  options:
+    retrieval_method: "bm25"
+
+num_runs: 1
+output_dir: "evaluation/results/smoke/crosscodeeval/"
+workspace_cache_dir: "../../.cache/workspaces"
+concurrency: 1
+
+metadata:
+  index_registry: "../../datasets/crosscodeeval/index_registry.json"
