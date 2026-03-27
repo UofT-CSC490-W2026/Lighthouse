@@ -1,8 +1,15 @@
 import pytest
 
 from shared.config import (
+    BEDROCK_EMBEDDING_DIMENSION,
+    BEDROCK_EMBEDDING_MODEL,
     CHUNK_MAX_LINES,
     CHUNK_OVERLAP_LINES,
+    DEFAULT_EMBEDDING_STRATEGY,
+    OPENAI_EMBEDDING_DIMENSION,
+    OPENAI_EMBEDDING_MODEL,
+    default_embedding_dimension,
+    default_embedding_model,
     EMBEDDING_DIMENSION,
     EMBEDDING_MODEL,
     MILVUS_COLLECTION_NAME,
@@ -10,13 +17,34 @@ from shared.config import (
 
 
 @pytest.mark.unit
+def test_default_embedding_strategy():
+    assert DEFAULT_EMBEDDING_STRATEGY == "bedrock"
+
+
+@pytest.mark.unit
+def test_provider_specific_embedding_defaults():
+    assert BEDROCK_EMBEDDING_MODEL == "amazon.titan-embed-text-v2:0"
+    assert BEDROCK_EMBEDDING_DIMENSION == 1024
+    assert OPENAI_EMBEDDING_MODEL == "text-embedding-3-large"
+    assert OPENAI_EMBEDDING_DIMENSION == 3072
+
+
+@pytest.mark.unit
 def test_embedding_model():
-    assert EMBEDDING_MODEL == "text-embedding-3-large"
+    assert EMBEDDING_MODEL == BEDROCK_EMBEDDING_MODEL
 
 
 @pytest.mark.unit
 def test_embedding_dimension():
-    assert EMBEDDING_DIMENSION == 3072
+    assert EMBEDDING_DIMENSION == BEDROCK_EMBEDDING_DIMENSION
+
+
+@pytest.mark.unit
+def test_default_embedding_helpers():
+    assert default_embedding_model("bedrock") == BEDROCK_EMBEDDING_MODEL
+    assert default_embedding_model("openai") == OPENAI_EMBEDDING_MODEL
+    assert default_embedding_dimension("bedrock") == BEDROCK_EMBEDDING_DIMENSION
+    assert default_embedding_dimension("openai") == OPENAI_EMBEDDING_DIMENSION
 
 
 @pytest.mark.unit
