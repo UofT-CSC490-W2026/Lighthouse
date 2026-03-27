@@ -13,6 +13,7 @@ dataset:
 num_runs: 3
 search_service_url: "http://localhost:8002"
 output_dir: "results/bugsinpy/"
+workspace_cache_dir: "../.cache/workspaces"
 concurrency: 4
 
 metadata:
