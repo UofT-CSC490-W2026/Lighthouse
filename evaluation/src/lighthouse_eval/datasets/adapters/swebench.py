@@ -27,6 +27,13 @@ from lighthouse_eval.datasets.schema import (
     TaskProvenance,
     TestSpec,
 )
+from lighthouse_eval.execution.preparation import (
+    apply_patch_to_workspace,
+    clone_git_repository,
+    materialize_cached_workspace,
+    require_executable,
+    run_process,
+)
 from lighthouse_eval.execution.evaluators.test_execution import PytestEvaluator
 
 log = logging.getLogger(__name__)
@@ -118,6 +125,59 @@ class SWEBenchAdapter:
     def get_oracle_provider(self) -> ContextProvider | None:
         return None
 
+    def validate_runtime(
+        self,
+        config: dict[str, Any],
+        dataset: Dataset,
+        cache_root: Path,
+    ) -> None:
+        require_executable("docker")
+        require_executable("git")
+        require_executable("patch")
+
+        images = {
+            task.test_spec.docker_image
+            for task in dataset.tasks
+            if task.test_spec is not None and task.test_spec.docker_image
+        }
+        for image in sorted(images):
+            run_process(["docker", "image", "inspect", image])
+
+    def prepare_task_workspace(
+        self,
+        task: Task,
+        config: dict[str, Any],
+        cache_root: Path,
+    ) -> Path:
+        repo = str(task.metadata.get("repo", "")).strip()
+        base_commit = str(task.metadata.get("base_commit", "")).strip()
+        if not repo or not base_commit:
+            raise RuntimeError(
+                f"SWE-bench task {task.id} is missing repo/base_commit metadata."
+            )
+
+        test_patch = str(task.metadata.get("test_patch", ""))
+        repo_url = f"https://github.com/{repo}.git"
+        spec = task.test_spec
+        return materialize_cached_workspace(
+            adapter_name=self.name,
+            task=task,
+            cache_root=cache_root,
+            state={
+                "repo": repo,
+                "base_commit": base_commit,
+                "test_patch_sha256": _sha256_text(test_patch),
+            },
+            build_fn=lambda build_dir: _build_swebench_workspace(
+                repo_url=repo_url,
+                base_commit=base_commit,
+                test_patch=test_patch,
+                build_dir=build_dir,
+            ),
+            setup_commands=spec.setup_commands if spec else [],
+            setup_timeout_seconds=spec.setup_timeout_seconds if spec else None,
+        )
+
     def get_repos(self, config: dict[str, Any]) -> list[RepoInfo]:
         from datasets import load_dataset
 
@@ -158,3 +218,21 @@ def _parse_test_list(raw: str) -> list[str]:
     except (json.JSONDecodeError, TypeError):
         pass
     return []
+
+
+def _build_swebench_workspace(
+    *,
+    repo_url: str,
+    base_commit: str,
+    test_patch: str,
+    build_dir: Path,
+) -> None:
+    clone_git_repository(repo_url, base_commit, build_dir)
+    if test_patch.strip():
+        apply_patch_to_workspace(test_patch, build_dir)
+
+
+def _sha256_text(value: str) -> str:
+    import hashlib
+
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
