@@ -188,7 +188,7 @@ returned to coding agents. However, several areas are still in active developmen
 \end{itemize}
 
 \subsection{Tech \& Testing Stack}
-
+Below are quick descriptions of each services tech stack:
 \begin{itemize}
   \item \texttt{ingestion} --- A Python 3.11 service built with FastAPI and Temporal.
     It uses GitPython for repository cloning, our shared workspace packages
@@ -209,7 +209,7 @@ returned to coding agents. However, several areas are still in active developmen
     management UI.
 \end{itemize}
 
-For testing, our backend stack is centered on \texttt{pytest}, with tests organized
+For testing, our testing framework is \texttt{pytest}, with tests organized
 into \texttt{unit}, \texttt{integration}, and \texttt{e2e} markers. We use
 \texttt{pytest-asyncio} for async service and API tests, and \texttt{pytest-cov} to
 measure line coverage across the Python services and shared packages. For
