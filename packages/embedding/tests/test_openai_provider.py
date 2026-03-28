@@ -2,7 +2,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from embedding.openai_provider import OpenAIEmbeddingProvider
+from embedding.openai_provider import (
+    OPENAI_DEFAULT_EMBEDDING_MODEL,
+    OpenAIEmbeddingProvider,
+)
 
 
 def _make_embedding_response(embeddings: list[list[float]]):
@@ -31,6 +34,26 @@ def test_embed_batch_single_batch(mock_openai_cls):
 
     assert result == [[0.1, 0.2], [0.3, 0.4]]
     mock_client.embeddings.create.assert_called_once()
+
+
+@pytest.mark.unit
+@patch("embedding.openai_provider.openai.OpenAI")
+def test_default_model_is_provider_local_constant(mock_openai_cls):
+    mock_openai_cls.return_value = MagicMock()
+
+    provider = OpenAIEmbeddingProvider(api_key="fake")
+
+    assert provider.model == OPENAI_DEFAULT_EMBEDDING_MODEL
+
+
+@pytest.mark.unit
+@patch("embedding.openai_provider.openai.OpenAI")
+def test_explicit_model_override(mock_openai_cls):
+    mock_openai_cls.return_value = MagicMock()
+
+    provider = OpenAIEmbeddingProvider(api_key="fake", model="custom-model")
+
+    assert provider.model == "custom-model"
 
 
 @pytest.mark.unit
