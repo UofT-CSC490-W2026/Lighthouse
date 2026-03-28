@@ -1,0 +1,257 @@
+
+==> SlidingWindowChunker
+         3758 function calls in 0.010 seconds
+
+   Ordered by: cumulative time
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        3    0.001    0.000    0.010    0.003 sliding_window_chunker.py:20(chunk_file)
+      468    0.000    0.000    0.003    0.000 utils.py:6(compute_chunk_hash)
+        3    0.003    0.001    0.003    0.001 {method 'splitlines' of 'str' objects}
+      468    0.002    0.000    0.002    0.000 {built-in method _hashlib.openssl_sha256}
+        3    0.001    0.000    0.001    0.000 {method 'strip' of 'str' objects}
+      468    0.001    0.000    0.001    0.000 {method 'encode' of 'str' objects}
+      468    0.001    0.000    0.001    0.000 {method 'join' of 'str' objects}
+      468    0.000    0.000    0.000    0.000 {method 'hexdigest' of '_hashlib.HASH' objects}
+      468    0.000    0.000    0.000    0.000 <string>:2(__init__)
+      468    0.000    0.000    0.000    0.000 {built-in method builtins.min}
+      468    0.000    0.000    0.000    0.000 {method 'append' of 'list' objects}
+        3    0.000    0.000    0.000    0.000 {built-in method builtins.len}
+        1    0.000    0.000    0.000    0.000 {built-in method builtins.max}
+        1    0.000    0.000    0.000    0.000 {method 'disable' of '_lsprof.Profiler' objects}
+
+
+generated_chunks=156 repeat=3 line_count=25000
+
+==> GitOperations.list_files
+         382556 function calls (382305 primitive calls) in 0.216 seconds
+
+   Ordered by: cumulative time
+   List reduced from 90 to 40 due to restriction <40>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        2    0.021    0.010    0.216    0.108 git_ops.py:70(list_files)
+    19802    0.005    0.000    0.083    0.000 pathlib.py:1008(stat)
+    10082    0.002    0.000    0.081    0.000 pathlib.py:956(rglob)
+    10082    0.008    0.000    0.078    0.000 pathlib.py:402(_select_from)
+    19802    0.054    0.000    0.077    0.000 {built-in method posix.stat}
+    10080    0.006    0.000    0.059    0.000 pathlib.py:1261(is_file)
+    10202    0.015    0.000    0.031    0.000 pathlib.py:353(_select_from)
+    20160    0.013    0.000    0.028    0.000 pathlib.py:583(__hash__)
+    20046    0.006    0.000    0.024    0.000 pathlib.py:546(__fspath__)
+    20046    0.011    0.000    0.018    0.000 pathlib.py:536(__str__)
+    10080    0.013    0.000    0.014    0.000 pathlib.py:569(_cparts)
+     9840    0.007    0.000    0.013    0.000 pathlib.py:630(suffix)
+    10200    0.005    0.000    0.010    0.000 pathlib.py:877(_make_child_relpath)
+  364/124    0.006    0.000    0.008    0.000 pathlib.py:383(_iterate_directories)
+    20040    0.007    0.000    0.008    0.000 pathlib.py:622(name)
+    10200    0.006    0.000    0.007    0.000 pathlib.py:523(_format_parsed_parts)
+     9960    0.007    0.000    0.007    0.000 pathlib.py:745(parts)
+    10200    0.004    0.000    0.005    0.000 pathlib.py:515(_from_parsed_parts)
+    10080    0.003    0.000    0.004    0.000 {method 'add' of 'set' objects}
+    10080    0.003    0.000    0.003    0.000 {method 'fullmatch' of 're.Pattern' objects}
+29781/29778    0.002    0.000    0.002    0.000 {built-in method builtins.len}
+      244    0.000    0.000    0.002    0.000 pathlib.py:934(_scandir)
+      244    0.001    0.000    0.002    0.000 {built-in method posix.scandir}
+    20160    0.002    0.000    0.002    0.000 pathlib.py:327(_select_from)
+    10201    0.002    0.000    0.002    0.000 {method 'join' of 'str' objects}
+    10080    0.001    0.000    0.001    0.000 {built-in method builtins.hash}
+     9840    0.001    0.000    0.001    0.000 {method 'rfind' of 'str' objects}
+    10200    0.001    0.000    0.001    0.000 {built-in method __new__ of type object at 0x561701efbf10}
+    10080    0.001    0.000    0.001    0.000 pathlib.py:257(casefold_parts)
+    10080    0.001    0.000    0.001    0.000 {method 'lower' of 'str' objects}
+    10080    0.001    0.000    0.001    0.000 {built-in method _stat.S_ISREG}
+     9738    0.001    0.000    0.001    0.000 {method 'append' of 'list' objects}
+        2    0.001    0.000    0.001    0.000 {method 'clear' of 'set' objects}
+    10080    0.001    0.000    0.001    0.000 {method 'is_dir' of 'posix.DirEntry' objects}
+      2/1    0.000    0.000    0.000    0.000 pathlib.py:281(_make_selector)
+        1    0.000    0.000    0.000    0.000 pathlib.py:380(__init__)
+      2/1    0.000    0.000    0.000    0.000 pathlib.py:304(__init__)
+        1    0.000    0.000    0.000    0.000 pathlib.py:349(__init__)
+        1    0.000    0.000    0.000    0.000 pathlib.py:260(compile_pattern)
+        1    0.000    0.000    0.000    0.000 __init__.py:225(compile)
+
+
+listed_files=4860 repeat=2 dirs=60 files_per_dir=80
+
+==> ChunkService.move_to_final
+         4603292 function calls (4417205 primitive calls) in 1.822 seconds
+
+   Ordered by: cumulative time
+   List reduced from 310 to 40 due to restriction <40>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.021    0.021    1.821    1.821 chunk.py:101(move_to_final)
+       18    0.000    0.000    1.158    0.064 peewee.py:2004(inner)
+       18    0.000    0.000    1.158    0.064 peewee.py:2079(execute)
+       17    0.002    0.000    1.157    0.068 peewee.py:2595(_execute)
+       18    0.000    0.000    1.156    0.064 peewee.py:3309(execute)
+       16    0.000    0.000    1.128    0.070 peewee.py:2881(_execute)
+104768/18    0.042    0.000    1.036    0.058 peewee.py:632(sql)
+       16    0.007    0.000    1.035    0.065 peewee.py:2848(__sql__)
+       16    0.285    0.018    1.027    0.064 peewee.py:2723(_generate_insert)
+  8035/35    0.060    0.000    0.592    0.017 peewee.py:1868(__sql__)
+97417/24333    0.007    0.000    0.512    0.000 {built-in method builtins.len}
+        1    0.000    0.000    0.510    0.510 peewee.py:2110(__len__)
+        1    0.000    0.000    0.510    0.510 peewee.py:4706(__len__)
+        1    0.003    0.003    0.510    0.510 peewee.py:4739(fill_cache)
+    16002    0.008    0.000    0.509    0.000 peewee.py:4799(next)
+     8001    0.009    0.000    0.500    0.000 peewee.py:4713(iterate)
+     8000    0.018    0.000    0.467    0.000 peewee.py:8054(process_row)
+    96002    0.036    0.000    0.412    0.000 peewee.py:1444(__sql__)
+    96002    0.186    0.000    0.375    0.000 peewee.py:644(value)
+     8000    0.038    0.000    0.366    0.000 peewee.py:8012(process_row)
+   104000    0.024    0.000    0.329    0.000 peewee.py:4966(python_value)
+    24000    0.008    0.000    0.290    0.000 peewee.py:5445(adapt)
+     8000    0.016    0.000    0.280    0.000 peewee.py:5410(format_date_time)
+    24000    0.009    0.000    0.263    0.000 {built-in method strptime}
+    24000    0.020    0.000    0.254    0.000 _strptime.py:564(_strptime_datetime)
+    24000    0.134    0.000    0.233    0.000 _strptime.py:309(_strptime)
+       18    0.000    0.000    0.118    0.007 peewee.py:3302(execute_sql)
+       18    0.095    0.005    0.118    0.007 {method 'execute' of 'sqlite3.Cursor' objects}
+   224384    0.067    0.000    0.085    0.000 peewee.py:4939(__hash__)
+     8000    0.021    0.000    0.081    0.000 peewee.py:6778(__init__)
+     8000    0.005    0.000    0.078    0.000 __init__.py:299(loads)
+     8000    0.012    0.000    0.071    0.000 decoder.py:332(decode)
+   104002    0.020    0.000    0.059    0.000 {built-in method builtins.setattr}
+    24000    0.008    0.000    0.056    0.000 _strptime.py:26(_getlang)
+   642147    0.046    0.000    0.055    0.000 {built-in method builtins.isinstance}
+   192291    0.042    0.000    0.054    0.000 peewee.py:562(__getattr__)
+   208542    0.043    0.000    0.053    0.000 peewee.py:640(literal)
+     8000    0.053    0.000    0.053    0.000 decoder.py:343(raw_decode)
+    24000    0.014    0.000    0.048    0.000 locale.py:594(getlocale)
+    96002    0.024    0.000    0.047    0.000 peewee.py:4963(db_value)
+
+
+moved=8000 final_count=8000 milvus_inserted=8000 target=move_to_final
+
+==> ChunkService.publish_incremental_batch
+
+6567890 function calls (6279793 primitive calls) in 2.530 seconds
+
+   Ordered by: cumulative time
+   List reduced from 363 to 30 due to restriction <30>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        3    0.027    0.009    2.530    0.843 chunk.py:199(publish_incremental_batch)
+     1425    0.001    0.000    1.608    0.001 peewee.py:2004(inner)
+     1425    0.001    0.000    1.606    0.001 peewee.py:2079(execute)
+     1425    0.003    0.000    1.591    0.001 peewee.py:3309(execute)
+198973/1625    0.094    0.000    1.518    0.001 peewee.py:632(sql)
+      819    0.004    0.000    1.272    0.002 peewee.py:2595(_execute)
+      216    0.000    0.000    1.062    0.005 peewee.py:2881(_execute)
+      216    0.007    0.000    0.967    0.004 peewee.py:2848(__sql__)
+      216    0.257    0.001    0.954    0.004 peewee.py:2723(_generate_insert)
+14453/2653    0.076    0.000    0.831    0.000 peewee.py:1868(__sql__)
+    17409    0.009    0.000    0.593    0.000 peewee.py:4799(next)
+     9406    0.011    0.000    0.583    0.000 peewee.py:4713(iterate)
+      600    0.005    0.000    0.580    0.001 peewee.py:6990(get_or_create)
+      603    0.005    0.000    0.561    0.001 peewee.py:4739(fill_cache)
+     8800    0.021    0.000    0.538    0.000 peewee.py:8054(process_row)
+146606/73522    0.010    0.000    0.508    0.000 {built-in method builtins.len}
+        3    0.000    0.000    0.503    0.168 peewee.py:2110(__len__)
+        3    0.000    0.000    0.503    0.168 peewee.py:4706(__len__)
+      600    0.002    0.000    0.471    0.001 peewee.py:7423(get)
+     8800    0.038    0.000    0.429    0.000 peewee.py:8012(process_row)
+106818/105618    0.035    0.000    0.428    0.000 peewee.py:1444(__sql__)
+   106812    0.194    0.000    0.392    0.000 peewee.py:644(value)
+   109600    0.026    0.000    0.390    0.000 peewee.py:4966(python_value)
+      806    0.009    0.000    0.385    0.000 peewee.py:2500(__sql__)
+    27200    0.009    0.000    0.349    0.000 peewee.py:5445(adapt)
+     9600    0.020    0.000    0.338    0.000 peewee.py:5410(format_date_time)
+      606    0.002    0.000    0.333    0.001 peewee.py:2252(_execute)
+    28800    0.011    0.000    0.316    0.000 {built-in method strptime}
+    28800    0.026    0.000    0.305    0.000 _strptime.py:564(_strptime_datetime)
+    28800    0.160    0.000    0.279    0.000 _strptime.py:309(_strptime)
+
+
+cleanup_targets=0 changed_files=200 milvus_inserted=8000 target=publish_incremental
+
+==> HybridSearchStrategy targets
+--- target=search size=medium repeat=2 ---
+         131064 function calls (124260 primitive calls) in 0.062 seconds
+
+   Ordered by: cumulative time
+   List reduced from 371 to 40 due to restriction <40>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.000    0.000    0.062    0.062 runners.py:160(run)
+        3    0.000    0.000    0.062    0.021 base_events.py:618(run_until_complete)
+        1    0.000    0.000    0.062    0.062 runners.py:86(run)
+        3    0.000    0.000    0.062    0.021 base_events.py:594(run_forever)
+        6    0.000    0.000    0.062    0.010 base_events.py:1859(_run_once)
+        6    0.000    0.000    0.062    0.010 events.py:82(_run)
+        6    0.000    0.000    0.062    0.010 {method 'run' of '_contextvars.Context' objects}
+        1    0.000    0.000    0.061    0.061 profiling.py:89(_runner)
+        2    0.000    0.000    0.061    0.031 hybrid_strategy.py:34(search)
+        2    0.000    0.000    0.042    0.021 hybrid_strategy.py:165(_filter_vector_results)
+        2    0.000    0.000    0.042    0.021 hybrid_strategy.py:196(_get_active_publish_map)
+        6    0.000    0.000    0.041    0.007 peewee.py:2004(inner)
+        6    0.000    0.000    0.041    0.007 peewee.py:2079(execute)
+        6    0.000    0.000    0.041    0.007 peewee.py:2252(_execute)
+        6    0.000    0.000    0.040    0.007 peewee.py:3309(execute)
+        4    0.000    0.000    0.039    0.010 peewee.py:7415(__iter__)
+   4732/6    0.003    0.000    0.037    0.006 peewee.py:632(sql)
+        6    0.000    0.000    0.037    0.006 peewee.py:2500(__sql__)
+    962/6    0.005    0.000    0.035    0.006 peewee.py:1524(__sql__)
+      534    0.000    0.000    0.016    0.000 peewee.py:4975(__sql__)
+      534    0.002    0.000    0.015    0.000 peewee.py:1312(__sql__)
+      208    0.000    0.000    0.008    0.000 peewee.py:4799(next)
+      208    0.000    0.000    0.008    0.000 peewee.py:4713(iterate)
+     1530    0.002    0.000    0.007    0.000 peewee.py:602(__call__)
+      202    0.000    0.000    0.007    0.000 peewee.py:8054(process_row)
+      540    0.001    0.000    0.005    0.000 peewee.py:1020(__sql__)
+        2    0.000    0.000    0.005    0.002 hybrid_strategy.py:86(<dictcomp>)
+      202    0.001    0.000    0.005    0.000 peewee.py:8012(process_row)
+     1530    0.003    0.000    0.004    0.000 peewee.py:548(__call__)
+  570/490    0.000    0.000    0.004    0.000 peewee.py:1444(__sql__)
+      534    0.001    0.000    0.004    0.000 peewee.py:840(apply_column)
+     1104    0.000    0.000    0.004    0.000 {built-in method builtins.next}
+        2    0.000    0.000    0.004    0.002 hybrid_strategy.py:54(<listcomp>)
+      566    0.002    0.000    0.004    0.000 peewee.py:644(value)
+     1138    0.000    0.000    0.004    0.000 peewee.py:4966(python_value)
+      160    0.000    0.000    0.004    0.000 dataclasses.py:1265(asdict)
+ 1120/160    0.002    0.000    0.004    0.000 dataclasses.py:1289(_asdict_inner)
+     1104    0.001    0.000    0.004    0.000 peewee.py:567(inner)
+        2    0.001    0.001    0.004    0.002 hybrid_strategy.py:226(_rrf_fusion)
+       82    0.000    0.000    0.003    0.000 peewee.py:5445(adapt)
+
+
+search_snippets=20 total_results=1532
+--- target=rrf size=medium repeat=2 ---
+         10010 function calls in 0.005 seconds
+
+   Ordered by: cumulative time
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        2    0.002    0.001    0.005    0.003 hybrid_strategy.py:226(_rrf_fusion)
+        2    0.002    0.001    0.002    0.001 hybrid_strategy.py:250(<listcomp>)
+        2    0.001    0.000    0.001    0.000 {built-in method builtins.sorted}
+     5000    0.000    0.000    0.000    0.000 hybrid_strategy.py:248(<lambda>)
+     5000    0.000    0.000    0.000    0.000 {method 'get' of 'dict' objects}
+        1    0.000    0.000    0.000    0.000 {method 'disable' of '_lsprof.Profiler' objects}
+        2    0.000    0.000    0.000    0.000 {method 'keys' of 'dict' objects}
+        1    0.000    0.000    0.000    0.000 {built-in method builtins.max}
+
+
+rrf_results=2500 vector=1500 keyword=1000
+--- target=filter size=medium repeat=2 ---
+         14008 function calls in 0.006 seconds
+
+   Ordered by: cumulative time
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        2    0.003    0.002    0.006    0.003 hybrid_strategy.py:165(_filter_vector_results)
+        2    0.002    0.001    0.002    0.001 hybrid_strategy.py:170(<listcomp>)
+    12000    0.001    0.000    0.001    0.000 typing.py:2287(cast)
+     2000    0.000    0.000    0.000    0.000 {method 'append' of 'list' objects}
+        1    0.000    0.000    0.000    0.000 {built-in method builtins.max}
+        1    0.000    0.000    0.000    0.000 {method 'disable' of '_lsprof.Profiler' objects}
+        2    0.000    0.000    0.000    0.000 profile_hybrid_strategy.py:231(<lambda>)
+
+
+filtered_results=1000 source_results=3000
+
+
+
+Completed profiling defaults.

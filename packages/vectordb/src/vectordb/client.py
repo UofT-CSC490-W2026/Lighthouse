@@ -16,6 +16,7 @@ class CollectionField(StrEnum):
     REPOSITORY_ID = "repository_id"
     FILE_PATH = "file_path"
     BRANCH = "branch"
+    PUBLISH_ID = "publish_id"
 
 
 @dataclass
@@ -25,6 +26,7 @@ class MilvusSearchResult:
     repository_id: str
     file_path: str
     branch: str
+    publish_id: str
 
 
 class MilvusClient:
@@ -42,6 +44,7 @@ class MilvusClient:
     def ensure_collection(self, dimension: int = 3072) -> None:
         """Create the collection if it does not exist."""
         if self._client.has_collection(self.collection_name):
+            self._validate_existing_collection_schema()
             return
 
         schema = self._client.create_schema(auto_id=False, enable_dynamic_field=False)
@@ -59,6 +62,7 @@ class MilvusClient:
         )
         schema.add_field(CollectionField.FILE_PATH, DataType.VARCHAR, max_length=512)
         schema.add_field(CollectionField.BRANCH, DataType.VARCHAR, max_length=128)
+        schema.add_field(CollectionField.PUBLISH_ID, DataType.VARCHAR, max_length=128)
 
         # Define indices here.
         index_params = self._client.prepare_index_params()
@@ -75,10 +79,44 @@ class MilvusClient:
             index_params=index_params,
         )
 
+    def _validate_existing_collection_schema(self) -> None:
+        """Validate that an existing collection has all required fields."""
+        description = self._client.describe_collection(
+            collection_name=self.collection_name
+        )
+        field_entries = description.get("fields", [])
+
+        existing_fields: set[str] = set()
+        for field in field_entries:
+            if isinstance(field, dict):
+                name = field.get("name") or field.get("field_name")
+            else:
+                name = getattr(field, "name", None) or getattr(field, "field_name", None)
+            if isinstance(name, str) and name:
+                existing_fields.add(name)
+
+        required_fields = {
+            CollectionField.ID.value,
+            CollectionField.CHUNK_ID.value,
+            CollectionField.EMBEDDING.value,
+            CollectionField.REPOSITORY_ID.value,
+            CollectionField.FILE_PATH.value,
+            CollectionField.BRANCH.value,
+            CollectionField.PUBLISH_ID.value,
+        }
+        missing = sorted(required_fields - existing_fields)
+        if missing:
+            raise RuntimeError(
+                f"Milvus collection '{self.collection_name}' is missing required "
+                f"field(s): {', '.join(missing)}. Recreate the collection with the "
+                "current schema before indexing."
+            )
+
     def insert(self, records: list[dict]) -> None:
         """Batch insert records into the collection.
 
-        Each record should have: id, chunk_id, embedding, repository_id, file_path, branch
+        Each record should have:
+        id, chunk_id, embedding, repository_id, file_path, branch, publish_id
         (see CollectionField for shared constants).
         """
         if not records:
@@ -103,6 +141,7 @@ class MilvusClient:
                 CollectionField.REPOSITORY_ID,
                 CollectionField.FILE_PATH,
                 CollectionField.BRANCH,
+                CollectionField.PUBLISH_ID,
             ],
             filter=filter_expr if filter_expr else "",
             search_params={"metric_type": "COSINE", "params": {"ef": 128}},
@@ -119,6 +158,7 @@ class MilvusClient:
                         repository_id=entity[CollectionField.REPOSITORY_ID],
                         file_path=entity[CollectionField.FILE_PATH],
                         branch=entity[CollectionField.BRANCH],
+                        publish_id=entity[CollectionField.PUBLISH_ID],
                     )
                 )
         return hits

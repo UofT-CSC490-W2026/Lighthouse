@@ -87,6 +87,32 @@ class StoreChunksInput:
 
 
 @dataclass
+class PublishStagedChunksInput:
+    batch_id: str
+    repository_id: str
+    branch: str
+    changed_files: list[str] = field(default_factory=list)
+
+
+@dataclass
+class FilePublishCleanup:
+    file_path: str
+    previous_publish_id: str | None = None
+
+
+@dataclass
+class PublishStagedChunksOutput:
+    cleanup_targets: list[FilePublishCleanup] = field(default_factory=list)
+
+
+@dataclass
+class CleanupInactiveChunksInput:
+    repository_id: str
+    branch: str
+    cleanup_targets: list[FilePublishCleanup] = field(default_factory=list)
+
+
+@dataclass
 class CleanupStagingInput:
     batch_id: str
 

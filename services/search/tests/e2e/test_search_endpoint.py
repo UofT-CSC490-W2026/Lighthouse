@@ -88,6 +88,7 @@ class TestSearchEndpoints:
                     "repository_id": repo.id,
                     "file_path": f"f{i}.py",
                     "branch": "main",
+                    "publish_id": "legacy",
                 }])
 
         resp = await client.post("/search", json={
@@ -156,6 +157,7 @@ class TestSearchEndpoints:
                     "repository_id": repo.id,
                     "file_path": f"search_{i}.py",
                     "branch": "main",
+                    "publish_id": "legacy",
                 }])
 
         resp = await client.post("/search", json={
@@ -200,6 +202,7 @@ class TestSearchEndpoints:
                     "repository_id": repo.id,
                     "file_path": f"algo_{i}.py",
                     "branch": "main",
+                    "publish_id": "legacy",
                 }])
 
         resp = await client.post("/search", json={

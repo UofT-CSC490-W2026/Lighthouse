@@ -3,7 +3,9 @@ name = "lighthouse"
 version = "0.1.0"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "xxhash>=3.6.0",
+]
 
 [tool.uv.workspace]
 members = [
@@ -68,6 +70,8 @@ exclude_lines = [
   "pragma: no cover",
   "if TYPE_CHECKING:",
   "raise NotImplementedError",
+  "^\\s*\\.\\.\\.$",
+  "^if __name__ == .__main__.:$",
 ]
 
 [tool.ruff]

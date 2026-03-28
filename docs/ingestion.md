@@ -34,7 +34,9 @@ Important current limitations:
 - indexing status is represented as unconstrained strings such as `pending`,
   `indexing`, `indexed`, and `failed`
 - failure cleanup is best effort and happens only after workflow errors are caught
-- webhook-driven incremental indexing assumes the repo can already be cloned or fetched locally
+- webhook-driven incremental indexing expects an existing clone under
+  `clone_base_dir` (same layout as full indexing); without it, fetch/clone cannot
+  succeed with the empty URL used in the incremental workflow
 
 ## Source Layout
 
@@ -113,11 +115,18 @@ Activities provide the concrete side-effecting work:
 
 - repository activities ensure shared repository rows exist
 - branch activities update branch status records
-- git activities clone, fetch, and diff repositories
+- git activities clone, fetch, list files changed between commits, and diff
+  repositories
 - chunking activities read files and write staging chunks
-- embedding activities generate embeddings in batches
-- storage activities delete old data, move staged chunks to final storage, and
-  clean staging rows
+- embedding activities generate embeddings in batches (workflows fan out multiple
+  batch activities in parallel)
+- storage activities delete old data, move staged chunks to final storage,
+  publish incremental batches (swap active file versions), remove superseded
+  chunks after publish, and clean staging rows on failure
+
+`delete_chunks_for_files` is implemented and registered on the worker for tests
+and reuse, but the current workflows do not call it; incremental publishing uses
+`publish_staged_chunks` and `cleanup_inactive_chunks` instead.
 
 ## Public HTTP Surface
 
@@ -140,7 +149,8 @@ The response is `IndexAcceptedResponse` with:
 
 Workflow IDs currently use the form:
 
-- `index-<github_repo_id>`
+- `index-<github_repo_id>` for the parent `IndexRepositoryWorkflow`
+- `index-branch-<github_repo_id>-<branch>` for each child `IndexBranchWorkflow`
 
 ### `POST /webhook`
 
@@ -184,21 +194,27 @@ The current flow is:
 
 ### Branch Indexing Flow
 
-`IndexBranchWorkflow` currently performs:
+`IndexBranchWorkflow` runs as a child workflow (see workflow IDs above) and
+currently performs:
 
-1. mark the branch as `indexing`
-2. clone or fetch the repository and resolve the latest commit
-3. chunk the branch contents into the staging table
-4. if there are no chunks, mark the branch as `indexed` and stop
-5. delete existing chunks for that repository branch
-6. embed staged chunks in batches
-7. move staged chunks into final PostgreSQL storage and Milvus
-8. mark the branch as `indexed`
+1. mark the branch as `indexing` (optionally persisting an encrypted GitHub token
+   when provided)
+2. clone or fetch the repository; capture the branch `HEAD` as `latest_commit`
+3. chunk the entire branch into the staging table (`chunker_strategy` defaults to
+   `sliding_window` on `ChunkFilesInput` / `IndexBranchInput`)
+4. if there are no chunks, mark the branch as `indexed` with
+   `last_indexed_commit` set from the git result and stop
+5. delete **all** existing final chunks for that repository branch (PostgreSQL
+   and Milvus)
+6. embed staged chunks in batches of `EMBED_BATCH_SIZE` (512), running **all**
+   batch embedding activities concurrently via `asyncio.gather`
+7. `store_chunks`: move the staging batch into final PostgreSQL rows and Milvus
+8. mark the branch as `indexed` with `last_indexed_commit` from the git step
 
 On failure it:
 
 - marks the branch as `failed`
-- cleans up staging rows if a batch was already created
+- cleans up staging rows if a batch was already created (`cleanup_staging`)
 - re-raises the error so Temporal sees the failure
 
 ## Incremental Indexing Flow
@@ -208,19 +224,33 @@ Incremental indexing is implemented in
 
 The current flow is:
 
-1. ensure the repository row exists
+1. `ensure_repository_record` with `repo_url` empty (upsert by `github_repo_id` /
+   `full_name` only) to resolve `repository_id`
 2. mark the branch as `indexing`
-3. clone or fetch the repository
-4. compute changed files between `before_commit` and `after_commit`
-5. if there are no changed files, mark the branch as `indexed` and stop
-6. delete existing chunks only for the changed files
-7. rechunk only the changed files into staging
-8. if chunks were produced, embed them in batches
-9. move staged chunks into final PostgreSQL storage and Milvus
-10. mark the branch as `indexed`
+3. `git_clone_or_fetch` with an empty `repo_url` and `repo_dir_name` set to the
+   string form of `github_repo_id`. If that directory already exists under
+   `clone_base_dir` from a prior full index, the worker fetches and checks out
+   the branch; if not, clone would require a URL, so **incremental indexing
+   assumes a clone already exists** (typically after `POST /index`)
+4. `get_changed_files` between `before_commit` and `after_commit`
+5. if there are no changed files, mark the branch as `indexed` with
+   `last_indexed_commit` = `after_commit` and stop
+6. `chunk_files` with `file_filter` set to the changed paths (default chunker
+   strategy)
+7. if `chunk_count > 0`, embed staged rows in batches of `EMBED_BATCH_SIZE`, with
+   all batch activities run concurrently
+8. `publish_staged_chunks`: publishes the staging batch, updates per-file active
+   versions (`IndexedFile` / `publish_id` on `Chunk`), and returns
+   `cleanup_targets` for the previous publish IDs that are no longer active
+9. mark the branch as `indexed` with `last_indexed_commit` = `after_commit`
+10. best-effort `cleanup_inactive_chunks` for those targets (logs a warning and
+    continues if cleanup fails)
 
-On failure it follows the same `failed` status and staging cleanup pattern as the
-full branch workflow.
+Incremental indexing does **not** call `store_chunks` (full replace). It uses
+publish + cleanup so concurrent search readers see a consistent switch per file.
+
+On failure it follows the same `failed` status and `cleanup_staging` pattern as
+the full branch workflow when a `batch_id` was allocated.
 
 ## Chunking and Storage Model
 
@@ -245,13 +275,21 @@ operations to `ChunkService`.
 
 Current storage operations are:
 
-- delete all chunks for a branch from PostgreSQL and Milvus
-- delete chunks for a specific file set from PostgreSQL and Milvus
-- move staged chunks to final PostgreSQL storage and Milvus
-- clean up staging rows
+- `delete_existing_chunks`: remove all chunks for a branch from PostgreSQL and
+  Milvus (used by full branch indexing before replacing with a new batch)
+- `delete_chunks_for_files`: remove chunks for a given file set (not used by the
+  current workflows)
+- `store_chunks`: move a full staging batch to final PostgreSQL storage and Milvus
+  (full branch path)
+- `publish_staged_chunks`: publish an incremental staging batch, flip active file
+  versions, and return targets for deleting superseded chunk rows
+- `cleanup_inactive_chunks`: delete Milvus/Postgres rows for those superseded
+  publish IDs after the new version is active
+- `cleanup_staging`: remove staging rows (typically on workflow failure)
 
-This means PostgreSQL and Milvus are updated as part of the same indexing pipeline,
-with PostgreSQL holding final chunk content and Milvus holding vector search state.
+PostgreSQL holds final chunk content (with per-file `publish_id` versioning for
+incremental updates); Milvus holds vector search state aligned with the same
+pipeline.
 
 ## Data Model
 
@@ -283,6 +321,14 @@ Stores final searchable chunk content with fields including:
 - `content`
 - `language`
 - `chunk_hash`
+- `publish_id` (identifies which publish generation this row belongs to; full
+  branch moves use the default `legacy` unless overridden by the chunk service)
+
+### `IndexedFile`
+
+Tracks, per repository branch and file path, which `publish_id` is currently
+active. Incremental `publish_staged_chunks` updates this so search can follow
+the latest published version per file.
 
 ### `StagingChunk`
 
@@ -339,7 +385,9 @@ Important implementation details:
 - the HTTP service starts workflows, but the actual indexing work is expected to
   run on the Temporal worker defined in `services/ingestion/src/ingestion/temporal/worker.py`
 - git operations use `clone_base_dir` as local working storage for repositories
-- embedding work is batched inside workflows using `EMBED_BATCH_SIZE`
+- embedding work is batched inside workflows using `EMBED_BATCH_SIZE`; each
+  workflow schedules one Temporal activity per batch and runs all batch
+  activities for a step concurrently
 - branch status updates are persisted through dedicated activities rather than
   inline workflow state
 
@@ -350,9 +398,9 @@ The most important gaps at the time of writing are:
 - the service boundary itself is unauthenticated
 - branch status values are stringly typed rather than enum-backed
 - webhook processing only handles GitHub push events
-- incremental indexing assumes local git state can be fetched and diffed successfully
+- incremental indexing requires an on-disk clone and successful fetch/diff between
+  the push’s `before` and `after` commits
 - cleanup on failure happens after exceptions and is not transactional across all backends
-- runtime docs for the wider system may still lag behind the actual ingestion pipeline
 
 ## Design Principles for Future Work
 
