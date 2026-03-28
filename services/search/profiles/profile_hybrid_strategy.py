@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 import tempfile
+import os
 import uuid
 
 from db import Chunk, DatabaseManager, IndexedFile, Repository
@@ -84,6 +85,20 @@ def parse_args() -> argparse.Namespace:
         default="medium",
     )
     parser.add_argument("--repeat", type=int, default=3)
+    parser.add_argument(
+        "--keyword-mode",
+        choices=("stubbed", "real"),
+        default="stubbed",
+        help="stubbed uses fixed keyword results; real uses HybridSearchStrategy._keyword_search",
+    )
+    parser.add_argument(
+        "--postgres-dsn",
+        default=None,
+        help=(
+            "Postgres DSN for --keyword-mode real. "
+            "If omitted, PROFILE_POSTGRES_DSN env var is used."
+        ),
+    )
     parser.add_argument("--sort-by", default="cumtime")
     parser.add_argument("--top-n", type=int, default=50)
     parser.add_argument("--dump-prof", action="store_true")
@@ -100,6 +115,13 @@ def size_config(size: str) -> tuple[int, int]:
 
 def setup_database(database_path: Path) -> DatabaseManager:
     db = DatabaseManager(f"sqlite:///{database_path}")
+    db.connect()
+    db.database.create_tables([Repository, Chunk, IndexedFile])
+    return db
+
+
+def setup_database_with_dsn(database_dsn: str) -> DatabaseManager:
+    db = DatabaseManager(database_dsn)
     db.connect()
     db.database.create_tables([Repository, Chunk, IndexedFile])
     return db
@@ -171,15 +193,15 @@ def seed_chunks(
     return milvus_hits, keyword_results
 
 
-def maybe_dump_path(enabled: bool, target: str, size: str) -> Path | None:
+def maybe_dump_path(enabled: bool, target: str, size: str, keyword_mode: str) -> Path | None:
     if not enabled:
         return None
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    filename = f"{target}_{size}_{timestamp}.prof"
+    filename = f"{target}_{size}_{keyword_mode}_{timestamp}.prof"
     return Path(__file__).resolve().parent / "artifacts" / "hybrid_strategy" / filename
 
 
-def run_search_profile(strategy: ProfileHybridSearchStrategy, repeat: int, cfg: ProfileConfig) -> None:
+def run_search_profile(strategy: HybridSearchStrategy, repeat: int, cfg: ProfileConfig) -> None:
     repo = Repository.select().first()
     if repo is None:
         raise RuntimeError("Repository seed failed before search profiling.")
@@ -241,38 +263,63 @@ def run_filter_profile(strategy: HybridSearchStrategy, vector_count: int, repeat
 def main() -> None:
     args = parse_args()
     chunk_count, changed_file_count = size_config(args.size)
-    with tempfile.TemporaryDirectory(prefix="lighthouse-profile-hybrid-strategy-") as tmp_dir:
-        db_path = Path(tmp_dir) / "profile_hybrid_strategy.db"
+    if args.keyword_mode == "real":
+        postgres_dsn = args.postgres_dsn or os.getenv("PROFILE_POSTGRES_DSN")
+        if not postgres_dsn:
+            raise SystemExit(
+                "--keyword-mode real requires --postgres-dsn or PROFILE_POSTGRES_DSN."
+            )
+        db = setup_database_with_dsn(postgres_dsn)
+    else:
+        temp_dir = tempfile.TemporaryDirectory(prefix="lighthouse-profile-hybrid-strategy-")
+        db_path = Path(temp_dir.name) / "profile_hybrid_strategy.db"
         db = setup_database(db_path)
 
-        try:
-            repo = create_repository()
-            branch = "main"
-            milvus_hits, keyword_results = seed_chunks(repo, branch, chunk_count, changed_file_count)
+    try:
+        repo = create_repository()
+        branch = "main"
+        milvus_hits, keyword_results = seed_chunks(repo, branch, chunk_count, changed_file_count)
+        if args.keyword_mode == "real":
+            strategy: HybridSearchStrategy = HybridSearchStrategy(
+                db_manager=db,
+                milvus=FakeMilvusClient(milvus_hits),
+                embedder=FakeEmbedder(),
+            )
+        else:
             strategy = ProfileHybridSearchStrategy(
                 db_manager=db,
                 milvus=FakeMilvusClient(milvus_hits),
                 keyword_results=keyword_results,
             )
 
-            targets = [args.target] if args.target != "all" else ["search", "rrf", "filter"]
-            for target in targets:
-                cfg = ProfileConfig(
-                    sort_by=args.sort_by,
-                    top_n=args.top_n,
-                    dump_stats_path=maybe_dump_path(args.dump_prof, target, args.size),
-                )
-                print(f"--- target={target} size={args.size} repeat={args.repeat} ---")
-                if target == "search":
-                    run_search_profile(strategy, args.repeat, cfg)
-                elif target == "rrf":
-                    run_rrf_profile(chunk_count // 2, chunk_count // 3, args.repeat, cfg)
-                else:
-                    run_filter_profile(strategy, chunk_count, args.repeat, cfg)
-                if cfg.dump_stats_path:
-                    print(f"prof_file={cfg.dump_stats_path}")
-        finally:
-            db.close()
+        targets = [args.target] if args.target != "all" else ["search", "rrf", "filter"]
+        for target in targets:
+            cfg = ProfileConfig(
+                sort_by=args.sort_by,
+                top_n=args.top_n,
+                dump_stats_path=maybe_dump_path(
+                    args.dump_prof,
+                    target,
+                    args.size,
+                    args.keyword_mode,
+                ),
+            )
+            print(
+                f"--- target={target} size={args.size} repeat={args.repeat} "
+                f"keyword_mode={args.keyword_mode} ---"
+            )
+            if target == "search":
+                run_search_profile(strategy, args.repeat, cfg)
+            elif target == "rrf":
+                run_rrf_profile(chunk_count // 2, chunk_count // 3, args.repeat, cfg)
+            else:
+                run_filter_profile(strategy, chunk_count, args.repeat, cfg)
+            if cfg.dump_stats_path:
+                print(f"prof_file={cfg.dump_stats_path}")
+    finally:
+        db.close()
+        if args.keyword_mode != "real":
+            temp_dir.cleanup()
 
 
 if __name__ == "__main__":

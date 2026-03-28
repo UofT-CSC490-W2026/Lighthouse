@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 
 from git import Repo
@@ -73,21 +74,29 @@ class GitOperations:
         """List all trackable code files, optionally filtered by extension."""
         allowed = extensions or CODE_EXTENSIONS
         files: list[Path] = []
+        allow_extensionless = {"dockerfile", "makefile"}
 
-        for path in repo_path.rglob("*"):
-            if not path.is_file():
-                continue
-            if ".git" in path.parts:
-                continue
-            if path.name in SKIP_PATTERNS:
-                continue
-            if path.suffix.lower() not in allowed:
-                # Also check for extensionless files like Dockerfile, Makefile
-                if path.name.lower() not in ("dockerfile", "makefile"):
+        for root, dirs, filenames in os.walk(repo_path):
+            # Skip git metadata directory during traversal.
+            dirs[:] = [d for d in dirs if d != ".git"]
+            root_path = Path(root)
+
+            for filename in filenames:
+                if filename in SKIP_PATTERNS:
                     continue
-            if path.stat().st_size > MAX_FILE_SIZE_BYTES:
-                continue
-            files.append(path)
+
+                suffix = os.path.splitext(filename)[1].lower()
+                lower_name = filename.lower()
+                if suffix not in allowed and lower_name not in allow_extensionless:
+                    continue
+
+                path = root_path / filename
+                try:
+                    if path.stat().st_size > MAX_FILE_SIZE_BYTES:
+                        continue
+                except OSError:
+                    continue
+                files.append(path)
 
         return files
 

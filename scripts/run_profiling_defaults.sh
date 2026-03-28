@@ -59,7 +59,7 @@ if [[ "$QUICK" -eq 1 ]]; then
   run_step \
     "SlidingWindowChunker (quick)" \
     services/ingestion/profiles/profile_sliding_window_chunker.py \
-    --line-count 5000 --max-lines 200 --overlap-lines 40 --repeat 1 --top-n 20 \
+    --line-count 5000 --max-lines 1000 --overlap-lines 40 --repeat 1 --top-n 20 \
     "${DUMP_ARG[@]}"
 
   run_step \
@@ -72,6 +72,12 @@ if [[ "$QUICK" -eq 1 ]]; then
     "ChunkService.move_to_final (quick)" \
     services/ingestion/profiles/profile_chunk_service.py \
     --target move_to_final --chunk-count 1200 --changed-files 80 --repeat 1 --top-n 20 \
+    "${DUMP_ARG[@]}"
+
+  run_step \
+    "ChunkService.publish_incremental_batch (quick)" \
+    services/ingestion/profiles/profile_chunk_service.py \
+    --target publish_incremental --chunk-count 1200 --changed-files 80 --repeat 1 --top-n 20 \
     "${DUMP_ARG[@]}"
 
   run_step \
@@ -96,6 +102,12 @@ else
     "ChunkService.move_to_final" \
     services/ingestion/profiles/profile_chunk_service.py \
     --target move_to_final --chunk-count 8000 --changed-files 200 --repeat 1 --top-n 40 \
+    "${DUMP_ARG[@]}"
+
+  run_step \
+    "ChunkService.publish_incremental_batch" \
+    services/ingestion/profiles/profile_chunk_service.py \
+    --target publish_incremental --chunk-count 8000 --changed-files 200 --repeat 1 --top-n 40 \
     "${DUMP_ARG[@]}"
 
   run_step \

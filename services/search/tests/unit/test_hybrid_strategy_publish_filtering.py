@@ -94,6 +94,39 @@ class TestHybridStrategyPublishFiltering:
             "active-keep",
         ]
 
+    def test_filter_vector_results_defaults_missing_publish_id_to_legacy(self, monkeypatch):
+        strategy = self._make_strategy()
+        monkeypatch.setattr(
+            strategy,
+            "_get_active_publish_map",
+            MagicMock(
+                return_value={
+                    ("repo-1", "main", "active.py"): "batch-123",
+                }
+            ),
+        )
+
+        vector_results = [
+            {
+                "chunk_id": "legacy-keep",
+                "repository_id": "repo-1",
+                "branch": "main",
+                "file_path": "legacy.py",
+                "score": 0.9,
+            },
+            {
+                "chunk_id": "active-drop",
+                "repository_id": "repo-1",
+                "branch": "main",
+                "file_path": "active.py",
+                "score": 0.8,
+            },
+        ]
+
+        filtered = strategy._filter_vector_results(vector_results)
+
+        assert [result["chunk_id"] for result in filtered] == ["legacy-keep"]
+
     def test_get_active_publish_map_empty(self):
         strategy = self._make_strategy()
 

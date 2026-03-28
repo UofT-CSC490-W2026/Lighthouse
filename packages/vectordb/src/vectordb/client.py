@@ -44,6 +44,7 @@ class MilvusClient:
     def ensure_collection(self, dimension: int = 3072) -> None:
         """Create the collection if it does not exist."""
         if self._client.has_collection(self.collection_name):
+            self._validate_existing_collection_schema()
             return
 
         schema = self._client.create_schema(auto_id=False, enable_dynamic_field=False)
@@ -77,6 +78,39 @@ class MilvusClient:
             schema=schema,
             index_params=index_params,
         )
+
+    def _validate_existing_collection_schema(self) -> None:
+        """Validate that an existing collection has all required fields."""
+        description = self._client.describe_collection(
+            collection_name=self.collection_name
+        )
+        field_entries = description.get("fields", [])
+
+        existing_fields: set[str] = set()
+        for field in field_entries:
+            if isinstance(field, dict):
+                name = field.get("name") or field.get("field_name")
+            else:
+                name = getattr(field, "name", None) or getattr(field, "field_name", None)
+            if isinstance(name, str) and name:
+                existing_fields.add(name)
+
+        required_fields = {
+            CollectionField.ID.value,
+            CollectionField.CHUNK_ID.value,
+            CollectionField.EMBEDDING.value,
+            CollectionField.REPOSITORY_ID.value,
+            CollectionField.FILE_PATH.value,
+            CollectionField.BRANCH.value,
+            CollectionField.PUBLISH_ID.value,
+        }
+        missing = sorted(required_fields - existing_fields)
+        if missing:
+            raise RuntimeError(
+                f"Milvus collection '{self.collection_name}' is missing required "
+                f"field(s): {', '.join(missing)}. Recreate the collection with the "
+                "current schema before indexing."
+            )
 
     def insert(self, records: list[dict]) -> None:
         """Batch insert records into the collection.
