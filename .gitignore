@@ -65,6 +65,7 @@ dist/
 .claude/
 .conductor/
 .coverage
+.agents/
 
 # Profiling outputs
 services/**/profiles/artifacts/
