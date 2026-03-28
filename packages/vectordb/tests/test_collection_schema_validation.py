@@ -61,3 +61,35 @@ def test_ensure_collection_accepts_existing_schema_with_publish_id():
     client._client = _Backend()
 
     client.ensure_collection()
+
+
+@pytest.mark.unit
+def test_ensure_collection_accepts_object_fields_with_name_attribute():
+    """Cover the else-branch where field entries are objects, not dicts."""
+    client = MilvusClient.__new__(MilvusClient)
+    client.collection_name = "embeddings"
+
+    class _Field:
+        def __init__(self, name: str) -> None:
+            self.name = name
+
+    class _Backend:
+        def has_collection(self, collection_name: str) -> bool:
+            return True
+
+        def describe_collection(self, collection_name: str) -> dict:
+            return {
+                "fields": [
+                    _Field("id"),
+                    _Field("chunk_id"),
+                    _Field("embedding"),
+                    _Field("repository_id"),
+                    _Field("file_path"),
+                    _Field("branch"),
+                    _Field("publish_id"),
+                ]
+            }
+
+    client._client = _Backend()
+
+    client.ensure_collection()

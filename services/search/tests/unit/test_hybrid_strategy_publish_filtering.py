@@ -163,3 +163,31 @@ class TestHybridStrategyPublishFiltering:
             ("repo-1", "main", "a.py"): "batch-1",
             ("repo-1", "main", "b.py"): None,
         }
+
+    def test_get_active_publish_map_rows_with_tuples_method(self, monkeypatch):
+        """Cover the hasattr(rows, 'tuples') branch where rows yields tuple objects."""
+        strategy = self._make_strategy()
+        tuple_rows = [
+            ("repo-1", "main", "a.py", "batch-1"),
+            ("repo-1", "main", "b.py", None),
+        ]
+
+        class _RowsWithTuples:
+            def tuples(self):
+                return tuple_rows
+
+        select_query = MagicMock()
+        select_query.where.return_value = _RowsWithTuples()
+        monkeypatch.setattr(
+            "search.strategies.hybrid_strategy.IndexedFile.select",
+            MagicMock(return_value=select_query),
+        )
+
+        result = strategy._get_active_publish_map(
+            [("repo-1", "main", "a.py"), ("repo-1", "main", "b.py")]
+        )
+
+        assert result == {
+            ("repo-1", "main", "a.py"): "batch-1",
+            ("repo-1", "main", "b.py"): None,
+        }
