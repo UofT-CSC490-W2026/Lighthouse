@@ -7,6 +7,7 @@ from db import DatabaseManager
 from fastapi import FastAPI
 from shared.config import MILVUS_COLLECTION_NAME
 from shared.schemas.search import SearchRequest, SearchResult
+from shared.config import EMBEDDING_MODEL
 from vectordb import MilvusClient
 
 from search.config import SearchSettings
@@ -55,7 +56,10 @@ def create_app(
     return FastAPI(title="Lighthouse Search Service", lifespan=lifespan)
 
 
-app = create_app()
+app = create_app(
+    settings=SearchSettings(),
+    embedder=OpenAIEmbeddingProvider(api_key=SearchSettings().openai_api_key, model=EMBEDDING_MODEL),
+)
 
 
 @app.post("/search", response_model=SearchResult)

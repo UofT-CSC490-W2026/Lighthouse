@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from embedding import OPENAI_DEFAULT_EMBEDDING_MODEL
 from fastapi import HTTPException
 
 from db.database import DatabaseManager
@@ -60,7 +61,10 @@ def test_embedding_registry_registers_and_rejects_unknown():
 
     register_embedding_provider(EmbeddingStrategy.OPENAI, DummyProvider)  # type: ignore[arg-type]
     provider = get_embedding_provider(EmbeddingStrategy.OPENAI, api_key="key")
-    assert provider.kwargs == {"api_key": "key"}
+    assert provider.kwargs == {
+        "api_key": "key",
+        "model": OPENAI_DEFAULT_EMBEDDING_MODEL,
+    }
 
 
 @pytest.mark.unit

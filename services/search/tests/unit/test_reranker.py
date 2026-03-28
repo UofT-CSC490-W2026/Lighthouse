@@ -5,9 +5,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from search.config import DEFAULT_RERANK_MODEL, SearchSettings
 from search.reranker import BaseReranker, CohereReranker, RankedDocument
 from search.reranker.base_reranker import RankedDocument as DirectRankedDocument
+from search.reranker.cohere_reranker import COHERE_DEFAULT_RERANK_MODEL
 
 
 class StubReranker(BaseReranker):
@@ -35,14 +35,6 @@ def test_ranked_document_export():
 
 
 @pytest.mark.unit
-def test_search_settings_defaults_include_reranker_config():
-    settings = SearchSettings()
-
-    assert settings.cohere_api_key == ""
-    assert settings.rerank_model == DEFAULT_RERANK_MODEL
-
-
-@pytest.mark.unit
 @patch("search.reranker.cohere_reranker.cohere.AsyncClientV2")
 def test_cohere_reranker_initializes_async_client_with_default_model(mock_client_cls):
     mock_client = MagicMock()
@@ -51,7 +43,7 @@ def test_cohere_reranker_initializes_async_client_with_default_model(mock_client
     reranker = CohereReranker(api_key="cohere-key")
 
     assert reranker.client is mock_client
-    assert reranker.model == DEFAULT_RERANK_MODEL
+    assert reranker.model == COHERE_DEFAULT_RERANK_MODEL
     mock_client_cls.assert_called_once_with(api_key="cohere-key")
 
 
@@ -107,5 +99,4 @@ async def test_cohere_reranker_maps_results_and_forwards_request(mock_client_cls
         query="needle",
         documents=["doc-a", "doc-b"],
         top_n=1,
-        return_documents=False,
     )

@@ -2,15 +2,15 @@ from __future__ import annotations
 
 import cohere
 
-from search.config import DEFAULT_RERANK_MODEL
-
 from .base_reranker import BaseReranker, RankedDocument
+
+COHERE_DEFAULT_RERANK_MODEL = "rerank-v4.0-pro"
 
 
 class CohereReranker(BaseReranker):
     """Reranker backed by Cohere's async v2 rerank API."""
 
-    def __init__(self, api_key: str, model: str = DEFAULT_RERANK_MODEL) -> None:
+    def __init__(self, api_key: str, model: str = COHERE_DEFAULT_RERANK_MODEL) -> None:
         self.client = cohere.AsyncClientV2(api_key=api_key)
         self.model = model
 

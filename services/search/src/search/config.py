@@ -4,7 +4,7 @@ from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
 from shared.ssm import ssm_settings_sources
 
 SSM_PARAMETER_ENV_VAR = "SEARCH_SETTINGS_SSM_PARAMETER"
-DEFAULT_RERANK_MODEL = "rerank-v3.5"
+DEFAULT_RERANK_MODEL = "rerank-v4.0-pro"
 
 
 class SearchSettings(BaseSettings):
