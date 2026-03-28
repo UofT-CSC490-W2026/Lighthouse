@@ -83,6 +83,25 @@ class TestGitOperations:
         names = [p.name for p in result]
         assert "package-lock.json" not in names
 
+    def test_list_files_skips_file_on_oserror(self, tmp_path: Path) -> None:
+        ops = GitOperations(str(tmp_path))
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        py_file = repo / "ghost.py"
+        py_file.write_text("print('hi')")
+
+        original_stat = Path.stat
+
+        def patched_stat(self: Path, **kwargs):
+            if self.name == "ghost.py":
+                raise OSError("stat failed")
+            return original_stat(self, **kwargs)
+
+        with patch.object(Path, "stat", patched_stat):
+            result = ops.list_files(repo)
+
+        assert "ghost.py" not in [p.name for p in result]
+
     def test_list_files_skips_large_files(self, tmp_path: Path) -> None:
         ops = GitOperations(str(tmp_path))
         repo = tmp_path / "repo"
