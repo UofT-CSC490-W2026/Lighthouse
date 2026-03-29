@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Annotated, Literal, Union
 
 from pydantic import BaseModel, Field
 
@@ -10,22 +9,17 @@ class SearchMethod(str, Enum):
     hybrid = "hybrid"
 
 
-class SearchRequestBase(BaseModel):
+class SearchRequest(BaseModel):
     query: str
     github_repo_id: int
     branch: str = Field(default="main", min_length=1)
     file_path: str | None = None
     top_k: int = Field(default=10, ge=1, le=100)
+    method: SearchMethod | None = None
 
 
-class HybridRequest(SearchRequestBase):
-    method: Literal[SearchMethod.hybrid] = SearchMethod.hybrid
-
-
-SearchRequest = Annotated[
-    Union[HybridRequest],
-    Field(discriminator="method"),
-]
+class HybridRequest(SearchRequest):
+    method: SearchMethod = SearchMethod.hybrid
 
 
 class CodeSnippet(BaseModel):

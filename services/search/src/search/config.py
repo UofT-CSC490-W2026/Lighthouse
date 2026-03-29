@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
-from shared.config import DEFAULT_EMBEDDING_STRATEGY
 from shared.ssm import ssm_settings_sources
 
 SSM_PARAMETER_ENV_VAR = "SEARCH_SETTINGS_SSM_PARAMETER"
+DEFAULT_RERANK_MODEL = "rerank-v4.0-pro"
 
 
 class SearchSettings(BaseSettings):
@@ -13,9 +13,9 @@ class SearchSettings(BaseSettings):
     postgres_dsn: str = "postgresql://lighthouse:lighthouse@localhost:5432/lighthouse"
     milvus_uri: str = "http://localhost:19530"
     openai_api_key: str = ""
-    embedding_strategy: str = DEFAULT_EMBEDDING_STRATEGY
-    embedding_model: str | None = None
-    embedding_dimension: int | None = None
+    cohere_api_key: str = ""
+    internal_service_token: str = ""
+    rerank_model: str = DEFAULT_RERANK_MODEL
 
     model_config = {"env_prefix": "", "env_file": ".env", "extra": "ignore"}
 

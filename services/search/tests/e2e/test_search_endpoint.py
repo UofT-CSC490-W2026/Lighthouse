@@ -20,7 +20,7 @@ def search_settings(pg_dsn, milvus_uri):
     return SearchSettings(
         postgres_dsn=pg_dsn,
         milvus_uri=milvus_uri,
-        embedding_dimension=TEST_EMBEDDING_DIMENSION,
+        openai_api_key="test",
     )
 
 
@@ -44,6 +44,7 @@ async def client(search_settings, mock_embedder, db_manager, e2e_milvus_client):
     from search.main import app
     from search.strategies.hybrid_strategy import HybridSearchStrategy
 
+    app.state.settings = search_settings
     app.state.strategy = HybridSearchStrategy(
         db_manager=db_manager,
         milvus=e2e_milvus_client,
@@ -92,6 +93,7 @@ class TestSearchEndpoints:
                     "repository_id": repo.id,
                     "file_path": f"f{i}.py",
                     "branch": "main",
+                    "publish_id": "legacy",
                 }])
 
         resp = await client.post("/search", json={
@@ -160,6 +162,7 @@ class TestSearchEndpoints:
                     "repository_id": repo.id,
                     "file_path": f"search_{i}.py",
                     "branch": "main",
+                    "publish_id": "legacy",
                 }])
 
         resp = await client.post("/search", json={
@@ -204,6 +207,7 @@ class TestSearchEndpoints:
                     "repository_id": repo.id,
                     "file_path": f"algo_{i}.py",
                     "branch": "main",
+                    "publish_id": "legacy",
                 }])
 
         resp = await client.post("/search", json={

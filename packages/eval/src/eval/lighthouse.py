@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
 import httpx
-from shared.schemas.search import CodeSnippet, HybridRequest, SearchResult
+from shared.schemas.search import CodeSnippet, SearchRequest, SearchResult
 
 from eval.prompts import build_lighthouse_user_message
 from eval.slice import SWEBenchTask
@@ -15,6 +16,7 @@ from eval.slice import SWEBenchTask
 DEFAULT_SEARCH_SERVICE_URL = "http://localhost:8002"
 DEFAULT_SEARCH_TOP_K = 8
 DEFAULT_LIGHTHOUSE_BRANCH = "main"
+DEFAULT_INTERNAL_SERVICE_TOKEN_ENV_VAR = "INTERNAL_SERVICE_TOKEN"
 
 
 @dataclass(frozen=True)
@@ -151,17 +153,22 @@ def search_lighthouse(
     repo_entry: RepoRegistryEntry,
     top_k: int,
 ) -> SearchResult:
-    request = HybridRequest(
+    request = SearchRequest(
         query=task.problem_statement.strip(),
         github_repo_id=repo_entry.github_repo_id,
         branch=repo_entry.branch,
         top_k=top_k,
     )
+    headers: dict[str, str] = {}
+    internal_token = os.environ.get(DEFAULT_INTERNAL_SERVICE_TOKEN_ENV_VAR, "").strip()
+    if internal_token:
+        headers["Authorization"] = f"Bearer {internal_token}"
 
     try:
         response = client.post(
             f"{search_service_url}/search",
-            json=[request.model_dump(mode="json")],
+            json=request.model_dump(mode="json", exclude_none=True),
+            headers=headers,
         )
         response.raise_for_status()
     except httpx.HTTPStatusError as exc:

@@ -18,7 +18,7 @@ from shared.config import (
 
 @pytest.mark.unit
 def test_default_embedding_strategy():
-    assert DEFAULT_EMBEDDING_STRATEGY == "bedrock"
+    assert DEFAULT_EMBEDDING_STRATEGY == "openai"
 
 
 @pytest.mark.unit
@@ -31,12 +31,12 @@ def test_provider_specific_embedding_defaults():
 
 @pytest.mark.unit
 def test_embedding_model():
-    assert EMBEDDING_MODEL == BEDROCK_EMBEDDING_MODEL
+    assert EMBEDDING_MODEL == OPENAI_EMBEDDING_MODEL
 
 
 @pytest.mark.unit
 def test_embedding_dimension():
-    assert EMBEDDING_DIMENSION == BEDROCK_EMBEDDING_DIMENSION
+    assert EMBEDDING_DIMENSION == OPENAI_EMBEDDING_DIMENSION
 
 
 @pytest.mark.unit

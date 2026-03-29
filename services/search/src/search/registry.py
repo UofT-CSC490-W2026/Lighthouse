@@ -19,18 +19,23 @@ class StrategyRegistry:
         return [m.value for m in self._strategies]
 
     async def search(self, requests: list[SearchRequest]) -> SearchResult:
+        typed_requests: list[tuple[SearchMethod, SearchRequest]] = []
+        for request in requests:
+            if request.method is None:
+                raise ValueError("StrategyRegistry requests must include a search method.")
+            typed_requests.append((request.method, request))
         results = await asyncio.gather(
-            *[self._strategies[r.method].search(r) for r in requests]
+            *[self._strategies[method].search(request) for method, request in typed_requests]
         )
 
         if len(results) == 1:
             return results[0]
 
-        top_k = max(r.top_k for r in requests)
+        top_k = max(request.top_k for _, request in typed_requests)
         fused = self._rrf_fuse([r.snippets for r in results])
         return SearchResult(
             snippets=fused[:top_k],
-            query=requests[0].query,
+            query=typed_requests[0][1].query,
             total_results=len(fused),
         )
 

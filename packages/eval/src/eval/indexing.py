@@ -28,6 +28,7 @@ DEFAULT_REPO_REGISTRY_OUTPUT = Path(".cache/eval/repo-registry.json")
 DEFAULT_STATUS_POLL_INTERVAL_SECONDS = 5.0
 DEFAULT_STATUS_TIMEOUT_SECONDS = 1_800.0
 DEFAULT_PROGRESS_HEARTBEAT_SECONDS = 30.0
+DEFAULT_INTERNAL_SERVICE_TOKEN_ENV_VAR = "INTERNAL_SERVICE_TOKEN"
 ACTIVE_INDEX_STATUSES = {"indexing", "pending", "in_progress"}
 
 
@@ -154,7 +155,10 @@ def index_swebench_repositories(
         compose_root=compose_root,
         enabled=should_stream_logs,
     ):
-        with httpx.Client(timeout=30.0) as client:
+        with httpx.Client(
+            timeout=30.0,
+            headers=_build_internal_service_headers(),
+        ) as client:
             already_indexed: dict[str, ResolvedRepository] = {}
             already_indexing: dict[str, ResolvedRepository] = {}
             to_index: list[ResolvedRepository] = []
@@ -230,6 +234,13 @@ def index_swebench_repositories(
     }
     write_repo_registry(output_path=output_path, registry=registry)
     return output_path.resolve()
+
+
+def _build_internal_service_headers() -> dict[str, str]:
+    token = os.environ.get(DEFAULT_INTERNAL_SERVICE_TOKEN_ENV_VAR, "").strip()
+    if not token:
+        return {}
+    return {"Authorization": f"Bearer {token}"}
 
 
 def resolve_repositories(

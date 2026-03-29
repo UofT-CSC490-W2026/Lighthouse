@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import logging
 from dataclasses import asdict
+from typing import cast
 
-from db import Chunk, DatabaseManager, Repository
+from db import Chunk, DatabaseManager, IndexedFile, Repository
 from embedding import EmbeddingProvider
 from shared.schemas.search import CodeSnippet, HybridRequest, SearchResult
 from vectordb import MilvusClient
@@ -15,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 class HybridSearchStrategy(SearchStrategy[HybridRequest, SearchResult]):
     """Hybrid search combining vector similarity and PostgreSQL full-text search."""
+
+    VECTOR_OVERFETCH_MULTIPLIER = 4
+    MAX_VECTOR_OVERFETCH = 200
+    ACTIVE_PUBLISH_LOOKUP_BATCH_SIZE = 500
 
     def __init__(
         self,
@@ -46,14 +51,20 @@ class HybridSearchStrategy(SearchStrategy[HybridRequest, SearchResult]):
         vector_results: list[dict] = []
         try:
             query_embedding = self.embedder.embed_single(request.query)
-            vector_results = [
+            raw_vector_results = [
                 asdict(r)
                 for r in self.milvus.search(
                     query_embedding=query_embedding,
-                    top_k=request.top_k * 2,
+                    # Over-fetch because stale-publish hits may be filtered out
+                    # before fusion.
+                    top_k=min(
+                        request.top_k * self.VECTOR_OVERFETCH_MULTIPLIER,
+                        self.MAX_VECTOR_OVERFETCH,
+                    ),
                     filters=filters if filters else None,
                 )
             ]
+            vector_results = self._filter_vector_results(raw_vector_results)
         except Exception:
             logger.exception("Vector search failed, falling back to keyword-only")
 
@@ -75,7 +86,10 @@ class HybridSearchStrategy(SearchStrategy[HybridRequest, SearchResult]):
             chunk_map = {c.id: c for c in chunks}
 
         # Build ordered snippets matching fusion order
-        score_map = {r["chunk_id"]: r["score"] for r in fused}
+        score_map = {
+            row["chunk_id"]: row["score"]
+            for row in fused[: request.top_k]
+        }
         snippets: list[CodeSnippet] = []
         for chunk_id in top_chunk_ids:
             chunk = chunk_map.get(chunk_id)
@@ -104,24 +118,36 @@ class HybridSearchStrategy(SearchStrategy[HybridRequest, SearchResult]):
         """Execute PostgreSQL full-text search on chunks.content."""
         with self.db_manager.connection_context():
             conditions = [
-                "to_tsvector('english', content) @@ plainto_tsquery('english', %s)"
+                "to_tsvector('english', chunks.content) @@ plainto_tsquery('english', %s)"
             ]
             params: list[str] = [request.query, request.query]
 
             if repo_id:
-                conditions.append("repository_id = %s")
+                conditions.append("chunks.repository_id = %s")
                 params.append(repo_id)
             if request.branch:
-                conditions.append("branch = %s")
+                conditions.append("chunks.branch = %s")
                 params.append(request.branch)
 
             where_clause = " AND ".join(conditions)
             sql = f"""
-                SELECT id, file_path,
-                       ts_rank(to_tsvector('english', content),
+                SELECT chunks.id, chunks.file_path,
+                       ts_rank(to_tsvector('english', chunks.content),
                                plainto_tsquery('english', %s)) as rank
                 FROM chunks
+                LEFT JOIN indexed_files
+                  ON indexed_files.repository_id = chunks.repository_id
+                 AND indexed_files.branch_name = chunks.branch
+                 AND indexed_files.file_path = chunks.file_path
                 WHERE {where_clause}
+                  AND (
+                    (indexed_files.active_publish_id IS NOT NULL
+                     AND chunks.publish_id = indexed_files.active_publish_id)
+                    OR
+                    (indexed_files.active_publish_id IS NULL
+                     AND indexed_files.id IS NULL
+                     AND chunks.publish_id = 'legacy')
+                  )
                 ORDER BY rank DESC
                 LIMIT %s
             """
@@ -136,6 +162,80 @@ class HybridSearchStrategy(SearchStrategy[HybridRequest, SearchResult]):
                     }
                 )
             return results
+
+    def _filter_vector_results(self, vector_results: list[dict]) -> list[dict]:
+        if not vector_results:
+            return []
+
+        unique_file_keys = list(
+            {
+                cast(tuple[str, str, str], (r["repository_id"], r["branch"], r["file_path"]))
+                for r in vector_results
+            }
+        )
+        active_publish_by_file = self._get_active_publish_map(unique_file_keys)
+
+        filtered = []
+        for result in vector_results:
+            publish_id = cast(str, result.get("publish_id", "legacy"))
+            key = cast(
+                tuple[str, str, str],
+                (result["repository_id"], result["branch"], result["file_path"]),
+            )
+            if key not in active_publish_by_file:
+                if publish_id == "legacy":
+                    filtered.append(result)
+                continue
+
+            active_publish_id = active_publish_by_file[key]
+            if active_publish_id is None:
+                continue
+
+            if publish_id == active_publish_id:
+                filtered.append(result)
+
+        return filtered
+
+    def _get_active_publish_map(
+        self, file_keys: list[tuple[str, str, str]]
+    ) -> dict[tuple[str, str, str], str | None]:
+        if not file_keys:
+            return {}
+
+        grouped: dict[tuple[str, str], set[str]] = {}
+        for repository_id, branch, file_path in file_keys:
+            grouped.setdefault((repository_id, branch), set()).add(file_path)
+
+        active_publish: dict[tuple[str, str, str], str | None] = {}
+        with self.db_manager.connection_context():
+            for (repository_id, branch), file_paths in grouped.items():
+                sorted_paths = sorted(file_paths)
+                for i in range(0, len(sorted_paths), self.ACTIVE_PUBLISH_LOOKUP_BATCH_SIZE):
+                    batch_paths = sorted_paths[i : i + self.ACTIVE_PUBLISH_LOOKUP_BATCH_SIZE]
+                    rows = (
+                        IndexedFile.select(
+                            IndexedFile.repository,
+                            IndexedFile.branch_name,
+                            IndexedFile.file_path,
+                            IndexedFile.active_publish_id,
+                        )
+                        .where(
+                            (IndexedFile.repository == repository_id)
+                            & (IndexedFile.branch_name == branch)
+                            & (IndexedFile.file_path.in_(batch_paths))
+                        )
+                    )
+                    if hasattr(rows, "tuples"):
+                        rows = rows.tuples()
+                    for row in rows:
+                        if isinstance(row, tuple):
+                            active_publish[(row[0], row[1], row[2])] = row[3]
+                        else:
+                            active_publish[
+                                (row.repository_id, row.branch_name, row.file_path)
+                            ] = row.active_publish_id
+
+        return active_publish
 
     @staticmethod
     def _rrf_fusion(

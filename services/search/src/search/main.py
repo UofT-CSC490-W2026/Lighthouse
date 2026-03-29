@@ -4,19 +4,16 @@ import logging
 from contextlib import asynccontextmanager
 
 from db import DatabaseManager
-from embedding import EmbeddingProvider, EmbeddingStrategy, get_embedding_provider
-from fastapi import FastAPI
-from shared.config import (
-    MILVUS_COLLECTION_NAME,
-    default_embedding_dimension,
-    default_embedding_model,
-)
-from shared.schemas.search import SearchMethod, SearchRequest, SearchResult
+from fastapi import Depends, FastAPI
+from shared.auth import verify_internal_token
+from shared.config import EMBEDDING_MODEL, MILVUS_COLLECTION_NAME
+from shared.schemas.search import SearchRequest, SearchResult
+from embedding import EmbeddingProvider, OpenAIEmbeddingProvider
 from vectordb import MilvusClient
 
 from search.config import SearchSettings
-from search.registry import StrategyRegistry
 from search.strategies.hybrid_strategy import HybridSearchStrategy
+from search.strategies.search_strategy import SearchStrategy
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -33,6 +30,7 @@ def create_app(
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         s = _settings or SearchSettings()
+        app.state.settings = s
 
         db_manager = DatabaseManager(s.postgres_dsn)
         db_manager.connect()
@@ -42,31 +40,15 @@ def create_app(
             collection_name=MILVUS_COLLECTION_NAME,
         )
 
-        strategy = EmbeddingStrategy(s.embedding_strategy.strip().lower())
-        provider_kwargs: dict[str, object] = {
-            "model": s.embedding_model or default_embedding_model(strategy.value),
-        }
-        if strategy == EmbeddingStrategy.BEDROCK:
-            provider_kwargs["dimensions"] = (
-                s.embedding_dimension or default_embedding_dimension(strategy.value)
-            )
-        elif s.openai_api_key:
-            provider_kwargs["api_key"] = s.openai_api_key
+        emb = _embedder or OpenAIEmbeddingProvider(api_key=s.openai_api_key)
 
-        emb = _embedder or get_embedding_provider(
-            strategy,
-            **provider_kwargs,
+        app.state.strategy = HybridSearchStrategy(
+            db_manager=db_manager,
+            milvus=milvus,
+            embedder=emb,
         )
 
-        registry = StrategyRegistry()
-        registry.register(
-            SearchMethod.hybrid,
-            HybridSearchStrategy(db_manager=db_manager, milvus=milvus, embedder=emb),
-        )
-
-        app.state.registry = registry
-
-        logger.info("Search service initialized — available methods: %s", registry.available())
+        logger.info("Search service initialized")
         yield
 
         milvus.close()
@@ -75,18 +57,16 @@ def create_app(
     return FastAPI(title="Lighthouse Search Service", lifespan=lifespan)
 
 
-app = create_app()
+app = create_app(
+    settings=SearchSettings(),
+    embedder=OpenAIEmbeddingProvider(api_key=SearchSettings().openai_api_key, model=EMBEDDING_MODEL),
+)
 
 
-@app.post("/search", response_model=SearchResult)
-async def search(requests: list[SearchRequest]) -> SearchResult:
-    return await app.state.registry.search(requests)
-
-
-@app.get("/search/methods")
-async def list_methods():
-    registry: StrategyRegistry = app.state.registry
-    return {"methods": registry.available()}
+@app.post("/search", response_model=SearchResult, dependencies=[Depends(verify_internal_token)])
+async def search(request: SearchRequest) -> SearchResult:
+    strategy: SearchStrategy[SearchRequest, SearchResult] = app.state.strategy
+    return await strategy.search(request)
 
 
 @app.get("/health")

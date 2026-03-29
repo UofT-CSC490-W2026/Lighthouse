@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import openai
-from shared.config import OPENAI_EMBEDDING_MODEL
 
 from .base_provider import EmbeddingProvider
+
+OPENAI_DEFAULT_EMBEDDING_MODEL = "text-embedding-3-large"
 
 
 class OpenAIEmbeddingProvider(EmbeddingProvider):
@@ -11,7 +12,11 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
 
     BATCH_SIZE = 2048
 
-    def __init__(self, api_key: str | None = None, model: str = OPENAI_EMBEDDING_MODEL) -> None:
+    def __init__(
+        self,
+        api_key: str | None = None,
+        model: str = OPENAI_DEFAULT_EMBEDDING_MODEL,
+    ) -> None:
         self.client = openai.OpenAI(api_key=api_key) if api_key else openai.OpenAI()
         self.model = model
 

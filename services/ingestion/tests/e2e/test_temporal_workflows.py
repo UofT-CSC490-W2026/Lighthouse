@@ -9,29 +9,30 @@ import uuid
 from dataclasses import dataclass, field
 
 import pytest
-from temporalio import activity, workflow
+from temporalio import activity
 from temporalio.client import WorkflowFailureError
 from temporalio.worker import UnsandboxedWorkflowRunner, Worker
 
 from ingestion.temporal.activities.inputs import (
+    CleanupInactiveChunksInput,
     ChunkFilesInput,
     ChunkFilesOutput,
     CleanupStagingInput,
-    DeleteChunksForFilesInput,
     DeleteChunksInput,
     EmbedBatchInput,
     EnsureRepoInput,
+    FilePublishCleanup,
     GetChangedFilesInput,
     GitCloneFetchInput,
     GitCloneFetchOutput,
     IndexBranchInput,
-    IndexRepoInput,
     IncrementalIndexInput,
+    PublishStagedChunksInput,
+    PublishStagedChunksOutput,
     StoreChunksInput,
     UpdateBranchStatusInput,
 )
 from ingestion.temporal.workflows.index_branch import IndexBranchWorkflow
-from ingestion.temporal.workflows.index_repository import IndexRepositoryWorkflow
 from ingestion.temporal.workflows.incremental import IncrementalIndexWorkflow
 
 
@@ -102,17 +103,31 @@ def make_mock_activities(tracker: ActivityTracker):
         tracker.calls.append(("delete_existing_chunks", input))
         return 5
 
-    @activity.defn(name="delete_chunks_for_files")
-    async def mock_delete_files(input: DeleteChunksForFilesInput) -> int:
-        tracker.calls.append(("delete_chunks_for_files", input))
-        return len(input.file_paths)
-
     @activity.defn(name="store_chunks")
     async def mock_store(input: StoreChunksInput) -> int:
         tracker.calls.append(("store_chunks", input))
         if tracker.fail_on == "store_chunks":
             raise RuntimeError("mock store failure")
         return tracker.chunk_count
+
+    @activity.defn(name="publish_staged_chunks")
+    async def mock_publish(input: PublishStagedChunksInput) -> PublishStagedChunksOutput:
+        tracker.calls.append(("publish_staged_chunks", input))
+        if tracker.fail_on == "publish_staged_chunks":
+            raise RuntimeError("mock publish failure")
+        return PublishStagedChunksOutput(
+            cleanup_targets=[
+                FilePublishCleanup(file_path=file_path, previous_publish_id="legacy")
+                for file_path in input.changed_files
+            ]
+        )
+
+    @activity.defn(name="cleanup_inactive_chunks")
+    async def mock_cleanup_inactive(input: CleanupInactiveChunksInput) -> int:
+        tracker.calls.append(("cleanup_inactive_chunks", input))
+        if tracker.fail_on == "cleanup_inactive_chunks":
+            raise RuntimeError("mock cleanup inactive failure")
+        return len(input.cleanup_targets)
 
     @activity.defn(name="cleanup_staging")
     async def mock_cleanup(input: CleanupStagingInput) -> str:
@@ -127,8 +142,9 @@ def make_mock_activities(tracker: ActivityTracker):
         mock_chunk,
         mock_embed,
         mock_delete,
-        mock_delete_files,
         mock_store,
+        mock_publish,
+        mock_cleanup_inactive,
         mock_cleanup,
     ]
 
@@ -305,102 +321,6 @@ class TestIndexBranchWorkflow:
 
 
 # ---------------------------------------------------------------------------
-# IndexRepositoryWorkflow tests
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.e2e
-class TestIndexRepositoryWorkflow:
-    async def test_single_branch_success(self, workflow_environment):
-        tracker = ActivityTracker(chunk_count=5)
-        queue = _queue()
-        async with Worker(
-            workflow_environment.client,
-            task_queue=queue,
-            workflows=[IndexRepositoryWorkflow, IndexBranchWorkflow],
-            activities=make_mock_activities(tracker),
-            workflow_runner=UnsandboxedWorkflowRunner(),
-        ):
-            result = await workflow_environment.client.execute_workflow(
-                IndexRepositoryWorkflow.run,
-                IndexRepoInput(
-                    github_repo_id=1,
-                    repo_url="https://github.com/o/r",
-                    full_name="o/r",
-                    branches=["main"],
-                ),
-                id=f"test-{uuid.uuid4().hex[:8]}",
-                task_queue=queue,
-            )
-        assert "1/1 branches succeeded" in result
-        assert "ensure_repository_record" == _activity_names(tracker)[0]
-
-    async def test_multi_branch_fan_out(self, workflow_environment):
-        tracker = ActivityTracker(chunk_count=5)
-        queue = _queue()
-        async with Worker(
-            workflow_environment.client,
-            task_queue=queue,
-            workflows=[IndexRepositoryWorkflow, IndexBranchWorkflow],
-            activities=make_mock_activities(tracker),
-            workflow_runner=UnsandboxedWorkflowRunner(),
-        ):
-            result = await workflow_environment.client.execute_workflow(
-                IndexRepositoryWorkflow.run,
-                IndexRepoInput(
-                    github_repo_id=1,
-                    repo_url="https://github.com/o/r",
-                    full_name="o/r",
-                    branches=["main", "dev"],
-                ),
-                id=f"test-{uuid.uuid4().hex[:8]}",
-                task_queue=queue,
-            )
-        assert "2/2 branches succeeded" in result
-
-    async def test_partial_failure(self, workflow_environment):
-        """One branch fails (git error), other succeeds."""
-        call_count = {"git": 0}
-
-        @activity.defn(name="git_clone_or_fetch")
-        async def git_fail_second(input: GitCloneFetchInput) -> GitCloneFetchOutput:
-            call_count["git"] += 1
-            # Fail for the second branch
-            if call_count["git"] > 1:
-                raise RuntimeError("git failure on second branch")
-            return GitCloneFetchOutput(
-                repo_path="/tmp/repos/test", latest_commit="abc123"
-            )
-
-        tracker = ActivityTracker(chunk_count=5)
-        mock_acts = make_mock_activities(tracker)
-        # Replace git activity with the one that fails on second call
-        mock_acts = [a for a in mock_acts if a.__name__ != "mock_git_clone"]
-        mock_acts.append(git_fail_second)
-
-        queue = _queue()
-        async with Worker(
-            workflow_environment.client,
-            task_queue=queue,
-            workflows=[IndexRepositoryWorkflow, IndexBranchWorkflow],
-            activities=mock_acts,
-            workflow_runner=UnsandboxedWorkflowRunner(),
-        ):
-            result = await workflow_environment.client.execute_workflow(
-                IndexRepositoryWorkflow.run,
-                IndexRepoInput(
-                    github_repo_id=1,
-                    repo_url="https://github.com/o/r",
-                    full_name="o/r",
-                    branches=["main", "dev"],
-                ),
-                id=f"test-{uuid.uuid4().hex[:8]}",
-                task_queue=queue,
-            )
-        assert "1 failed" in result
-
-
-# ---------------------------------------------------------------------------
 # IncrementalIndexWorkflow tests
 # ---------------------------------------------------------------------------
 
@@ -434,10 +354,10 @@ class TestIncrementalIndexWorkflow:
         names = _activity_names(tracker)
         assert "ensure_repository_record" in names
         assert "get_changed_files" in names
-        assert "delete_chunks_for_files" in names
         assert "chunk_files" in names
         assert "embed_chunk_batch" in names
-        assert "store_chunks" in names
+        assert "publish_staged_chunks" in names
+        assert "cleanup_inactive_chunks" in names
 
     async def test_no_changed_files_early_exit(self, workflow_environment):
         tracker = ActivityTracker(changed_files=[])
@@ -463,7 +383,6 @@ class TestIncrementalIndexWorkflow:
             )
         assert "No changes" in result
         names = _activity_names(tracker)
-        assert "delete_chunks_for_files" not in names
         assert "chunk_files" not in names
         # Should still mark indexed
         status_calls = [inp for name, inp in tracker.calls if name == "update_branch_status"]
@@ -479,7 +398,7 @@ class TestIncrementalIndexWorkflow:
             activities=make_mock_activities(tracker),
             workflow_runner=UnsandboxedWorkflowRunner(),
         ):
-            result = await workflow_environment.client.execute_workflow(
+            await workflow_environment.client.execute_workflow(
                 IncrementalIndexWorkflow.run,
                 IncrementalIndexInput(
                     github_repo_id=1,
@@ -494,13 +413,13 @@ class TestIncrementalIndexWorkflow:
         names = _activity_names(tracker)
         # embed and store should be skipped when chunk_count=0
         assert "embed_chunk_batch" not in names
-        assert "store_chunks" not in names
+        assert "publish_staged_chunks" in names
         # But should still be marked indexed
         status_calls = [inp for name, inp in tracker.calls if name == "update_branch_status"]
         assert any(s.status == "indexed" for s in status_calls)
 
     async def test_failure_cleans_staging(self, workflow_environment):
-        tracker = ActivityTracker(chunk_count=5, fail_on="store_chunks")
+        tracker = ActivityTracker(chunk_count=5, fail_on="publish_staged_chunks")
         queue = _queue()
         async with Worker(
             workflow_environment.client,
@@ -526,3 +445,76 @@ class TestIncrementalIndexWorkflow:
         status_calls = [inp for name, inp in tracker.calls if name == "update_branch_status"]
         assert any(s.status == "failed" for s in status_calls)
         assert "cleanup_staging" in names
+
+    async def test_publish_failure_before_switch_never_runs_stale_cleanup(
+        self, workflow_environment
+    ):
+        tracker = ActivityTracker(
+            chunk_count=5,
+            changed_files=["a.py"],
+            fail_on="publish_staged_chunks",
+        )
+        queue = _queue()
+        async with Worker(
+            workflow_environment.client,
+            task_queue=queue,
+            workflows=[IncrementalIndexWorkflow],
+            activities=make_mock_activities(tracker),
+            workflow_runner=UnsandboxedWorkflowRunner(),
+        ):
+            with pytest.raises(WorkflowFailureError):
+                await workflow_environment.client.execute_workflow(
+                    IncrementalIndexWorkflow.run,
+                    IncrementalIndexInput(
+                        github_repo_id=1,
+                        full_name="o/r",
+                        branch="main",
+                        before_commit="aaa11111",
+                        after_commit="bbb22222",
+                    ),
+                    id=f"test-{uuid.uuid4().hex[:8]}",
+                    task_queue=queue,
+                )
+
+        names = _activity_names(tracker)
+        assert "publish_staged_chunks" in names
+        assert "cleanup_staging" in names
+        assert "cleanup_inactive_chunks" not in names
+        status_calls = [inp for name, inp in tracker.calls if name == "update_branch_status"]
+        assert status_calls[-1].status == "failed"
+
+    async def test_cleanup_inactive_failure_does_not_fail_workflow(
+        self, workflow_environment
+    ):
+        tracker = ActivityTracker(
+            chunk_count=5,
+            changed_files=["a.py"],
+            fail_on="cleanup_inactive_chunks",
+        )
+        queue = _queue()
+        async with Worker(
+            workflow_environment.client,
+            task_queue=queue,
+            workflows=[IncrementalIndexWorkflow],
+            activities=make_mock_activities(tracker),
+            workflow_runner=UnsandboxedWorkflowRunner(),
+        ):
+            result = await workflow_environment.client.execute_workflow(
+                IncrementalIndexWorkflow.run,
+                IncrementalIndexInput(
+                    github_repo_id=1,
+                    full_name="o/r",
+                    branch="main",
+                    before_commit="aaa11111",
+                    after_commit="bbb22222",
+                ),
+                id=f"test-{uuid.uuid4().hex[:8]}",
+                task_queue=queue,
+            )
+
+        assert "aaa11111..bbb22222" in result
+        names = _activity_names(tracker)
+        assert "publish_staged_chunks" in names
+        assert "cleanup_inactive_chunks" in names
+        status_calls = [inp for name, inp in tracker.calls if name == "update_branch_status"]
+        assert status_calls[-1].status == "indexed"

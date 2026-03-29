@@ -9,26 +9,27 @@ from temporalio.common import RetryPolicy
 with workflow.unsafe.imports_passed_through():
     from ..activities import (
         EMBED_BATCH_SIZE,
+        CleanupInactiveChunksInput,
         ChunkFilesInput,
         ChunkFilesOutput,
         CleanupStagingInput,
-        DeleteChunksForFilesInput,
         EmbedBatchInput,
         EnsureRepoInput,
         GetChangedFilesInput,
         GitCloneFetchInput,
         GitCloneFetchOutput,
         IncrementalIndexInput,
-        StoreChunksInput,
+        PublishStagedChunksInput,
+        PublishStagedChunksOutput,
         UpdateBranchStatusInput,
         chunk_files,
+        cleanup_inactive_chunks,
         cleanup_staging,
-        delete_chunks_for_files,
         embed_chunk_batch,
         ensure_repository_record,
         get_changed_files,
         git_clone_or_fetch,
-        store_chunks,
+        publish_staged_chunks,
         update_branch_status,
     )
 
@@ -124,19 +125,7 @@ class IncrementalIndexWorkflow:
                 )
                 return f"No changes for {input.full_name}/{input.branch}"
 
-            # 4. Delete chunks for changed files
-            await workflow.execute_activity(
-                delete_chunks_for_files,
-                DeleteChunksForFilesInput(
-                    repository_id=repository_id,
-                    branch=input.branch,
-                    file_paths=changed_files,
-                ),
-                start_to_close_timeout=timedelta(minutes=2),
-                retry_policy=_DB_RETRY,
-            )
-
-            # 5. Chunk changed files -> staging
+            # 4. Chunk changed files -> staging
             chunk_result: ChunkFilesOutput = await workflow.execute_activity(
                 chunk_files,
                 ChunkFilesInput(
@@ -151,8 +140,9 @@ class IncrementalIndexWorkflow:
             )
             batch_id = chunk_result.batch_id
 
+            publish_result = PublishStagedChunksOutput()
             if chunk_result.chunk_count > 0:
-                # 6. Embed in batches
+                # 5. Embed in batches
                 embed_futures = []
                 for offset in range(0, chunk_result.chunk_count, EMBED_BATCH_SIZE):
                     embed_futures.append(
@@ -170,15 +160,20 @@ class IncrementalIndexWorkflow:
                     )
                 await asyncio.gather(*embed_futures)
 
-                # 7. Store chunks
-                await workflow.execute_activity(
-                    store_chunks,
-                    StoreChunksInput(batch_id=batch_id),
-                    start_to_close_timeout=timedelta(minutes=5),
-                    retry_policy=_DB_RETRY,
-                )
+            # 6. Publish staged chunks and switch active file versions
+            publish_result = await workflow.execute_activity(
+                publish_staged_chunks,
+                PublishStagedChunksInput(
+                    batch_id=batch_id,
+                    repository_id=repository_id,
+                    branch=input.branch,
+                    changed_files=changed_files,
+                ),
+                start_to_close_timeout=timedelta(minutes=5),
+                retry_policy=_DB_RETRY,
+            )
 
-            # 8. Mark indexed
+            # 7. Mark indexed
             await workflow.execute_activity(
                 update_branch_status,
                 UpdateBranchStatusInput(
@@ -190,6 +185,26 @@ class IncrementalIndexWorkflow:
                 start_to_close_timeout=timedelta(seconds=30),
                 retry_policy=_DB_RETRY,
             )
+
+            # 8. Best-effort cleanup of superseded publishes
+            if publish_result.cleanup_targets:
+                try:
+                    await workflow.execute_activity(
+                        cleanup_inactive_chunks,
+                        CleanupInactiveChunksInput(
+                            repository_id=repository_id,
+                            branch=input.branch,
+                            cleanup_targets=publish_result.cleanup_targets,
+                        ),
+                        start_to_close_timeout=timedelta(minutes=5),
+                        retry_policy=_DB_RETRY,
+                    )
+                except Exception:
+                    workflow.logger.warning(
+                        "Inactive chunk cleanup failed for %s/%s after publish",
+                        input.full_name,
+                        input.branch,
+                    )
 
             return (
                 f"Incremental index {input.full_name}/{input.branch}: "

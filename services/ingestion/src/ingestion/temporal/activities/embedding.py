@@ -27,10 +27,7 @@ async def embed_chunk_batch(input: EmbedBatchInput) -> str:
     elif settings.openai_api_key:
         provider_kwargs["api_key"] = settings.openai_api_key
 
-    embedder = get_embedding_provider(
-        strategy,
-        **provider_kwargs,
-    )
+    embedder = get_embedding_provider(strategy, **provider_kwargs)
     try:
         svc = ChunkService(db)
         chunks = svc.read_staging_batch(input.batch_id, input.offset, input.limit)

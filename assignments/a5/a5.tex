@@ -1,0 +1,1032 @@
+\documentclass[a4paper,12pt]{article}
+
+\usepackage{a4wide}
+\usepackage{amsfonts}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{csquotes}
+\usepackage{lipsum}
+\usepackage{bm}
+\usepackage{tabularx}
+\usepackage{longtable}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{tikz}
+\usepackage{float}
+\usetikzlibrary{positioning, arrows.meta, shapes.geometric, fit}
+
+\usepackage{graphicx}  % For including images
+\usepackage{xcolor}  % For a colorfull presentation
+\usepackage{listings}  % For presenting code 
+
+\usepackage{algorithm}
+\usepackage[noend]{algpseudocode}
+\makeatletter
+\def\BState{\State\hskip-\ALG@thistlm}
+\makeatletter
+\usepackage[normalem]{ulem}
+\usepackage{array}
+\usepackage{hyperref}
+% \usepackage[hyphens]{url}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue,
+  urlcolor=blue,
+  citecolor=blue
+}
+\newcommand{\bluehref}[2]{\href{#1}{\textcolor{blue}{\uline{#2}}}}
+\makeatletter
+\newcommand*{\citelinktext}[2]{%
+  \hyper@@link[cite]{}{cite.#1}{#2}}
+\makeatother
+
+\usepackage{booktabs} 
+\usepackage{enumitem}
+\usepackage{bbm}
+\usepackage{tcolorbox}
+
+\usepackage{minted}
+\usepackage{subcaption}
+
+\usepackage[font=small,labelfont=bf]{caption}
+
+\usepackage{fullpage,amsmath,amsthm,amssymb}
+\newtheorem*{solution}{Solution}
+\newtheorem*{part1}{Part 1}
+\newtheorem*{part2}{Part 2}
+
+\newcommand{\Cov}{\mathrm{Cov}}
+\newcommand{\Var}{\mathrm{Var}}
+\newcommand{\rank}{\mathrm{rank}}
+\newcommand{\Span}{\mathrm{span}}
+\newcommand{\clip}{\mathrm{clip}}
+\newcommand{\Dim}{\mathrm{dim}}
+
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\newcolumntype{R}[1]{>{\raggedright\arraybackslash}p{#1}}
+
+\tcbset{
+  colback=gray!3,
+  colframe=black!20,
+  boxsep=1mm,
+  left=1mm,
+  right=1mm,
+  top=1mm,
+  bottom=1mm,
+}
+
+\usepackage{changepage}
+\setlength{\parindent}{0pt}
+
+\newenvironment{restoretext}%
+    {
+     \begin{adjustwidth}{}{\leftmargin}%
+    }{\end{adjustwidth}
+     }
+
+% Definition of a style for code, matter of taste
+\lstdefinestyle{mystyle}{
+  language=Python,
+  basicstyle=\ttfamily\footnotesize,
+  backgroundcolor=\color[HTML]{F7F7F7},
+  rulecolor=\color[HTML]{EEEEEE},
+  identifierstyle=\color[HTML]{24292E},
+  emphstyle=\color[HTML]{005CC5},
+  keywordstyle=\color[HTML]{D73A49},
+  commentstyle=\color[HTML]{6A737D},
+  stringstyle=\color[HTML]{032F62},
+  emph={@property,self,range,True,False},
+  morekeywords={super,with,as,lambda},
+  literate=%
+    {+}{{{\color[HTML]{D73A49}+}}}1
+    {-}{{{\color[HTML]{D73A49}-}}}1
+    {*}{{{\color[HTML]{D73A49}*}}}1
+    {/}{{{\color[HTML]{D73A49}/}}}1
+    {=}{{{\color[HTML]{D73A49}=}}}1
+    {/=}{{{\color[HTML]{D73A49}=}}}1,
+  breakatwhitespace=false,
+  breaklines=true,
+  captionpos=b,
+  keepspaces=true,
+  numbers=none,
+  showspaces=false,
+  showstringspaces=false,
+  showtabs=false,
+  tabsize=4,
+  frame=single,
+}
+\lstset{style=mystyle}
+
+\begin{document}
+\begin{titlepage}
+    \centering
+    \vspace*{1cm}
+    
+    \Huge
+    \textbf{CSC490: Assignment 5}
+    
+    \vspace{0.5cm}
+    
+    \vspace{1.5cm}
+    
+    \textbf{Team Members}
+    
+    \vspace{0.8cm}
+    
+    \large
+    \begin{tabular}{ll}
+        \textbf{Name} & \textbf{Student ID} \\
+        \midrule
+        Aarya Prakash & 1008790257 \\
+        Derek Huynh & 1008849052 \\
+        Merrick Liu & 1008951920 \\
+        Rhys Balevicius & 1000801974 \\
+    \end{tabular}
+    
+    \vfill
+    
+    \large
+    University of Toronto\\
+    Department of Computer Science    
+\end{titlepage}
+
+\section{Context for Our Project: Lighthouse}
+
+Lighthouse is a code search engine exposed via the Model Context Protocol (MCP) that
+improves the performance of AI coding agents by surfacing relevant context from a
+codebase. A developer selects GitHub repositories to index, Lighthouse ingests and
+indexes them, and the developer adds the Lighthouse MCP server to their AI coding
+agent. When the agent is working on a task and needs context that falls outside its
+immediate working scope, it queries Lighthouse to retrieve relevant code snippets,
+interfaces, and documentation.\\
+
+The system is composed of several services: an \textbf{ingestion service} that clones
+repositories, chunks source files, generates embeddings, and stores them in Postgres
+and Milvus (vector database) via Temporal (distributed, durable execution solution) workflows; a \textbf{search service} that implements retrieval
+strategies (e.g.\ hybrid search combining dense vector similarity with sparse keyword
+matching); an \textbf{MCP server} that exposes search as MCP tools consumable by coding
+agents; and a \textbf{web service} for management and visualization (currently used for debugging).
+
+\subsection{Current State}
+
+We have implemented a baseline version of the full pipeline: repositories can be indexed
+(with both full and incremental indexing), searched via the MCP server, and results are
+returned to coding agents. However, several areas are still in active development:
+
+\begin{itemize}
+  \item \textbf{Web UI} --- The web service currently serves as a debugging interface
+    for internal development. We are still discussing and formulating what the
+    production UI will look like, and expect to redesign it in the coming week.
+  \item \textbf{Evaluation suite} --- We are developing an eval suite to measure how
+    effectively Lighthouse improves coding agent outcomes, building on the aspirational
+    dataset design from A2. This will let us quantitatively compare retrieval strategies.
+  \item \textbf{Search and ingestion experimentation} --- We are experimenting with
+    different search strategies, chunking approaches (e.g.\ sliding window vs.\
+    AST-aware chunking), and embedding models to improve retrieval quality beyond
+    our current baseline.
+\end{itemize}
+
+\subsection{Tech \& Testing Stack}
+Below are quick descriptions of each services (found in \texttt{services/}) tech stack:
+\begin{itemize}
+  \item \texttt{ingestion} --- A Python 3.11 service built with FastAPI and Temporal.
+    It uses GitPython for repository cloning, our shared workspace packages
+    (\texttt{shared}, \texttt{db}, \texttt{vectordb}, and \texttt{embedding}) for
+    schemas and storage, and implements the indexing pipeline including chunking,
+    embedding generation, and workflow orchestration.
+  \item \texttt{search} --- A Python 3.11 FastAPI service that implements retrieval
+    logic. It uses the same shared workspace packages as the ingestion service and
+    contains our search strategies, including hybrid search over Postgres and Milvus.
+  \item \texttt{mcp\_server} --- A Python 3.11 service built with FastAPI and
+    FastMCP. It exposes Lighthouse functionality as MCP and HTTP endpoints for coding
+    agents, and also uses \texttt{httpx}, \texttt{cryptography}, \texttt{asyncpg},
+    and \texttt{boto3} for integration with authentication, persistence, and external
+    services.
+  \item \texttt{web} --- A TypeScript frontend built with React 19 and Vite. It uses
+    React Router for navigation, SWR for client-side data fetching, and Tailwind CSS
+    for styling; at the moment it primarily serves as an internal debugging and
+    management UI.
+\end{itemize}
+
+For testing, our testing framework is \texttt{pytest}, with tests organized
+into \texttt{unit}, \texttt{integration}, and \texttt{e2e} markers. We use
+\texttt{pytest-asyncio} for async service and API tests, and \texttt{pytest-cov} to
+measure line coverage across the Python services and shared packages. For
+infrastructure-dependent tests, we use \texttt{testcontainers} to provision isolated
+Postgres and Milvus instances during test runs instead of depending on shared
+developer machines. Since Temporal is a core part of the ingestion pipeline, we also
+use Temporal Python SDK testing utilities such as
+\texttt{temporalio.testing.WorkflowEnvironment} and
+\texttt{ActivityEnvironment} to test workflow orchestration and activities in a
+deterministic local environment.
+
+% ================================================================================
+
+\newpage
+\section{Profiling Execution time}
+% Profile 5 important functions in your codebase using https://docs.python.org/3/library/profile.html.
+% Analyze your functions and find ways to improve them.
+
+We performed profiling benchmarks of some significant hot paths in our function, focusing mostly on our intensive ingestion and search services. The raw benchmark results of the pre-improvement baselines can be seen in Appendix~\ref{app:prof_baseline} and the improved performance data can be seen in Appendix~\ref{app:prof_improved}. \\
+
+\textbf{1. SlidingWindowChunker.chunk\_file}
+
+In the baseline profile (\texttt{profiling\_results.tmp}), \texttt{chunk\_file} accounted for a cumulative \texttt{0.010s} across 3 calls. The function itself was not dominated by loop control logic; instead, the profile showed repeated per-chunk work from hashing and string processing. In particular, \texttt{compute\_chunk\_hash} contributed \texttt{0.003s} cumulative, with \texttt{\_hashlib.openssl\_sha256} at \texttt{0.002s}. This indicated that for medium-to-large chunk counts, hash choice materially affected end-to-end chunking latency. \\
+
+The optimization focused on replacing SHA-256 with xxHash64 in \texttt{compute\_chunk\_hash}, while keeping the chunking algorithm and output semantics unchanged. This is appropriate because the hash is used for chunk identity/dedup behavior rather than cryptographic verification, so we don't need the full security guarantees of something like SHA-256. xxHash64 significantly reduces CPU cost per hash invocation while still providing practical collision resistance for this operational context. xxHash also allows for a larger 128-bit option which would reduce the chance of hash collisions significantly, though only extremely large codebases would even run the risk of collision in a 64-bit space. \\
+
+In the post-change profile (\texttt{profiling\_results\_after\_improvements.tmp}), \texttt{chunk\_file} dropped to \texttt{0.006s} cumulative across 3 calls (about 40\% faster). Hashing is no longer a visible dominant cost: \texttt{compute\_chunk\_hash} and \texttt{xxhash.\_xxhash.xxh64\_hexdigest} both register effectively as near-zero at this scale. The remaining visible work is mostly \texttt{splitlines}, \texttt{join}, and baseline iteration overhead. \\
+
+\textbf{2. GitOperations.list\_files}
+
+Before optimization, \texttt{list\_files} took \texttt{0.216s} cumulative across 2 calls. The profile showed expensive traversal behavior centered on \texttt{pathlib.rglob} and related selector machinery: \texttt{rglob} at \texttt{0.081s}, selector internals at \texttt{0.078s}, and heavy \texttt{stat}/\texttt{is\_file} traffic (\texttt{stat} at \texttt{0.077s}, \texttt{is\_file} at \texttt{0.059s}). The key issue was traversal and path-object overhead rather than filtering logic alone. \\
+
+The implementation was changed to use \texttt{os.walk} traversal with inline filtering. This avoids the \texttt{pathlib} selector/rglob overhead, reduces object churn, and keeps filtering close to candidate discovery. The behavior contract was retained: same extension checks, same skip patterns, same size threshold, and exclusion of \texttt{.git}-internal content. \\
+
+After optimization, \texttt{list\_files} improved to \texttt{0.158s} cumulative across 2 calls (about 27\% faster). The hotspot shape also shifted as expected: \texttt{rglob} and selector frames disappeared, replaced by \texttt{os.\_walk} and direct path/stat operations. This confirms that the improvement came from cheaper traversal mechanics, not from reduced output scope (\texttt{listed\_files} remained \texttt{4860} in both runs). \\
+
+\textbf{3. ChunkService.move\_to\_final}
+
+In the baseline, \texttt{move\_to\_final} consumed \texttt{1.822s} cumulative for the 8k-chunk profile case. Most of that time sat in ORM SQL generation and execution pathways: SQL construction (\texttt{1.036s}), internal SQL building (\texttt{1.035s}), and insert generation (\texttt{1.027s}). Additional cost came from staging row materialization and conversion (\texttt{process\_row}, \texttt{python\_value}, date/time adaptation paths). This profile clearly identified the expensive portions as ORM shaping plus per-row conversion overhead. \\
+
+The maintainable optimization path preserved Peewee inserts (raw SQL insert path was intentionally reverted) and instead reduced per-row overhead where safe:
+\begin{itemize}
+\item read only required staging columns,
+\item fetch staging rows as tuples instead of full model instances,
+\item centralize embedding normalization/decoding in a lightweight helper.
+\end{itemize}
+These changes keep transactional behavior and output semantics intact while lowering model-instantiation and field-conversion pressure. \\
+
+After these adjustments, \texttt{move\_to\_final} dropped to \texttt{1.260s} cumulative (about 31\% faster). ORM SQL generation remains the dominant cost center, but the total envelope is significantly reduced. The profile confirms reduced pressure from row-conversion-heavy portions compared to baseline, while preserving current maintainability constraints. \\
+
+\textbf{4. HybridSearchStrategy.search}
+
+Baseline search profiling showed \texttt{search} at \texttt{0.062s} cumulative for 2 calls, with the main internal hotspot concentrated in publish filtering:
+
+\texttt{\_filter\_vector\_results} at \texttt{0.042s} and \texttt{\_get\_active\_publish\_map} at \texttt{0.042s}.  
+This pointed to query-shape inefficiency (large OR predicate construction/execution) rather than fusion or snippet rendering. Supporting ORM SQL frames reinforced that diagnosis.
+
+The optimization replaced OR-heavy publish-map lookup with a grouped and batched strategy:
+\begin{itemize}
+\item deduplicate \((repository, branch, file\_path)\) keys before querying,
+\item group lookups by \((repository, branch)\),
+\item issue batched \texttt{IN (...)} queries for file paths.
+\end{itemize}
+Additional low-risk trims were included:
+\begin{itemize}
+\item cap vector overfetch to prevent unnecessary widening in lookup workloads,
+\item build score map only for top-\(k\) fused entries used for final snippet scoring.
+\end{itemize}
+
+After optimization, overall \texttt{search} time dropped to \texttt{0.023s} cumulative for 2 calls (about 63\% improvement). Internal hotspot reductions are substantial: \texttt{\_get\_active\_publish\_map} decreased from \(\sim\)\texttt{0.042s} to \(\sim\)\texttt{0.005s}, and \texttt{\_filter\_vector\_results} decreased from \(\sim\)\texttt{0.042s} to \(\sim\)\texttt{0.006s}. Fusion remained inexpensive, confirming that the dominant gain came from improved DB query shape and key-set handling. \\
+
+\textbf{5. ChunkService.publish\_incremental\_batch}
+
+Baseline profiling showed \texttt{publish\_incremental\_batch} at \texttt{2.530s} cumulative for 3 calls in the 8k-chunk / 200-file workload. The dominant costs were concentrated in ORM-heavy paths and per-file upsert logic: SQL generation (\texttt{1.518s}), insert generation (\texttt{0.954s}), and repeated per-file \texttt{get\_or\_create} activity (\texttt{0.580s} cumulative for \texttt{600} calls across repeats). Additional overhead came from row materialization/conversion (\texttt{process\_row}, \texttt{python\_value}, date parsing/formatting paths), indicating that object hydration and query construction were significant contributors. \\
+
+The implementation was optimized without changing external behavior. First, staging reads were moved to a column-limited \texttt{select(...).tuples()} shape so the method operates on lightweight tuple rows instead of hydrated model instances. Second, file tracking was reduced from a per-file list map to a set of staged file paths, since only membership checks are required for publish decisions. Third, embedding decoding was normalized through the shared \texttt{\_decode\_embedding} path to remove duplicate branch/convert logic in this function. Fourth, chunk inserts remained batched via Peewee but are now built from tuple rows, reducing repeated attribute access overhead. Fifth, the per-file \texttt{get\_or\_create + save} loop was replaced with batched \texttt{insert\_many(...).on\_conflict(update=...)} upserts on \texttt{indexed\_files}, updating \texttt{active\_publish\_id} and \texttt{updated\_at} in bulk. \\
+
+After these changes, the same benchmark improved from \texttt{2.530s} to \texttt{1.447s} cumulative, a reduction of about \textbf{43\%}. The hotspot profile still shows ORM SQL generation as the leading cost center, but the expensive per-file upsert pattern and model-materialization overhead were substantially reduced while preserving publish semantics and cleanup behavior.
+
+
+% ================================================================================
+\newpage
+\section{Showing Code Coverage}
+% Using pytest-cov (https://github.com/pytest-dev/pytest-cov) or a similar library, show the code
+% coverage of your project. Create a github workflow to generate your test coverage automatically on your
+% readme and PRs. You can reference the example in pytest-cov or other open source projects
+
+We use \texttt{pytest-cov} to measure line coverage across all Python source packages.
+Coverage is automated via a GitHub Actions workflow at
+\bluehref{https://github.com/UofT-CSC490-W2026/Lighthouse/blob/a5/.github/workflows/tests.yml}{.github/workflows/tests.yml},
+which runs on every push to \texttt{main} and on every pull request.
+
+The workflow performs the following steps:
+\begin{enumerate}
+  \item Runs \texttt{uv run pytest --cov --cov-report=xml --cov-report=term-missing} to
+    execute all 293 tests and produce a coverage report.
+  \item Parses the generated \texttt{coverage.xml} to extract the overall line coverage
+    percentage and generate a colored badge.
+  \item \textbf{On pushes to main:} updates the
+    \bluehref{https://github.com/UofT-CSC490-W2026/Lighthouse/blob/main/README.md}{README.md}
+    coverage badge in-place (between \texttt{coverage:start} / \texttt{coverage:end} markers)
+    and commits the change automatically.
+  \item \textbf{On pull requests:} posts (or updates) a comment on the PR with the current
+    coverage percentage, so reviewers can see coverage impact at a glance.
+\end{enumerate}
+
+% ================================================================================
+\newpage
+\section{Test Coverage Breadth}
+% Let’s make sure our code is well tested. You’ll recieve 0.20 marks for each 1% of code coverage up to 20
+% marks based on part one.
+
+Our test suite consists of 300+ tests (unit, integration, and end-to-end) achieving
+\textbf{100\% line coverage} across 2{,}418 source lines. As we push changes to the codebase, this may not be reflected in the \texttt{main} branch while grading, but you may view the coverage comment in our final (2 out of 2 PRs) \bluehref{https://github.com/UofT-CSC490-W2026/Lighthouse/pull/19}{A5 PR} to see that we achieved full coverage on submission.
+
+\subsection{What We Measure}
+
+Coverage is configured in
+\bluehref{https://github.com/UofT-CSC490-W2026/Lighthouse/blob/a5/pyproject.toml}{pyproject.toml}
+under \texttt{[tool.coverage.run].source} and includes all Python backend code:
+
+\begin{itemize}
+  \item \texttt{packages/db/src} --- Peewee ORM models and database utilities
+  \item \texttt{packages/vectordb/src} --- Milvus vector database client wrapper
+  \item \texttt{packages/embedding/src} --- Embedding provider abstraction (OpenAI, mock)
+  \item \texttt{packages/shared/src} --- Shared data models and utilities
+  \item \texttt{services/ingestion/src} --- Temporal workflows, activities, and chunking pipelines
+  \item \texttt{services/search/src} --- Search strategies (hybrid search)
+  \item \texttt{services/mcp\_server/src} --- MCP server, HTTP/MCP routers, auth, and decorators
+\end{itemize}
+
+\subsection{What We Exclude and Why}
+
+\textbf{\texttt{services/web/}} is excluded from coverage measurement. This service is a
+TypeScript/React frontend that currently serves as a debugging UI for internal development.
+It is not part of our Python test suite and is being actively redesigned in the coming week,
+so investing in test coverage for code that will be replaced would not be productive.
+Once the new frontend stabilizes, we plan to add Playwright or similar end-to-end tests
+for it separately.\\
+
+We also use standard \texttt{exclude\_lines} patterns in our coverage configuration to
+skip lines that are not meaningfully testable: \texttt{TYPE\_CHECKING} blocks,
+\texttt{raise NotImplementedError} stubs, ellipsis-only bodies, and
+\texttt{if \_\_name\_\_ == "\_\_main\_\_"} guards.
+
+% ================================================================================
+\newpage
+\section{Test Coverage Depth}
+% Choose your most complex module in your codebase. Create at least 10 unit tests for this module that
+% test edge cases, failure modes and important use cases. Link the tests and edge cases, and explain why
+% you chose these tests in comments of that module. We’ll try to find addtional edge cases that exist to
+% cause an error! Make sure to write positive tests and negative tests (ones that throw errors or gracefully
+% handle incorrect inputs)
+
+Our most complex module is the \texttt{IndexBranchWorkflow} in the ingestion service
+
+(\bluehref{https://github.com/UofT-CSC490-W2026/Lighthouse/blob/a5/services/ingestion/src/ingestion/temporal/workflows/index\_branch.py}{services/ingestion/src/ingestion/temporal/workflows/index\_branch.py}).
+This Temporal workflow orchestrates 7 distinct activities through a multi-step pipeline:
+marking a branch as indexing, cloning the repository, chunking files into a staging table,
+deleting old chunks, embedding chunks in parallel batches, storing results to the final
+tables and vector database, and updating the branch status. It includes conditional
+early-exit logic (when no chunks are produced), parallel fan-out for embedding batches
+(using \texttt{asyncio.gather}), and a two-phase error handler that marks the branch as
+failed and conditionally cleans up staging data only when a \texttt{batch\_id} has been assigned. \\
+
+All 12 tests are located in
+\bluehref{https://github.com/UofT-CSC490-W2026/Lighthouse/blob/a5/services/ingestion/tests/unit/test\_index\_branch\_workflow.py}{services/ingestion/tests/unit/test\_index\_branch\_workflow.py} and use Temporal's
+\texttt{WorkflowEnvironment} with mocked activities. This isolates the workflow's
+orchestration logic from external dependencies (Postgres, Milvus, git, OpenAI), allowing
+us to test decision-making, parameter threading, and failure handling.
+Each test and the reasoning behind why we chose it is commented in the code.
+
+\subsection{Boundary Tests (Positive)}
+
+These tests target the embed batching loop, which uses
+\texttt{range(0, chunk\_count, EMBED\_BATCH\_SIZE)} where \texttt{EMBED\_BATCH\_SIZE = 512}.
+Off-by-one errors in this loop would cause chunks to be silently skipped or duplicated.
+
+\begin{enumerate}
+  \item \textbf{test\_single\_chunk\_produces\_one\_embed\_batch} -
+    \texttt{chunk\_count=1} produces exactly 1 embed call at offset 0.
+    Tests the lower boundary of the batching loop.
+
+  \item \textbf{test\_exactly\_512\_chunks\_one\_batch} -
+    \texttt{chunk\_count=512} (exactly \texttt{EMBED\_BATCH\_SIZE}) produces exactly 1 batch.
+    This is the upper boundary for a single batch; a fencepost error would produce 0 or 2 batches.
+
+  \item \textbf{test\_513\_chunks\_two\_batches} ---
+    \texttt{chunk\_count=513} is the smallest value that requires 2 batches.
+    Verifies offsets are \texttt{[0, 512]}.
+
+  \item \textbf{test\_large\_chunk\_count\_batch\_offsets} -
+    \texttt{chunk\_count=2049} produces 5 batches with offsets
+    \texttt{[0, 512, 1024, 1536, 2048]}.
+    Validates batch arithmetic at scale.
+\end{enumerate}
+
+\subsection{Failure Mode Tests (Negative)}
+
+These tests verify that the workflow correctly handles exceptions at different stages.
+The key invariant: \texttt{cleanup\_staging} is called if and only if \texttt{batch\_id}
+was set (i.e., \texttt{chunk\_files} succeeded).
+
+\begin{enumerate}[resume]
+  \item \textbf{test\_delete\_failure\_triggers\_cleanup} -
+    \texttt{delete\_existing\_chunks} fails \emph{after} \texttt{batch\_id} is assigned.
+    Verifies both \texttt{status="failed"} and \texttt{cleanup\_staging} are called.
+    This failure point was not covered by existing e2e tests.
+
+  \item \textbf{test\_store\_failure\_triggers\_cleanup} -
+    \texttt{store\_chunks} fails after embedding succeeds.
+    Embedded staging rows must be cleaned up to avoid dangling data.
+
+  \item \textbf{test\_chunk\_files\_failure\_no\_cleanup} -
+    \texttt{chunk\_files} raises \emph{before} \texttt{batch\_id} is assigned.
+    Verifies \texttt{cleanup\_staging} is \textbf{not} called (there is nothing to clean),
+    validating the \texttt{if batch\_id is not None} guard in the exception handler.
+\end{enumerate}
+
+\subsection{Parameter Propagation Tests (Positive)}
+
+These tests verify that input parameters are correctly threaded through to the right activities.
+Silent parameter drops would cause production failures with no error signal.
+
+\begin{enumerate}[resume]
+  \item \textbf{test\_github\_token\_propagated} -
+    A \texttt{github\_token} must reach both \texttt{update\_branch\_status} (for private
+    repo branch creation via GitHub API) and \texttt{git\_clone\_or\_fetch} (for
+    authenticated clone). Dropping the token causes silent 401 errors on private repos.
+
+  \item \textbf{test\_custom\_strategies\_propagated} -
+    Custom \texttt{chunker\_strategy="ast"} and\\ \texttt{embedding\_strategy="cohere"} must
+    be forwarded to \texttt{chunk\_files} and \texttt{embed\_chunk\_batch} respectively.
+    If silently replaced by defaults, the user gets wrong results with no error.
+
+  \item \textbf{test\_latest\_commit\_in\_final\_status} -
+    The final \texttt{update\_branch\_status(status="indexed")} must include
+    \texttt{latest\_commit} from the git output, while the initial
+    \texttt{status="indexing"} call must have \texttt{latest\_commit=None}.
+    Swapping these would record a stale or null commit SHA.
+\end{enumerate}
+
+\subsection{Cleanup Correctness and Return Value Tests}
+
+\begin{enumerate}[resume]
+  \item \textbf{test\_cleanup\_receives\_correct\_batch\_id} -
+    On failure after chunking, \texttt{cleanup\_staging} must receive the exact
+    \texttt{batch\_id="batch-001"} returned by \texttt{chunk\_files}. A wrong batch ID
+    would leak staging rows while potentially purging unrelated data.
+
+  \item \textbf{test\_return\_value\_format} -
+    With \texttt{full\_name="myorg/myrepo"} and \texttt{branch="feature/cool"}, the return
+    string must be \texttt{"Indexed myorg/myrepo/feature/cool at abc123"}. Branch names
+    with slashes must not be truncated. This serves as a regression test for string
+    interpolation used in observability logging.
+\end{enumerate}
+
+% ================================================================================
+\newpage
+\section{Two Memorable Bugs}
+% Record a video walkthrough of two of the most memorable bugs you encountered during your project.
+% For each bug, include:
+% • What the bug was and how you discovered it
+% • The debugging process you used to identify the root cause
+% • How you fixed the bug
+% • What you learned from the experience
+% • The test cases you created to prevent this bug from reoccurring
+% Link your video in your a5.pdf
+
+\subsection{Links}
+\begin{itemize}
+    \item Here is a \bluehref{https://youtu.be/lVmJs_g7dEQ}{video walk through} of the two memorable bugs.
+    \item Here is a \bluehref{https://docs.google.com/presentation/d/1oTm824FbHy6FvsnDb1Oj1ypalQ6g7qS3t5RsoxHJR8k/edit?usp=sharing}{link} to the slides shown in the video.
+\end{itemize}
+
+\subsection{Summary}
+
+\textbf{Context:} The \bluehref{https://github.com/UofT-CSC490-W2026/Lighthouse/blob/a5/services/ingestion/src/ingestion/temporal/workflows/incremental.py}{\texttt{IncrementalIndexWorkflow}} is a Temporal workflow
+triggered by GitHub webhooks that re-indexes changed repository files into the search
+pipeline. On each invocation it clones the updated branch, chunks modified files,
+generates embeddings, and writes results into Postgres and Milvus so that search
+reflects the latest code. \\
+
+\textbf{Bug 1: Temporary Gap in Searchable Data.} The workflow deleted existing
+search chunks for changed files before their replacements were ready, creating a
+window during which a recently modified file was invisible to search. The fix
+introduced a publish-and-switch model: new chunks are staged under a
+\texttt{publish\_id} and only promoted to active once fully written, so old data
+remains searchable until the new version is ready. This taught us that correctness
+is not only about eventually producing the right data. It is
+also about what is visible at every intermediate state. It also showed us that background tasks can also have big ripple effects.
+\\
+
+\textbf{Bug 2: Catastrophic Deletion on Failure.} If any step failed after
+deletion (during chunking, embedding, or storage) the workflow would terminate
+without restoring the removed chunks, leaving those files absent from search until a
+future successful re-index. The publish-and-switch architecture resolves this as
+well: because deletion no longer precedes the publish, a failure at any point leaves
+the active search data exactly as it was before the workflow began. This highlighted
+that orchestration order is crucial and retry logic introduces complexity.
+
+\newpage
+
+\appendix
+\section{Profiling Benchmarks Baseline}
+\label{app:prof_baseline}
+
+\begin{lstlisting}[basicstyle=\ttfamily\fontsize{9}{9}\selectfont]
+==> SlidingWindowChunker
+         3758 function calls in 0.010 seconds
+
+   Ordered by: cumulative time
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        3    0.001    0.000    0.010    0.003 sliding_window_chunker.py:20(chunk_file)
+      468    0.000    0.000    0.003    0.000 utils.py:6(compute_chunk_hash)
+        3    0.003    0.001    0.003    0.001 {method 'splitlines' of 'str' objects}
+      468    0.002    0.000    0.002    0.000 {built-in method _hashlib.openssl_sha256}
+        3    0.001    0.000    0.001    0.000 {method 'strip' of 'str' objects}
+      468    0.001    0.000    0.001    0.000 {method 'encode' of 'str' objects}
+      468    0.001    0.000    0.001    0.000 {method 'join' of 'str' objects}
+      468    0.000    0.000    0.000    0.000 {method 'hexdigest' of '_hashlib.HASH' objects}
+      468    0.000    0.000    0.000    0.000 <string>:2(__init__)
+      468    0.000    0.000    0.000    0.000 {built-in method builtins.min}
+      468    0.000    0.000    0.000    0.000 {method 'append' of 'list' objects}
+        3    0.000    0.000    0.000    0.000 {built-in method builtins.len}
+        1    0.000    0.000    0.000    0.000 {built-in method builtins.max}
+        1    0.000    0.000    0.000    0.000 {method 'disable' of '_lsprof.Profiler' objects}
+
+
+generated_chunks=156 repeat=3 line_count=25000
+
+==> GitOperations.list_files
+         382556 function calls (382305 primitive calls) in 0.216 seconds
+
+   Ordered by: cumulative time
+   List reduced from 90 to 40 due to restriction <40>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        2    0.021    0.010    0.216    0.108 git_ops.py:70(list_files)
+    19802    0.005    0.000    0.083    0.000 pathlib.py:1008(stat)
+    10082    0.002    0.000    0.081    0.000 pathlib.py:956(rglob)
+    10082    0.008    0.000    0.078    0.000 pathlib.py:402(_select_from)
+    19802    0.054    0.000    0.077    0.000 {built-in method posix.stat}
+    10080    0.006    0.000    0.059    0.000 pathlib.py:1261(is_file)
+    10202    0.015    0.000    0.031    0.000 pathlib.py:353(_select_from)
+    20160    0.013    0.000    0.028    0.000 pathlib.py:583(__hash__)
+    20046    0.006    0.000    0.024    0.000 pathlib.py:546(__fspath__)
+    20046    0.011    0.000    0.018    0.000 pathlib.py:536(__str__)
+    10080    0.013    0.000    0.014    0.000 pathlib.py:569(_cparts)
+     9840    0.007    0.000    0.013    0.000 pathlib.py:630(suffix)
+    10200    0.005    0.000    0.010    0.000 pathlib.py:877(_make_child_relpath)
+  364/124    0.006    0.000    0.008    0.000 pathlib.py:383(_iterate_directories)
+    20040    0.007    0.000    0.008    0.000 pathlib.py:622(name)
+    10200    0.006    0.000    0.007    0.000 pathlib.py:523(_format_parsed_parts)
+     9960    0.007    0.000    0.007    0.000 pathlib.py:745(parts)
+    10200    0.004    0.000    0.005    0.000 pathlib.py:515(_from_parsed_parts)
+    10080    0.003    0.000    0.004    0.000 {method 'add' of 'set' objects}
+    10080    0.003    0.000    0.003    0.000 {method 'fullmatch' of 're.Pattern' objects}
+29781/29778    0.002    0.000    0.002    0.000 {built-in method builtins.len}
+      244    0.000    0.000    0.002    0.000 pathlib.py:934(_scandir)
+      244    0.001    0.000    0.002    0.000 {built-in method posix.scandir}
+    20160    0.002    0.000    0.002    0.000 pathlib.py:327(_select_from)
+    10201    0.002    0.000    0.002    0.000 {method 'join' of 'str' objects}
+    10080    0.001    0.000    0.001    0.000 {built-in method builtins.hash}
+     9840    0.001    0.000    0.001    0.000 {method 'rfind' of 'str' objects}
+    10200    0.001    0.000    0.001    0.000 {built-in method __new__ of type object at 0x561701efbf10}
+    10080    0.001    0.000    0.001    0.000 pathlib.py:257(casefold_parts)
+    10080    0.001    0.000    0.001    0.000 {method 'lower' of 'str' objects}
+    10080    0.001    0.000    0.001    0.000 {built-in method _stat.S_ISREG}
+     9738    0.001    0.000    0.001    0.000 {method 'append' of 'list' objects}
+        2    0.001    0.000    0.001    0.000 {method 'clear' of 'set' objects}
+    10080    0.001    0.000    0.001    0.000 {method 'is_dir' of 'posix.DirEntry' objects}
+      2/1    0.000    0.000    0.000    0.000 pathlib.py:281(_make_selector)
+        1    0.000    0.000    0.000    0.000 pathlib.py:380(__init__)
+      2/1    0.000    0.000    0.000    0.000 pathlib.py:304(__init__)
+        1    0.000    0.000    0.000    0.000 pathlib.py:349(__init__)
+        1    0.000    0.000    0.000    0.000 pathlib.py:260(compile_pattern)
+        1    0.000    0.000    0.000    0.000 __init__.py:225(compile)
+
+
+listed_files=4860 repeat=2 dirs=60 files_per_dir=80
+
+==> ChunkService.move_to_final
+         4603292 function calls (4417205 primitive calls) in 1.822 seconds
+
+   Ordered by: cumulative time
+   List reduced from 310 to 40 due to restriction <40>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.021    0.021    1.821    1.821 chunk.py:101(move_to_final)
+       18    0.000    0.000    1.158    0.064 peewee.py:2004(inner)
+       18    0.000    0.000    1.158    0.064 peewee.py:2079(execute)
+       17    0.002    0.000    1.157    0.068 peewee.py:2595(_execute)
+       18    0.000    0.000    1.156    0.064 peewee.py:3309(execute)
+       16    0.000    0.000    1.128    0.070 peewee.py:2881(_execute)
+104768/18    0.042    0.000    1.036    0.058 peewee.py:632(sql)
+       16    0.007    0.000    1.035    0.065 peewee.py:2848(__sql__)
+       16    0.285    0.018    1.027    0.064 peewee.py:2723(_generate_insert)
+  8035/35    0.060    0.000    0.592    0.017 peewee.py:1868(__sql__)
+97417/24333    0.007    0.000    0.512    0.000 {built-in method builtins.len}
+        1    0.000    0.000    0.510    0.510 peewee.py:2110(__len__)
+        1    0.000    0.000    0.510    0.510 peewee.py:4706(__len__)
+        1    0.003    0.003    0.510    0.510 peewee.py:4739(fill_cache)
+    16002    0.008    0.000    0.509    0.000 peewee.py:4799(next)
+     8001    0.009    0.000    0.500    0.000 peewee.py:4713(iterate)
+     8000    0.018    0.000    0.467    0.000 peewee.py:8054(process_row)
+    96002    0.036    0.000    0.412    0.000 peewee.py:1444(__sql__)
+    96002    0.186    0.000    0.375    0.000 peewee.py:644(value)
+     8000    0.038    0.000    0.366    0.000 peewee.py:8012(process_row)
+   104000    0.024    0.000    0.329    0.000 peewee.py:4966(python_value)
+    24000    0.008    0.000    0.290    0.000 peewee.py:5445(adapt)
+     8000    0.016    0.000    0.280    0.000 peewee.py:5410(format_date_time)
+    24000    0.009    0.000    0.263    0.000 {built-in method strptime}
+    24000    0.020    0.000    0.254    0.000 _strptime.py:564(_strptime_datetime)
+    24000    0.134    0.000    0.233    0.000 _strptime.py:309(_strptime)
+       18    0.000    0.000    0.118    0.007 peewee.py:3302(execute_sql)
+       18    0.095    0.005    0.118    0.007 {method 'execute' of 'sqlite3.Cursor' objects}
+   224384    0.067    0.000    0.085    0.000 peewee.py:4939(__hash__)
+     8000    0.021    0.000    0.081    0.000 peewee.py:6778(__init__)
+     8000    0.005    0.000    0.078    0.000 __init__.py:299(loads)
+     8000    0.012    0.000    0.071    0.000 decoder.py:332(decode)
+   104002    0.020    0.000    0.059    0.000 {built-in method builtins.setattr}
+    24000    0.008    0.000    0.056    0.000 _strptime.py:26(_getlang)
+   642147    0.046    0.000    0.055    0.000 {built-in method builtins.isinstance}
+   192291    0.042    0.000    0.054    0.000 peewee.py:562(__getattr__)
+   208542    0.043    0.000    0.053    0.000 peewee.py:640(literal)
+     8000    0.053    0.000    0.053    0.000 decoder.py:343(raw_decode)
+    24000    0.014    0.000    0.048    0.000 locale.py:594(getlocale)
+    96002    0.024    0.000    0.047    0.000 peewee.py:4963(db_value)
+
+
+moved=8000 final_count=8000 milvus_inserted=8000 target=move_to_final
+
+==> ChunkService.publish_incremental_batch
+
+6567890 function calls (6279793 primitive calls) in 2.530 seconds
+
+   Ordered by: cumulative time
+   List reduced from 363 to 30 due to restriction <30>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        3    0.027    0.009    2.530    0.843 chunk.py:199(publish_incremental_batch)
+     1425    0.001    0.000    1.608    0.001 peewee.py:2004(inner)
+     1425    0.001    0.000    1.606    0.001 peewee.py:2079(execute)
+     1425    0.003    0.000    1.591    0.001 peewee.py:3309(execute)
+198973/1625    0.094    0.000    1.518    0.001 peewee.py:632(sql)
+      819    0.004    0.000    1.272    0.002 peewee.py:2595(_execute)
+      216    0.000    0.000    1.062    0.005 peewee.py:2881(_execute)
+      216    0.007    0.000    0.967    0.004 peewee.py:2848(__sql__)
+      216    0.257    0.001    0.954    0.004 peewee.py:2723(_generate_insert)
+14453/2653    0.076    0.000    0.831    0.000 peewee.py:1868(__sql__)
+    17409    0.009    0.000    0.593    0.000 peewee.py:4799(next)
+     9406    0.011    0.000    0.583    0.000 peewee.py:4713(iterate)
+      600    0.005    0.000    0.580    0.001 peewee.py:6990(get_or_create)
+      603    0.005    0.000    0.561    0.001 peewee.py:4739(fill_cache)
+     8800    0.021    0.000    0.538    0.000 peewee.py:8054(process_row)
+146606/73522    0.010    0.000    0.508    0.000 {built-in method builtins.len}
+        3    0.000    0.000    0.503    0.168 peewee.py:2110(__len__)
+        3    0.000    0.000    0.503    0.168 peewee.py:4706(__len__)
+      600    0.002    0.000    0.471    0.001 peewee.py:7423(get)
+     8800    0.038    0.000    0.429    0.000 peewee.py:8012(process_row)
+106818/105618    0.035    0.000    0.428    0.000 peewee.py:1444(__sql__)
+   106812    0.194    0.000    0.392    0.000 peewee.py:644(value)
+   109600    0.026    0.000    0.390    0.000 peewee.py:4966(python_value)
+      806    0.009    0.000    0.385    0.000 peewee.py:2500(__sql__)
+    27200    0.009    0.000    0.349    0.000 peewee.py:5445(adapt)
+     9600    0.020    0.000    0.338    0.000 peewee.py:5410(format_date_time)
+      606    0.002    0.000    0.333    0.001 peewee.py:2252(_execute)
+    28800    0.011    0.000    0.316    0.000 {built-in method strptime}
+    28800    0.026    0.000    0.305    0.000 _strptime.py:564(_strptime_datetime)
+    28800    0.160    0.000    0.279    0.000 _strptime.py:309(_strptime)
+
+
+cleanup_targets=0 changed_files=200 milvus_inserted=8000 target=publish_incremental
+
+==> HybridSearchStrategy targets
+--- target=search size=medium repeat=2 ---
+         131064 function calls (124260 primitive calls) in 0.062 seconds
+
+   Ordered by: cumulative time
+   List reduced from 371 to 40 due to restriction <40>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.000    0.000    0.062    0.062 runners.py:160(run)
+        3    0.000    0.000    0.062    0.021 base_events.py:618(run_until_complete)
+        1    0.000    0.000    0.062    0.062 runners.py:86(run)
+        3    0.000    0.000    0.062    0.021 base_events.py:594(run_forever)
+        6    0.000    0.000    0.062    0.010 base_events.py:1859(_run_once)
+        6    0.000    0.000    0.062    0.010 events.py:82(_run)
+        6    0.000    0.000    0.062    0.010 {method 'run' of '_contextvars.Context' objects}
+        1    0.000    0.000    0.061    0.061 profiling.py:89(_runner)
+        2    0.000    0.000    0.061    0.031 hybrid_strategy.py:34(search)
+        2    0.000    0.000    0.042    0.021 hybrid_strategy.py:165(_filter_vector_results)
+        2    0.000    0.000    0.042    0.021 hybrid_strategy.py:196(_get_active_publish_map)
+        6    0.000    0.000    0.041    0.007 peewee.py:2004(inner)
+        6    0.000    0.000    0.041    0.007 peewee.py:2079(execute)
+        6    0.000    0.000    0.041    0.007 peewee.py:2252(_execute)
+        6    0.000    0.000    0.040    0.007 peewee.py:3309(execute)
+        4    0.000    0.000    0.039    0.010 peewee.py:7415(__iter__)
+   4732/6    0.003    0.000    0.037    0.006 peewee.py:632(sql)
+        6    0.000    0.000    0.037    0.006 peewee.py:2500(__sql__)
+    962/6    0.005    0.000    0.035    0.006 peewee.py:1524(__sql__)
+      534    0.000    0.000    0.016    0.000 peewee.py:4975(__sql__)
+      534    0.002    0.000    0.015    0.000 peewee.py:1312(__sql__)
+      208    0.000    0.000    0.008    0.000 peewee.py:4799(next)
+      208    0.000    0.000    0.008    0.000 peewee.py:4713(iterate)
+     1530    0.002    0.000    0.007    0.000 peewee.py:602(__call__)
+      202    0.000    0.000    0.007    0.000 peewee.py:8054(process_row)
+      540    0.001    0.000    0.005    0.000 peewee.py:1020(__sql__)
+        2    0.000    0.000    0.005    0.002 hybrid_strategy.py:86(<dictcomp>)
+      202    0.001    0.000    0.005    0.000 peewee.py:8012(process_row)
+     1530    0.003    0.000    0.004    0.000 peewee.py:548(__call__)
+  570/490    0.000    0.000    0.004    0.000 peewee.py:1444(__sql__)
+      534    0.001    0.000    0.004    0.000 peewee.py:840(apply_column)
+     1104    0.000    0.000    0.004    0.000 {built-in method builtins.next}
+        2    0.000    0.000    0.004    0.002 hybrid_strategy.py:54(<listcomp>)
+      566    0.002    0.000    0.004    0.000 peewee.py:644(value)
+     1138    0.000    0.000    0.004    0.000 peewee.py:4966(python_value)
+      160    0.000    0.000    0.004    0.000 dataclasses.py:1265(asdict)
+ 1120/160    0.002    0.000    0.004    0.000 dataclasses.py:1289(_asdict_inner)
+     1104    0.001    0.000    0.004    0.000 peewee.py:567(inner)
+        2    0.001    0.001    0.004    0.002 hybrid_strategy.py:226(_rrf_fusion)
+       82    0.000    0.000    0.003    0.000 peewee.py:5445(adapt)
+
+
+search_snippets=20 total_results=1532
+--- target=rrf size=medium repeat=2 ---
+         10010 function calls in 0.005 seconds
+
+   Ordered by: cumulative time
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        2    0.002    0.001    0.005    0.003 hybrid_strategy.py:226(_rrf_fusion)
+        2    0.002    0.001    0.002    0.001 hybrid_strategy.py:250(<listcomp>)
+        2    0.001    0.000    0.001    0.000 {built-in method builtins.sorted}
+     5000    0.000    0.000    0.000    0.000 hybrid_strategy.py:248(<lambda>)
+     5000    0.000    0.000    0.000    0.000 {method 'get' of 'dict' objects}
+        1    0.000    0.000    0.000    0.000 {method 'disable' of '_lsprof.Profiler' objects}
+        2    0.000    0.000    0.000    0.000 {method 'keys' of 'dict' objects}
+        1    0.000    0.000    0.000    0.000 {built-in method builtins.max}
+
+
+rrf_results=2500 vector=1500 keyword=1000
+--- target=filter size=medium repeat=2 ---
+         14008 function calls in 0.006 seconds
+
+   Ordered by: cumulative time
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        2    0.003    0.002    0.006    0.003 hybrid_strategy.py:165(_filter_vector_results)
+        2    0.002    0.001    0.002    0.001 hybrid_strategy.py:170(<listcomp>)
+    12000    0.001    0.000    0.001    0.000 typing.py:2287(cast)
+     2000    0.000    0.000    0.000    0.000 {method 'append' of 'list' objects}
+        1    0.000    0.000    0.000    0.000 {built-in method builtins.max}
+        1    0.000    0.000    0.000    0.000 {method 'disable' of '_lsprof.Profiler' objects}
+        2    0.000    0.000    0.000    0.000 profile_hybrid_strategy.py:231(<lambda>)
+
+
+filtered_results=1000 source_results=3000 
+\end{lstlisting}
+
+\section{Profiling Benchmarks After Improvements}
+\label{app:prof_improved}
+
+\begin{lstlisting}[basicstyle=\ttfamily\fontsize{9}{9}\selectfont]
+==> SlidingWindowChunker
+         2822 function calls in 0.006 seconds
+
+   Ordered by: cumulative time
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        3    0.001    0.000    0.006    0.002 sliding_window_chunker.py:20(chunk_file)
+        3    0.002    0.001    0.002    0.001 {method 'splitlines' of 'str' objects}
+      468    0.001    0.000    0.001    0.000 {method 'join' of 'str' objects}
+        3    0.001    0.000    0.001    0.000 {method 'strip' of 'str' objects}
+      468    0.000    0.000    0.000    0.000 utils.py:6(compute_chunk_hash)
+      468    0.000    0.000    0.000    0.000 {built-in method xxhash._xxhash.xxh64_hexdigest}
+      468    0.000    0.000    0.000    0.000 <string>:2(__init__)
+      468    0.000    0.000    0.000    0.000 {built-in method builtins.min}
+      468    0.000    0.000    0.000    0.000 {method 'append' of 'list' objects}
+        3    0.000    0.000    0.000    0.000 {built-in method builtins.len}
+        1    0.000    0.000    0.000    0.000 {built-in method builtins.max}
+        1    0.000    0.000    0.000    0.000 {method 'disable' of '_lsprof.Profiler' objects}
+
+
+generated_chunks=156 repeat=3 line_count=25000
+
+==> GitOperations.list_files
+         327670 function calls (327430 primitive calls) in 0.158 seconds
+
+   Ordered by: cumulative time
+   List reduced from 46 to 40 due to restriction <40>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        2    0.017    0.009    0.158    0.079 git_ops.py:71(list_files)
+     9720    0.003    0.000    0.054    0.000 pathlib.py:1008(stat)
+     9720    0.003    0.000    0.051    0.000 pathlib.py:765(__truediv__)
+     9720    0.027    0.000    0.051    0.000 {built-in method posix.stat}
+     9720    0.010    0.000    0.049    0.000 pathlib.py:530(_make_child)
+     9842    0.011    0.000    0.034    0.000 pathlib.py:484(_parse_args)
+     9722    0.003    0.000    0.024    0.000 pathlib.py:546(__fspath__)
+     9722    0.014    0.000    0.021    0.000 pathlib.py:536(__str__)
+     9842    0.014    0.000    0.020    0.000 pathlib.py:56(parse_parts)
+     9840    0.007    0.000    0.018    0.000 <frozen posixpath>:117(splitext)
+  364/124    0.005    0.000    0.014    0.000 <frozen os>:345(_walk)
+     9840    0.007    0.000    0.010    0.000 <frozen genericpath>:121(_splitext)
+     9720    0.005    0.000    0.007    0.000 pathlib.py:523(_format_parsed_parts)
+    10202    0.005    0.000    0.005    0.000 {built-in method builtins.next}
+     9720    0.003    0.000    0.004    0.000 pathlib.py:515(_from_parsed_parts)
+    10206    0.003    0.000    0.003    0.000 {built-in method sys.intern}
+    39970    0.003    0.000    0.003    0.000 {method 'append' of 'list' objects}
+    29644    0.002    0.000    0.002    0.000 {built-in method builtins.isinstance}
+    19680    0.002    0.000    0.002    0.000 {method 'rfind' of 'str' objects}
+     9842    0.002    0.000    0.002    0.000 pathlib.py:239(splitroot)
+     9720    0.002    0.000    0.002    0.000 pathlib.py:94(join_parsed_parts)
+      122    0.000    0.000    0.002    0.000 pathlib.py:868(__new__)
+    19680    0.001    0.000    0.001    0.000 {method 'lower' of 'str' objects}
+     9720    0.001    0.000    0.001    0.000 {method 'join' of 'str' objects}
+      122    0.000    0.000    0.001    0.000 pathlib.py:504(_from_parts)
+    19804    0.001    0.000    0.001    0.000 {built-in method posix.fspath}
+     9842    0.001    0.000    0.001    0.000 {built-in method __new__ of type object at 0x559079f36f10}
+      122    0.001    0.000    0.001    0.000 {built-in method posix.scandir}
+     9842    0.001    0.000    0.001    0.000 {method 'reverse' of 'list' objects}
+      120    0.000    0.000    0.001    0.000 <frozen posixpath>:164(islink)
+    10080    0.001    0.000    0.001    0.000 {method 'is_dir' of 'posix.DirEntry' objects}
+      120    0.000    0.000    0.000    0.000 <frozen posixpath>:71(join)
+      120    0.000    0.000    0.000    0.000 {built-in method posix.lstat}
+      122    0.000    0.000    0.000    0.000 {method 'split' of 'str' objects}
+      120    0.000    0.000    0.000    0.000 <frozen posixpath>:41(_get_sep)
+      122    0.000    0.000    0.000    0.000 git_ops.py:81(<listcomp>)
+      120    0.000    0.000    0.000    0.000 {method 'endswith' of 'str' objects}
+      120    0.000    0.000    0.000    0.000 {method 'startswith' of 'str' objects}
+      122    0.000    0.000    0.000    0.000 {method 'lstrip' of 'str' objects}
+      244    0.000    0.000    0.000    0.000 {built-in method builtins.len}
+
+
+listed_files=4860 repeat=2 dirs=60 files_per_dir=80
+
+==> ChunkService.move_to_final
+         3404358 function calls (3291622 primitive calls) in 1.260 seconds
+
+   Ordered by: cumulative time
+   List reduced from 230 to 40 due to restriction <40>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.010    0.010    1.260    1.260 chunk.py:107(move_to_final)
+       18    0.000    0.000    1.087    0.060 peewee.py:2004(inner)
+       18    0.000    0.000    1.087    0.060 peewee.py:2079(execute)
+       17    0.002    0.000    1.085    0.064 peewee.py:2595(_execute)
+       18    0.000    0.000    1.084    0.060 peewee.py:3309(execute)
+       16    0.000    0.000    1.053    0.066 peewee.py:2881(_execute)
+104753/18    0.040    0.000    0.961    0.053 peewee.py:632(sql)
+       16    0.005    0.000    0.960    0.060 peewee.py:2848(__sql__)
+       16    0.262    0.016    0.954    0.060 peewee.py:2723(_generate_insert)
+  8035/35    0.056    0.000    0.551    0.016 peewee.py:1868(__sql__)
+    96002    0.031    0.000    0.380    0.000 peewee.py:1444(__sql__)
+    96002    0.171    0.000    0.350    0.000 peewee.py:644(value)
+       18    0.000    0.000    0.121    0.007 peewee.py:3302(execute_sql)
+       18    0.101    0.006    0.121    0.007 {method 'execute' of 'sqlite3.Cursor' objects}
+24328/24327    0.002    0.000    0.079    0.000 {built-in method builtins.len}
+   224384    0.060    0.000    0.077    0.000 peewee.py:4939(__hash__)
+        1    0.000    0.000    0.077    0.077 peewee.py:2110(__len__)
+        1    0.000    0.000    0.077    0.077 peewee.py:4706(__len__)
+        1    0.002    0.002    0.077    0.077 peewee.py:4739(fill_cache)
+    16002    0.005    0.000    0.077    0.000 peewee.py:4799(next)
+     8000    0.005    0.000    0.076    0.000 chunk.py:38(_decode_embedding)
+     8001    0.006    0.000    0.071    0.000 peewee.py:4713(iterate)
+     8000    0.004    0.000    0.069    0.000 __init__.py:299(loads)
+     8000    0.016    0.000    0.064    0.000 decoder.py:332(decode)
+   208530    0.042    0.000    0.052    0.000 peewee.py:640(literal)
+   577613    0.044    0.000    0.052    0.000 {built-in method builtins.isinstance}
+   192285    0.038    0.000    0.051    0.000 peewee.py:562(__getattr__)
+     8000    0.005    0.000    0.049    0.000 peewee.py:8031(process_row)
+    96002    0.023    0.000    0.046    0.000 peewee.py:4963(db_value)
+     8000    0.016    0.000    0.044    0.000 peewee.py:8033(<listcomp>)
+     8000    0.043    0.000    0.043    0.000 decoder.py:343(raw_decode)
+    96032    0.020    0.000    0.041    0.000 peewee.py:396(<lambda>)
+    80000    0.015    0.000    0.028    0.000 peewee.py:4966(python_value)
+     8087    0.009    0.000    0.027    0.000 peewee.py:602(__call__)
+   120002    0.021    0.000    0.026    0.000 peewee.py:5115(adapt)
+   432881    0.023    0.000    0.023    0.000 {method 'append' of 'list' objects}
+    96032    0.016    0.000    0.022    0.000 inspect.py:292(isclass)
+    16000    0.002    0.000    0.019    0.000 dbapi2.py:58(adapt_datetime)
+    16000    0.017    0.000    0.017    0.000 {method 'isoformat' of 'datetime.datetime' objects}
+   224385    0.017    0.000    0.017    0.000 {built-in method builtins.hash}
+
+
+moved=8000 final_count=8000 milvus_inserted=8000 target=move_to_final
+
+==> ChunkService.publish_incremental_batch
+
+3602787 function calls (3480566 primitive calls) in 1.436 seconds
+
+   Ordered by: cumulative time
+   List reduced from 261 to 30 due to restriction <30>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        3    0.011    0.004    1.436    0.479 chunk.py:200(publish_incremental_batch)
+       28    0.000    0.000    1.128    0.040 peewee.py:2004(inner)
+       28    0.000    0.000    1.128    0.040 peewee.py:2079(execute)
+       28    0.000    0.000    1.125    0.040 peewee.py:3309(execute)
+       22    0.002    0.000    1.113    0.051 peewee.py:2595(_execute)
+       19    0.000    0.000    1.091    0.057 peewee.py:2881(_execute)
+111224/28    0.046    0.000    1.000    0.036 peewee.py:632(sql)
+       19    0.006    0.000    0.987    0.052 peewee.py:2848(__sql__)
+       19    0.181    0.010    0.978    0.051 peewee.py:2723(_generate_insert)
+  8674/62    0.066    0.000    0.645    0.010 peewee.py:1868(__sql__)
+101418/100218    0.040    0.000    0.446    0.000 peewee.py:1444(__sql__)
+   101412    0.198    0.000    0.405    0.000 peewee.py:644(value)
+     8000    0.005    0.000    0.196    0.000 chunk.py:40(_decode_embedding)
+     8000    0.005    0.000    0.190    0.000 __init__.py:299(loads)
+     8000    0.008    0.000    0.184    0.000 decoder.py:332(decode)
+     8000    0.171    0.000    0.171    0.000 decoder.py:343(raw_decode)
+       34    0.000    0.000    0.125    0.004 peewee.py:3302(execute_sql)
+       34    0.100    0.003    0.124    0.004 {method 'execute' of 'sqlite3.Cursor' objects}
+26347/26346    0.002    0.000    0.090    0.000 {built-in method builtins.len}
+    16409    0.006    0.000    0.089    0.000 peewee.py:4799(next)
+   235232    0.069    0.000    0.089    0.000 peewee.py:4939(__hash__)
+        3    0.000    0.000    0.088    0.029 peewee.py:2110(__len__)
+        3    0.000    0.000    0.088    0.029 peewee.py:4706(__len__)
+        3    0.002    0.001    0.088    0.029 peewee.py:4739(fill_cache)
+     8406    0.007    0.000    0.083    0.000 peewee.py:4713(iterate)
+   220920    0.048    0.000    0.060    0.000 peewee.py:640(literal)
+   205728    0.045    0.000    0.060    0.000 peewee.py:562(__getattr__)
+     8400    0.006    0.000    0.057    0.000 peewee.py:8031(process_row)
+   610410    0.047    0.000    0.055    0.000 {built-in method builtins.isinstance}
+   101412    0.026    0.000    0.054    0.000 peewee.py:4963(db_value)
+
+
+cleanup_targets=0 changed_files=200 milvus_inserted=8000 target=publish_incremental
+
+==> HybridSearchStrategy targets
+--- target=search size=medium repeat=2 keyword_mode=stubbed ---
+         54717 function calls (52159 primitive calls) in 0.023 seconds
+
+   Ordered by: cumulative time
+   List reduced from 373 to 40 due to restriction <40>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.000    0.000    0.023    0.023 runners.py:160(run)
+        3    0.000    0.000    0.023    0.008 base_events.py:618(run_until_complete)
+        1    0.000    0.000    0.023    0.023 runners.py:86(run)
+        3    0.000    0.000    0.023    0.008 base_events.py:594(run_forever)
+        6    0.000    0.000    0.023    0.004 base_events.py:1859(_run_once)
+        6    0.000    0.000    0.022    0.004 events.py:82(_run)
+        6    0.000    0.000    0.022    0.004 {method 'run' of '_contextvars.Context' objects}
+        1    0.000    0.000    0.022    0.022 profiling.py:89(_runner)
+        2    0.000    0.000    0.022    0.011 hybrid_strategy.py:34(search)
+        6    0.000    0.000    0.007    0.001 peewee.py:2004(inner)
+        6    0.000    0.000    0.007    0.001 peewee.py:2079(execute)
+        6    0.000    0.000    0.007    0.001 peewee.py:2252(_execute)
+        6    0.000    0.000    0.007    0.001 peewee.py:3309(execute)
+    794/6    0.000    0.000    0.006    0.001 peewee.py:632(sql)
+        4    0.000    0.000    0.006    0.001 peewee.py:7415(__iter__)
+        6    0.000    0.000    0.006    0.001 peewee.py:2500(__sql__)
+        2    0.000    0.000    0.006    0.003 hybrid_strategy.py:171(_filter_vector_results)
+      208    0.000    0.000    0.006    0.000 peewee.py:4799(next)
+      208    0.000    0.000    0.006    0.000 peewee.py:4713(iterate)
+        2    0.000    0.000    0.005    0.003 hybrid_strategy.py:203(_get_active_publish_map)
+        2    0.000    0.000    0.004    0.002 hybrid_strategy.py:89(<dictcomp>)
+       20    0.000    0.000    0.004    0.000 peewee.py:1868(__sql__)
+       42    0.000    0.000    0.004    0.000 peewee.py:8054(process_row)
+        2    0.000    0.000    0.004    0.002 hybrid_strategy.py:54(<listcomp>)
+      160    0.000    0.000    0.004    0.000 dataclasses.py:1265(asdict)
+ 1120/160    0.001    0.000    0.004    0.000 dataclasses.py:1289(_asdict_inner)
+     14/6    0.000    0.000    0.004    0.001 peewee.py:1524(__sql__)
+       42    0.000    0.000    0.004    0.000 peewee.py:8012(process_row)
+     1138    0.000    0.000    0.004    0.000 peewee.py:4966(python_value)
+       82    0.000    0.000    0.003    0.000 peewee.py:5445(adapt)
+       82    0.000    0.000    0.003    0.000 peewee.py:5410(format_date_time)
+        2    0.001    0.001    0.003    0.001 hybrid_strategy.py:244(_rrf_fusion)
+      246    0.000    0.000    0.003    0.000 {built-in method strptime}
+      246    0.000    0.000    0.003    0.000 _strptime.py:564(_strptime_datetime)
+   418/18    0.000    0.000    0.003    0.000 peewee.py:1444(__sql__)
+      246    0.001    0.000    0.002    0.000 _strptime.py:309(_strptime)
+      410    0.001    0.000    0.002    0.000 peewee.py:644(value)
+        2    0.000    0.000    0.002    0.001 peewee.py:6967(get_or_none)
+        2    0.000    0.000    0.002    0.001 peewee.py:6954(get)
+        2    0.000    0.000    0.002    0.001 peewee.py:7423(get)
+
+
+search_snippets=20 total_results=1532
+--- target=rrf size=medium repeat=2 keyword_mode=stubbed ---
+         10010 function calls in 0.004 seconds
+
+   Ordered by: cumulative time
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        2    0.002    0.001    0.004    0.002 hybrid_strategy.py:244(_rrf_fusion)
+        2    0.001    0.001    0.001    0.001 hybrid_strategy.py:268(<listcomp>)
+        2    0.000    0.000    0.001    0.000 {built-in method builtins.sorted}
+     5000    0.000    0.000    0.000    0.000 hybrid_strategy.py:266(<lambda>)
+     5000    0.000    0.000    0.000    0.000 {method 'get' of 'dict' objects}
+        1    0.000    0.000    0.000    0.000 {built-in method builtins.max}
+        2    0.000    0.000    0.000    0.000 {method 'keys' of 'dict' objects}
+        1    0.000    0.000    0.000    0.000 {method 'disable' of '_lsprof.Profiler' objects}
+
+
+rrf_results=2500 vector=1500 keyword=1000
+--- target=filter size=medium repeat=2 keyword_mode=stubbed ---
+         14008 function calls in 0.006 seconds
+
+   Ordered by: cumulative time
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        2    0.003    0.002    0.006    0.003 hybrid_strategy.py:171(_filter_vector_results)
+        2    0.002    0.001    0.002    0.001 hybrid_strategy.py:176(<setcomp>)
+    12000    0.000    0.000    0.000    0.000 typing.py:2287(cast)
+     2000    0.000    0.000    0.000    0.000 {method 'append' of 'list' objects}
+        1    0.000    0.000    0.000    0.000 {built-in method builtins.max}
+        1    0.000    0.000    0.000    0.000 {method 'disable' of '_lsprof.Profiler' objects}
+        2    0.000    0.000    0.000    0.000 profile_hybrid_strategy.py:253(<lambda>)
+
+
+filtered_results=1000 source_results=3000
+\end{lstlisting}
+
+
+\end{document}

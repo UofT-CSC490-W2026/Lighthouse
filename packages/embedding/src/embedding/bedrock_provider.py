@@ -6,7 +6,7 @@ from typing import Any
 
 import boto3
 from botocore.exceptions import ClientError
-from shared.config import EMBEDDING_DIMENSION, EMBEDDING_MODEL
+from shared.config import BEDROCK_EMBEDDING_DIMENSION, BEDROCK_EMBEDDING_MODEL
 
 from .base_provider import EmbeddingProvider
 
@@ -25,8 +25,8 @@ class BedrockEmbeddingProvider(EmbeddingProvider):
     def __init__(
         self,
         *,
-        model: str = EMBEDDING_MODEL,
-        dimensions: int = EMBEDDING_DIMENSION,
+        model: str = BEDROCK_EMBEDDING_MODEL,
+        dimensions: int = BEDROCK_EMBEDDING_DIMENSION,
         normalize: bool | None = None,
         region_name: str | None = None,
         client: Any | None = None,

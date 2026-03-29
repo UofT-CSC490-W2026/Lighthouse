@@ -19,7 +19,7 @@ _REGISTRY: dict[EmbeddingStrategy, type[EmbeddingProvider]] = {
 
 
 def get_embedding_provider(
-    strategy: EmbeddingStrategy = EmbeddingStrategy.BEDROCK,
+    strategy: EmbeddingStrategy = EmbeddingStrategy.OPENAI,
     **kwargs,
 ) -> EmbeddingProvider:
     """Instantiate an embedding provider by strategy name."""

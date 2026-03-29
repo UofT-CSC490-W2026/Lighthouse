@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from shared.config import DEFAULT_EMBEDDING_STRATEGY
 
 EMBED_BATCH_SIZE = 64
 
@@ -79,12 +78,38 @@ class EmbedBatchInput:
     batch_id: str
     offset: int
     limit: int
-    embedding_strategy: str = DEFAULT_EMBEDDING_STRATEGY
+    embedding_strategy: str = "openai"
 
 
 @dataclass
 class StoreChunksInput:
     batch_id: str
+
+
+@dataclass
+class PublishStagedChunksInput:
+    batch_id: str
+    repository_id: str
+    branch: str
+    changed_files: list[str] = field(default_factory=list)
+
+
+@dataclass
+class FilePublishCleanup:
+    file_path: str
+    previous_publish_id: str | None = None
+
+
+@dataclass
+class PublishStagedChunksOutput:
+    cleanup_targets: list[FilePublishCleanup] = field(default_factory=list)
+
+
+@dataclass
+class CleanupInactiveChunksInput:
+    repository_id: str
+    branch: str
+    cleanup_targets: list[FilePublishCleanup] = field(default_factory=list)
 
 
 @dataclass
@@ -96,16 +121,6 @@ class CleanupStagingInput:
 
 
 @dataclass
-class IndexRepoInput:
-    github_repo_id: int
-    repo_url: str
-    full_name: str
-    branches: list[str]
-    github_token: str | None = None
-    embedding_strategy: str = DEFAULT_EMBEDDING_STRATEGY
-
-
-@dataclass
 class IndexBranchInput:
     repository_id: str
     github_repo_id: int
@@ -114,7 +129,7 @@ class IndexBranchInput:
     branch: str
     github_token: str | None = None
     chunker_strategy: str = "sliding_window"
-    embedding_strategy: str = DEFAULT_EMBEDDING_STRATEGY
+    embedding_strategy: str = "openai"
 
 
 @dataclass
@@ -124,4 +139,4 @@ class IncrementalIndexInput:
     branch: str
     before_commit: str
     after_commit: str
-    embedding_strategy: str = DEFAULT_EMBEDDING_STRATEGY
+    embedding_strategy: str = "openai"
