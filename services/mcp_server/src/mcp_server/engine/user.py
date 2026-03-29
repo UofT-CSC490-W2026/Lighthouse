@@ -156,8 +156,10 @@ class UserEngine:
             ]
         )
 
+        token = self.engine.app.settings.internal_service_token
+        headers = {"Authorization": f"Bearer {token}"} if token else {}
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=30.0, headers=headers) as client:
                 resp = await client.post(
                     f"{ingestion_url}/index",
                     json=index_request.model_dump(exclude_none=True),

@@ -99,6 +99,13 @@ class Settings(BaseSettings):
             "ingestion_service_url",
         ),
     )
+    internal_service_token: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "INTERNAL_SERVICE_TOKEN",
+            "internal_service_token",
+        ),
+    )
 
     @classmethod
     def settings_customise_sources(

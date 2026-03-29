@@ -6,7 +6,8 @@ import json
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
+from shared.auth import verify_internal_token
 from shared.schemas.ingestion import (
     BranchStatus,
     IndexAcceptedResponse,
@@ -38,7 +39,7 @@ app = FastAPI(title="Lighthouse Ingestion Service", lifespan=lifespan)
 # --- Endpoints ---
 
 
-@app.post("/index", response_model=IndexAcceptedResponse)
+@app.post("/index", response_model=IndexAcceptedResponse, dependencies=[Depends(verify_internal_token)])
 async def index_repos(request: IndexRequest):
     """Kick off indexing workflows for the specified repositories."""
     temporal: Client = app.state.temporal_client
@@ -132,7 +133,7 @@ async def github_webhook(request: Request):
     return {"status": "accepted", "workflow_id": workflow_id}
 
 
-@app.get("/status/{github_repo_id:int}", response_model=IndexStatusResponse)
+@app.get("/status/{github_repo_id:int}", response_model=IndexStatusResponse, dependencies=[Depends(verify_internal_token)])
 async def get_status(github_repo_id: int):
     """Return indexing status for all branches of a repository."""
     from db import DatabaseManager, IndexedBranch, Repository
