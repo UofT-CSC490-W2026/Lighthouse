@@ -24,7 +24,7 @@ def test_load_synthetic_family_includes_required_task_type() -> None:
     assert family.config.family_name == "synthetic-ab-contracts"
     assert family.config.task_type == DEFAULT_SYNTHETIC_TASK_TYPE
     assert family.config.task_count == 10
-    assert len(family.tasks) == 10
+    assert len(family.tasks) == 100
     assert all(task.task_type == DEFAULT_SYNTHETIC_TASK_TYPE for task in family.tasks)
     assert family.tasks[0].consumer_edit_files
     assert family.tasks[0].consumer_test_files
@@ -43,6 +43,14 @@ def test_select_synthetic_tasks_is_deterministic_for_seeded_subset() -> None:
 def test_select_synthetic_tasks_rejects_unimplemented_shared_repo_topology() -> None:
     with pytest.raises(NotImplementedError):
         select_synthetic_tasks(shared_library_repo_count=2)
+
+
+@pytest.mark.unit
+def test_select_synthetic_tasks_accepts_full_hundred_task_slice() -> None:
+    _, tasks, seed = select_synthetic_tasks(task_count=100, seed=1)
+
+    assert seed == 1
+    assert len(tasks) == 100
 
 
 @pytest.mark.integration
@@ -74,9 +82,15 @@ def test_prepare_synthetic_workspace_refreshes_stale_materialization(tmp_path) -
         seed=7,
         workspace_root=tmp_path,
     )
+    family = load_synthetic_family()
     sentinel = workspace.workspace_dir / "stale.txt"
     sentinel.write_text("stale\n", encoding="utf-8")
-    stale_mtime = workspace.selection_manifest_path.stat().st_mtime - 3600
+    newest_family_mtime = max(
+        path.stat().st_mtime
+        for path in family.family_dir.rglob("*")
+        if path.is_file()
+    )
+    stale_mtime = newest_family_mtime - 3600
     os.utime(workspace.selection_manifest_path, (stale_mtime, stale_mtime))
 
     refreshed = prepare_synthetic_workspace(
