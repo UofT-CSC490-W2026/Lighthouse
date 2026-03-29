@@ -14,6 +14,7 @@ class SearchSettings(BaseSettings):
     milvus_uri: str = "http://localhost:19530"
     openai_api_key: str = ""
     cohere_api_key: str = ""
+    internal_service_token: str = ""
     rerank_model: str = DEFAULT_RERANK_MODEL
 
     model_config = {"env_prefix": "", "env_file": ".env", "extra": "ignore"}

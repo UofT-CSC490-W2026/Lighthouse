@@ -123,6 +123,7 @@ services:
       POSTGRES_DSN: postgresql://lighthouse:lighthouse@postgres:5432/lighthouse
       MILVUS_URI: http://milvus:19530
       TEMPORAL_ADDRESS: temporal:7233
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -166,6 +167,7 @@ services:
     environment:
       POSTGRES_DSN: postgresql://lighthouse:lighthouse@postgres:5432/lighthouse
       MILVUS_URI: http://milvus:19530
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -189,6 +191,7 @@ services:
       POSTGRES_DSN: postgresql://lighthouse:lighthouse@postgres:5432/lighthouse
       SEARCH_SERVICE_URL: http://search:8002
       INGESTION_SERVICE_URL: http://ingestion:8001
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-}
     depends_on:
       postgres:
         condition: service_healthy

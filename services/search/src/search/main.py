@@ -4,7 +4,8 @@ import logging
 from contextlib import asynccontextmanager
 
 from db import DatabaseManager
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
+from shared.auth import verify_internal_token
 from shared.config import MILVUS_COLLECTION_NAME
 from shared.schemas.search import SearchRequest, SearchResult
 from shared.config import EMBEDDING_MODEL
@@ -30,6 +31,7 @@ def create_app(
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         s = _settings or SearchSettings()
+        app.state.settings = s
 
         db_manager = DatabaseManager(s.postgres_dsn)
         db_manager.connect()
@@ -62,7 +64,7 @@ app = create_app(
 )
 
 
-@app.post("/search", response_model=SearchResult)
+@app.post("/search", response_model=SearchResult, dependencies=[Depends(verify_internal_token)])
 async def search(request: SearchRequest) -> SearchResult:
     strategy: SearchStrategy[SearchRequest, SearchResult] = app.state.strategy
     return await strategy.search(request)

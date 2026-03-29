@@ -14,6 +14,7 @@ class IngestionSettings(BaseSettings):
     milvus_uri: str = "http://localhost:19530"
     openai_api_key: str = ""
     github_webhook_secret: str = ""
+    internal_service_token: str = ""
     clone_base_dir: str = "/tmp/lighthouse_repos"
     temporal_address: str = "localhost:7233"
     temporal_task_queue: str = "ingestion"
