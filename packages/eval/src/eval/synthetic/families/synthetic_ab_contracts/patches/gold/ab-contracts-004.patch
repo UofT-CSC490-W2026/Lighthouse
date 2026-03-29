@@ -1,0 +1,9 @@
+diff --git a/consumer_app/emails.py b/consumer_app/emails.py
+--- a/consumer_app/emails.py
++++ b/consumer_app/emails.py
+@@ -4,4 +4,4 @@
+ 
+ 
+ def primary_contact(emails: list[str]) -> str:
+-    return emails[0]
++    return choose_primary_email(emails)

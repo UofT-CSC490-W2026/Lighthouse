@@ -1,0 +1,9 @@
+diff --git a/consumer_app/timeouts.py b/consumer_app/timeouts.py
+--- a/consumer_app/timeouts.py
++++ b/consumer_app/timeouts.py
+@@ -4,4 +4,4 @@
+ 
+ 
+ def client_timeout_ms(seconds: float | int | None) -> int:
+-    return seconds_to_timeout_ms(seconds) * 1000
++    return seconds_to_timeout_ms(seconds)

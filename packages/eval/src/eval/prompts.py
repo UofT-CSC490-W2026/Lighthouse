@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from shared.schemas.search import CodeSnippet
+from shared.schemas.search import CodeSnippet, WikiSnippet
 
 from eval.slice import SWEBenchTask
 
@@ -84,6 +84,58 @@ def build_lighthouse_user_message(
             "- Return ONLY a unified diff patch.",
             "- Use standard unified diff patch headers with `a/...` and `b/...` paths.",
             "- Use the retrieved code context when it is helpful, but do not assume it is complete.",
+            "- Keep the patch minimal and focused on fixing the bug.",
+            "- Do not include any explanations.",
+        ]
+    )
+    return "\n".join(parts)
+
+
+def build_wiki_lighthouse_user_message(
+    task: SWEBenchTask,
+    snippets: list[WikiSnippet],
+) -> str:
+    parts = [
+        "SWE-bench task",
+        "",
+        f"Instance ID: {task.instance_id}",
+        f"Repository: {task.repo}",
+        f"Base commit: {task.base_commit}",
+        f"Version: {task.version}",
+        "",
+        "Problem statement:",
+        task.problem_statement.strip(),
+        "",
+        "Retrieved repository wiki context from Lighthouse:",
+    ]
+
+    if not snippets:
+        parts.extend(
+            [
+                "- No wiki snippets were retrieved for this task.",
+                "",
+            ]
+        )
+    else:
+        for index, snippet in enumerate(snippets, start=1):
+            parts.extend(
+                [
+                    f"Wiki snippet {index}:",
+                    f"- Page: {snippet.page_title}",
+                    f"- Slug: {snippet.slug}",
+                    f"- Section path: {snippet.section_path}",
+                    "",
+                    snippet.content_snippet.rstrip(),
+                    "",
+                ]
+            )
+
+    parts.extend(
+        [
+            "Output requirements:",
+            "- Return ONLY a unified diff patch.",
+            "- Use standard unified diff patch headers with `a/...` and `b/...` paths.",
+            "- Use the retrieved wiki context when it is helpful, but do not assume it is complete.",
             "- Keep the patch minimal and focused on fixing the bug.",
             "- Do not include any explanations.",
         ]

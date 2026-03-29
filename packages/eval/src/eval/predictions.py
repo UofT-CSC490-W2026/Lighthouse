@@ -12,6 +12,10 @@ from eval.slice import SWEBenchTask
 
 _XML_BLOCK_RE = re.compile(r"\<([\w-]+)\>(.*?)\<\/\1\>", re.DOTALL)
 _FENCED_BLOCK_RE = re.compile(r"```(\w+)?\n(.*?)```", re.DOTALL)
+_HUNK_HEADER_RE = re.compile(
+    r"^@@ -(?P<old_start>\d+)(?:,(?P<old_count>\d+))? "
+    r"\+(?P<new_start>\d+)(?:,(?P<new_count>\d+))? @@(?P<suffix>.*)$"
+)
 
 
 @dataclass(frozen=True)
@@ -127,6 +131,59 @@ def extract_model_patch(response: str | None) -> str:
 
 def _normalize_patch_text(text: str) -> str:
     patch = text.strip()
+    patch = patch.replace("\r\n", "\n")
+    lines = [line for line in patch.split("\n") if line.strip() != "<diff>"]
+    if len(lines) >= 2 and lines[0].startswith("a/") and lines[1].startswith("b/"):
+        lines = [f"diff --git {lines[0]} {lines[1]}", *lines[2:]]
+    patch = _normalize_hunk_headers("\n".join(lines).strip())
     if patch and not patch.endswith("\n"):
         patch += "\n"
     return patch
+
+
+def _normalize_hunk_headers(patch: str) -> str:
+    lines = patch.split("\n")
+    normalized: list[str] = []
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+        match = _HUNK_HEADER_RE.match(line)
+        if match is None:
+            normalized.append(line)
+            index += 1
+            continue
+
+        next_index = index + 1
+        old_count = 0
+        new_count = 0
+        body_lines: list[str] = []
+        while next_index < len(lines):
+            candidate = lines[next_index]
+            if candidate.startswith(("diff --git ", "--- ", "+++ ", "@@ ")):
+                break
+            normalized_candidate = candidate
+            if candidate == "":
+                normalized_candidate = " "
+            elif not candidate.startswith((" ", "+", "-", "\\")):
+                normalized_candidate = f" {candidate}"
+            body_lines.append(normalized_candidate)
+            if normalized_candidate.startswith("\\ No newline at end of file"):
+                next_index += 1
+                continue
+            if normalized_candidate:
+                prefix = normalized_candidate[0]
+                if prefix in {" ", "-"}:
+                    old_count += 1
+                if prefix in {" ", "+"}:
+                    new_count += 1
+            next_index += 1
+
+        suffix = match.group("suffix")
+        normalized.append(
+            f"@@ -{match.group('old_start')},{old_count} "
+            f"+{match.group('new_start')},{new_count} @@{suffix}"
+        )
+        normalized.extend(body_lines)
+        index = next_index
+
+    return "\n".join(normalized)

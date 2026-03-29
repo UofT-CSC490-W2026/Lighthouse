@@ -1,0 +1,11 @@
+diff --git a/consumer_app/retries.py b/consumer_app/retries.py
+--- a/consumer_app/retries.py
++++ b/consumer_app/retries.py
+@@ -4,5 +4,5 @@
+ 
+ 
+ def describe_retry_delay(header: str | None) -> str:
+-    seconds = parse_retry_header(header) if header else 0
++    seconds = parse_retry_header(header)
+     suffix = "second" if seconds == 1 else "seconds"
+     return f"retry in {seconds} {suffix}"

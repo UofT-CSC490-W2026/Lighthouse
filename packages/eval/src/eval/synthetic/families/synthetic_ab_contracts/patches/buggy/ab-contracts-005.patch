@@ -1,0 +1,9 @@
+diff --git a/consumer_app/flags.py b/consumer_app/flags.py
+--- a/consumer_app/flags.py
++++ b/consumer_app/flags.py
+@@ -4,4 +4,4 @@
+ 
+ 
+ def is_beta_enabled(raw: str | None) -> bool:
+-    return parse_feature_flag(raw)
++    return bool(raw)

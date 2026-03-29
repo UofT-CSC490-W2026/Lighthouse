@@ -37,6 +37,7 @@ testing = { workspace = true }
 
 [tool.pytest.ini_options]
 testpaths = [
+  "packages/eval/tests",
   "packages/db/tests",
   "packages/vectordb/tests",
   "packages/embedding/tests",
@@ -57,6 +58,7 @@ filterwarnings = [
 
 [tool.coverage.run]
 source = [
+  "packages/eval/src",
   "packages/db/src",
   "packages/vectordb/src",
   "packages/embedding/src",
@@ -81,4 +83,4 @@ exclude_lines = [
 extend-exclude = ["assignments", "infra", "docs"]
 
 [tool.ty.src]
-exclude = ["assignments", "infra", "docs"]
+exclude = ["assignments", "infra", "docs", "packages/eval/src/eval/synthetic/families"]

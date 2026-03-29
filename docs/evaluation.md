@@ -1,10 +1,13 @@
 # Eval Package
 
-This document describes the new evaluation package under `packages/eval/`.
+This document describes the evaluation package under `packages/eval/`.
 
-It is intentionally narrower than the older `evaluation/` framework. The goal
-is to establish a reliable SWE-bench baseline path first, with manual checks
-after each step, before adding more datasets or more retrieval-aware behavior.
+It now supports two evaluation tracks:
+
+- a SWE-bench workflow that uses the official harness for image preparation and
+  scoring
+- a small synthetic A/B contract benchmark that is optimized for fast local
+  iteration and direct Lighthouse validation
 
 For the broader roadmap, see `docs/eval-package-plan.md`. This document only
 covers the package as it exists today.
@@ -12,24 +15,35 @@ covers the package as it exists today.
 Unless otherwise noted, all paths shown below are relative to the repository
 root.
 
+Before running Lighthouse-backed indexing or retrieval after pulling service or
+database-model changes, apply the database migrations from `packages/db` so the
+search and ingestion services match the current schema.
+
 ## Scope
 
 Current scope:
 
-- load a SWE-bench slice from Hugging Face
-- inspect the selected slice
+- load and inspect a SWE-bench slice from Hugging Face
 - prepare SWE-bench Docker images for that slice
 - index SWE-bench repositories into Lighthouse and write a repo registry file
-- generate baseline SWE-bench prediction JSONL with Bedrock
-- generate retrieval-augmented SWE-bench prediction JSONL with Lighthouse
-- evaluate predictions with the official SWE-bench harness
-- summarize harness results in a small human-readable report
+- generate Lighthouse wiki documentation for indexed SWE-bench repositories
+- generate baseline and retrieval-augmented SWE-bench prediction JSONL with Bedrock
+- evaluate SWE-bench predictions with the official harness and summarize the results
+- load a checked-in synthetic benchmark family with configurable task-count and seed overrides
+- materialize deterministic local synthetic repos under `.cache/eval/synthetic/...`
+- validate synthetic tasks by proving they fail before the gold patch and pass after it
+- index the shared synthetic provider repository into Lighthouse
+- generate provider-library wiki documentation for the synthetic benchmark
+- generate baseline and retrieval-augmented synthetic prediction JSONL with Bedrock
+- evaluate synthetic predictions locally and summarize the results
+- compare baseline and Lighthouse synthetic runs in a table
+- run a full synthetic experiment end to end with one command
 
 Current non-scope:
 
-- result comparison
-- support for datasets other than SWE-bench
 - commit-pinned retrieval instead of branch-based retrieval
+- synthetic task families beyond the first `api_contract_mismatch` family
+- synthetic topologies with more than one shared provider repository
 
 ## Design
 
@@ -55,9 +69,27 @@ packages/eval/
     indexing.py
     bedrock.py
     lighthouse.py
+    wiki.py
     prompts.py
     predictions.py
     summary.py
+    synthetic/
+      __init__.py
+      workspace.py
+      prompts.py
+      predictions.py
+      lighthouse.py
+      eval.py
+      compare.py
+      experiment.py
+      metadata.py
+      families/
+        synthetic_ab_contracts/
+          family.json
+          tasks.json
+          repo_a_template/
+          repo_b_template/
+          patches/
 ```
 
 ### `slice.py`
@@ -116,7 +148,7 @@ It:
 - waits for indexing completion
 - writes a registry JSON file that `generate-lighthouse` can consume later
 
-### `bedrock.py`, `lighthouse.py`, `prompts.py`, and `predictions.py`
+### `bedrock.py`, `lighthouse.py`, `wiki.py`, `prompts.py`, and `predictions.py`
 
 These files make up the current generation paths.
 
@@ -139,7 +171,7 @@ It uses only benchmark metadata from the selected task:
 `predictions.py` turns model responses into harness-compatible JSONL rows and
 writes them incrementally to disk.
 
-`lighthouse.py` is the retrieval layer for Lighthouse-augmented generation.
+`lighthouse.py` is the code-retrieval layer for Lighthouse-augmented generation.
 
 It:
 
@@ -148,6 +180,15 @@ It:
   - a repository registry JSON file, or
   - a single `--github-repo-id` override for one-repo slices
 - builds prompt-ready retrieved context for each SWE-bench task
+
+`wiki.py` is the wiki-generation and wiki-retrieval layer.
+
+It:
+
+- calls the ingestion service at `POST /generate-wiki`
+- polls the ingestion service at `GET /wiki-status/{github_repo_id}`
+- calls the search service at `POST /search/wiki`
+- builds prompt-ready wiki context for each SWE-bench task
 
 ### `summary.py`
 
@@ -165,6 +206,68 @@ It then turns those files into a smaller summary view containing:
 - whether the generated patch applied
 - how many `FAIL_TO_PASS` tests passed or failed
 - any remaining failing `FAIL_TO_PASS` test names
+
+### `synthetic/`
+
+The `synthetic/` package contains the synthetic benchmark path.
+
+`synthetic/workspace.py` contains:
+
+- synthetic family loading from checked-in `family.json` and `tasks.json`
+- deterministic task selection with `--task-count`, `--task-type`, and `--seed`
+- local repo materialization under `.cache/eval/synthetic/...`
+- git initialization and buggy patch application for each consumer repo
+- request helpers for synthetic indexing and wiki generation
+
+`synthetic/prompts.py` contains the synthetic baseline and retrieval prompt
+builders. These prompts intentionally avoid leakage:
+
+- no gold patches
+- no buggy patch paths
+- no expected relevant file hints in the baseline path
+
+`synthetic/predictions.py` writes synthetic prediction JSONL rows with:
+
+- `task_id`
+- `task_type`
+- `model_name_or_path`
+- `context_source`
+- `model_patch`
+- `full_output`
+
+`synthetic/lighthouse.py` is the Lighthouse-facing synthetic helper layer. It:
+
+- indexes the shared provider repository only
+- generates wiki documentation for the shared provider repository only
+- queries the code or wiki search endpoints against that provider repository
+- builds prompt-ready synthetic retrieval context
+
+`synthetic/eval.py` is the local synthetic evaluator. It:
+
+- validates checked-in tasks before they are used
+- applies model patches to consumer repo `A` only
+- runs the declared pytest targets locally with repo `B` exposed on `PYTHONPATH`
+- writes per-task results and a run summary under `.cache/eval/synthetic_runs/<run-id>/`
+- records SWE-bench-style aggregate counters such as `submitted_instances`, `completed_instances`, `resolved_instances`, `unresolved_instances`, `empty_patch_instances`, and `error_instances`
+- stamps each run with experiment metadata for generation and embedding configuration
+
+`synthetic/metadata.py` resolves experiment metadata for synthetic runs. It records:
+
+- generation model and region
+- indexing embedding strategy and model
+- query embedding strategy and model
+- retrieval context source and `top_k`
+
+`synthetic/experiment.py` is the orchestration layer for one-command synthetic
+experiments. It can:
+
+- prepare or rebuild the synthetic workspace
+- optionally validate the checked-in tasks
+- index the shared provider repo
+- optionally generate provider wiki documentation
+- generate baseline and Lighthouse predictions
+- evaluate both runs locally
+- compare the final runs and write comparison artifacts to disk
 
 ### Image Naming
 
@@ -216,10 +319,39 @@ Available commands today:
 - `show-slice`
 - `prepare-images`
 - `index-repos`
+- `prepare-wiki`
 - `generate-baseline`
 - `generate-lighthouse`
 - `evaluate`
 - `summarize`
+- `show-synthetic`
+- `prepare-synthetic`
+- `index-synthetic`
+- `prepare-synthetic-wiki`
+- `generate-synthetic-baseline`
+- `generate-synthetic-lighthouse`
+- `evaluate-synthetic`
+- `summarize-synthetic`
+- `compare-synthetic`
+- `run-synthetic-experiment`
+
+Shared synthetic selection arguments:
+
+- `--family`
+- `--task-count`
+- `--task-type`
+- `--seed`
+- `--shared-library-repo-count`
+
+Current synthetic v1 limits:
+
+- `--task-type` currently supports only `api_contract_mismatch`
+- `--shared-library-repo-count` must remain `1`
+
+Synthetic workspace-aware commands also accept:
+
+- `--workspace-root`
+- `--force-workspace`
 
 ### `show-slice`
 
@@ -280,11 +412,32 @@ Supported arguments:
 - `--github-token`
 - `--output`
 - `--status-poll-interval`
+- `--progress-heartbeat-seconds`
+- `--status-timeout-seconds`
+
+### `prepare-wiki`
+
+Generate Lighthouse wiki documentation for the repositories referenced by a
+selected SWE-bench slice. This command assumes the repositories were already
+indexed with `index-repos`.
+
+Supported arguments:
+
+- `--dataset-name`
+- `--split`
+- `--max-instances`
+- `--instance-id`
+- `--ingestion-url`
+- `--repo-registry`
+- `--github-repo-id`
+- `--branch`
+- `--status-poll-interval`
+- `--progress-heartbeat-seconds`
 - `--status-timeout-seconds`
 
 ### `generate-lighthouse`
 
-Load a selected SWE-bench slice, retrieve code context from Lighthouse, and
+Load a selected SWE-bench slice, retrieve code or wiki context from Lighthouse, and
 generate one prediction per task with Bedrock.
 
 Supported arguments:
@@ -304,6 +457,7 @@ Supported arguments:
 - `--github-repo-id`
 - `--branch`
 - `--top-k`
+- `--context-source`
 
 ### `evaluate`
 
@@ -334,7 +488,248 @@ Supported arguments:
 - `--run-id`
 - `--workdir`
 
-## Run Book
+### `show-synthetic`
+
+Print the selected synthetic task subset without materializing any repos.
+
+### `prepare-synthetic`
+
+Materialize the selected synthetic tasks locally and validate that each task:
+
+- fails in its buggy state
+- applies its gold patch cleanly
+- passes after the gold patch
+
+### `index-synthetic`
+
+Index the shared synthetic provider repository into Lighthouse using the local
+repo path from the materialized workspace.
+
+### `prepare-synthetic-wiki`
+
+Generate Lighthouse wiki documentation for the shared synthetic provider
+repository. This assumes `index-synthetic` has already completed.
+
+### `generate-synthetic-baseline`
+
+Generate baseline synthetic predictions with Bedrock using only the task
+statement, failing test context, and visible provider API names.
+
+### `generate-synthetic-lighthouse`
+
+Generate synthetic predictions with Lighthouse retrieval context. Supported
+context sources:
+
+- `code`
+- `wiki`
+
+### `evaluate-synthetic`
+
+Apply synthetic prediction patches to consumer repo `A`, run the declared
+pytest targets locally, and write structured results under:
+
+```text
+.cache/eval/synthetic_runs/<run-id>/
+```
+
+The synthetic summary uses the same aggregate counters as the SWE-bench
+harness summary:
+
+- `total_instances`
+- `submitted_instances`
+- `completed_instances`
+- `resolved_instances`
+- `unresolved_instances`
+- `empty_patch_instances`
+- `error_instances`
+
+Per-task synthetic summaries also mirror the SWE-bench report shape:
+
+- `patch_exists`
+- `patch_successfully_applied`
+- `FAIL_TO_PASS.success`
+- `FAIL_TO_PASS.failure`
+- `PASS_TO_PASS.failure`
+
+### `summarize-synthetic`
+
+Read a synthetic run summary back from disk and print a compact human-readable
+report.
+
+### `compare-synthetic`
+
+Load two synthetic runs, treat one as the baseline and the other as the
+Lighthouse run, and print:
+
+- an overall comparison table
+- a per-task comparison table
+
+Supported arguments:
+
+- `--baseline-run-id`
+- `--lighthouse-run-id`
+- `--runs-root`
+- `--baseline-label`
+- `--lighthouse-label`
+
+## Synthetic Run Book
+
+### One-Command Experiment
+
+```bash
+uv run --package eval python -m eval.cli run-synthetic-experiment \
+  --task-count 3 \
+  --seed 1 \
+  --run-prefix synthetic-code-3 \
+  --context-source code \
+  --model bedrock/us.amazon.nova-pro-v1:0
+```
+
+This writes:
+
+- baseline predictions under `.cache/eval/runs/`
+- Lighthouse predictions under `.cache/eval/runs/`
+- run summaries under `.cache/eval/synthetic_runs/`
+- comparison and experiment artifacts under `.cache/eval/synthetic_experiments/`
+
+If you want to compare different embedding configurations, reconfigure the
+running ingestion and search services, re-index with this command, and either:
+
+- let the runner infer embedding metadata from `services/ingestion/.env` and `services/search/.env`
+- pass explicit overrides with `--indexing-embedding-strategy`,
+  `--indexing-embedding-model`, `--query-embedding-strategy`, and
+  `--query-embedding-model`
+
+### 1. Inspect The Selected Synthetic Tasks
+
+```bash
+uv run --package eval python -m eval.cli show-synthetic --task-count 3 --seed 1
+```
+
+This prints:
+
+- the family name and version
+- the selected deterministic subset
+- each task id, task type, consumer repo, provider repo, and pytest targets
+
+### 2. Materialize And Validate The Synthetic Workspace
+
+```bash
+uv run --package eval python -m eval.cli prepare-synthetic \
+  --task-count 3 \
+  --seed 1
+```
+
+This materializes:
+
+- one shared provider repo `B`
+- one buggy consumer repo `A` per task
+- a repo registry JSON for the shared provider repo
+- a validation report proving the checked-in gold patches still resolve the tasks
+
+### 3. Index The Shared Provider Repo
+
+```bash
+uv run --package eval python -m eval.cli index-synthetic \
+  --task-count 3 \
+  --seed 1
+```
+
+This indexes the shared provider repo only. Consumer repos are not indexed in
+v1.
+
+### 4. Optionally Generate Provider Wiki Documentation
+
+```bash
+uv run --package eval python -m eval.cli prepare-synthetic-wiki \
+  --task-count 3 \
+  --seed 1
+```
+
+### 5. Generate Baseline Synthetic Predictions
+
+```bash
+uv run --package eval python -m eval.cli generate-synthetic-baseline \
+  --task-count 3 \
+  --seed 1 \
+  --output .cache/eval/runs/synthetic-baseline-3.jsonl
+```
+
+### 6. Generate Retrieval-Augmented Synthetic Predictions
+
+Code retrieval:
+
+```bash
+uv run --package eval python -m eval.cli generate-synthetic-lighthouse \
+  --task-count 3 \
+  --seed 1 \
+  --context-source code \
+  --output .cache/eval/runs/synthetic-code-3.jsonl
+```
+
+Wiki retrieval:
+
+```bash
+uv run --package eval python -m eval.cli generate-synthetic-lighthouse \
+  --task-count 3 \
+  --seed 1 \
+  --context-source wiki \
+  --output .cache/eval/runs/synthetic-wiki-3.jsonl
+```
+
+### 7. Evaluate Synthetic Predictions Locally
+
+```bash
+uv run --package eval python -m eval.cli evaluate-synthetic \
+  --task-count 3 \
+  --seed 1 \
+  --predictions .cache/eval/runs/synthetic-baseline-3.jsonl \
+  --run-id synthetic-baseline-3
+```
+
+### 8. Summarize The Synthetic Run
+
+```bash
+uv run --package eval python -m eval.cli summarize-synthetic \
+  --run-id synthetic-baseline-3
+```
+
+### 9. Compare Baseline And Lighthouse
+
+```bash
+uv run --package eval python -m eval.cli compare-synthetic \
+  --baseline-run-id synthetic-baseline-3 \
+  --lighthouse-run-id synthetic-code-3
+```
+
+This prints two tables:
+
+- an overall table with the SWE-bench aggregate field names:
+  `total_instances`, `submitted_instances`, `completed_instances`,
+  `resolved_instances`, `unresolved_instances`, `empty_patch_instances`, and
+  `error_instances`
+- a per-task table showing baseline status, Lighthouse status, failing-test
+  counts, and whether Lighthouse improved, regressed, or stayed unchanged
+
+### `run-synthetic-experiment`
+
+Run the full synthetic flow in one command:
+
+- prepare the workspace
+- optionally validate the tasks
+- index the shared provider repo
+- optionally generate provider wiki documentation
+- generate baseline and Lighthouse predictions
+- evaluate both runs
+- print and persist the comparison table
+
+The command writes experiment artifacts under:
+
+```text
+.cache/eval/synthetic_experiments/
+```
+
+## SWE-bench Run Book
 
 ### 1. Show The Slice
 
@@ -621,12 +1016,42 @@ Repository registry: .cache/eval/repo-registry.json
 The resulting registry file is the input you can reuse for later
 `generate-lighthouse` runs.
 
-### 6. Generate Lighthouse-Augmented Predictions
+### 6. Prepare Lighthouse Wiki Generation
+
+If you want to evaluate the doc-generation path, run wiki generation after the
+repositories are indexed.
+
+For the current 3-instance smoke slice:
+
+```bash
+uv run --package eval python -m eval.cli prepare-wiki \
+  --max-instances 3 \
+  --ingestion-url http://localhost:8001 \
+  --repo-registry .cache/eval/repo-registry.json
+```
+
+Expected output shape:
+
+```text
+SWE-bench slice: 3 instance(s) from princeton-nlp/SWE-bench_Lite [test]
+...
+Ingestion service URL: http://localhost:8001
+Repository registry: .cache/eval/repo-registry.json
+Submitting ... wiki generation request(s)
+Started wiki generation for astropy/astropy@main (wiki-...)
+Accepted workflows: wiki-...
+Still waiting after ...s for wiki generation: astropy/astropy@main
+Wiki ready: astropy/astropy@main (... page(s))
+Wiki preparation completed.
+```
+
+### 7. Generate Lighthouse-Augmented Predictions
 
 Before using Lighthouse retrieval, make sure:
 
 - the search service is running
 - the repository for the selected SWE-bench tasks has already been indexed
+- wiki generation has already completed if you plan to use `--context-source wiki`
 - you know either:
   - the indexed repository's `github_repo_id`, or
   - a registry file that maps `owner/repo` to `github_repo_id` and `branch`
@@ -640,6 +1065,7 @@ uv run --package eval python -m eval.cli generate-lighthouse \
   --github-repo-id <github-repo-id> \
   --branch main \
   --search-url http://localhost:8002 \
+  --context-source code \
   --output .cache/eval/runs/lighthouse-1.jsonl
 ```
 
@@ -662,8 +1088,12 @@ uv run --package eval python -m eval.cli generate-lighthouse \
   --max-instances 3 \
   --repo-registry .cache/eval/repo-registry.json \
   --search-url http://localhost:8002 \
+  --context-source code \
   --output .cache/eval/runs/lighthouse-3.jsonl
 ```
+
+To use the doc-generation path instead of code snippets, change
+`--context-source code` to `--context-source wiki`.
 
 Expected output shape:
 
@@ -676,6 +1106,7 @@ SWE-bench slice: 1 instance(s) from princeton-nlp/SWE-bench_Lite [test]
 Model: bedrock/us.amazon.nova-lite-v1:0
 Bedrock region: us-east-1
 Search service URL: http://localhost:8002
+Context source: code
 GitHub repo id override: ...
 Branch override: main
 Output file: .cache/eval/runs/lighthouse-1.jsonl
@@ -693,7 +1124,7 @@ Then inspect the file directly:
 sed -n '1,5p' .cache/eval/runs/lighthouse-1.jsonl
 ```
 
-### 7. Evaluate Predictions
+### 8. Evaluate Predictions
 
 Once you have a predictions file, run the official SWE-bench harness through
 the new wrapper.
@@ -774,7 +1205,7 @@ uv run --package eval python -m eval.cli evaluate \
   --max-workers 1
 ```
 
-### 8. Summarize A Completed Run
+### 9. Summarize A Completed Run
 
 Once an evaluation has finished, you can print a compact summary without
 opening the raw harness JSON files manually.

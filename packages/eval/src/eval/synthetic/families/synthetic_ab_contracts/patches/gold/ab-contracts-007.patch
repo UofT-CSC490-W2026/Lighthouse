@@ -1,0 +1,9 @@
+diff --git a/consumer_app/tags.py b/consumer_app/tags.py
+--- a/consumer_app/tags.py
++++ b/consumer_app/tags.py
+@@ -4,4 +4,4 @@
+ 
+ 
+ def normalized_tag_line(tags: list[str]) -> str:
+-    return ", ".join(sorted(normalize_tags(tags)))
++    return ", ".join(normalize_tags(tags))
