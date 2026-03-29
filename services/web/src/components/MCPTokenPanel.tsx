@@ -1,9 +1,27 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { apiFetch, type MCPTokenState } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+
+function buildMcpJsonTemplate(mcpBaseUrl: string): string {
+  const base = mcpBaseUrl.replace(/\/$/, "");
+  return JSON.stringify(
+    {
+      mcpServers: {
+        lighthouse: {
+          url: `${base}/mcp`,
+          headers: {
+            Authorization: "Bearer ${env:LIGHTHOUSE_MCP_TOKEN}",
+          },
+        },
+      },
+    },
+    null,
+    2
+  );
+}
 
 export function MCPTokenPanel() {
   const [tokenState, setTokenState] = useState<MCPTokenState | null>(null);
@@ -11,7 +29,17 @@ export function MCPTokenPanel() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [configCopied, setConfigCopied] = useState(false);
   const [expanded, setExpanded] = useState(false);
+
+  const mcpJsonTemplate = useMemo(() => {
+    const base =
+      typeof import.meta.env.VITE_MCP_URL === "string" &&
+      import.meta.env.VITE_MCP_URL.trim()
+        ? import.meta.env.VITE_MCP_URL.trim()
+        : "http://localhost:8000";
+    return buildMcpJsonTemplate(base);
+  }, []);
 
   useEffect(() => {
     void loadToken();
@@ -40,6 +68,16 @@ export function MCPTokenPanel() {
       window.setTimeout(() => setCopied(false), 1500);
     } catch {
       setError("Failed to copy token to clipboard.");
+    }
+  }
+
+  async function handleCopyConfig() {
+    try {
+      await navigator.clipboard.writeText(mcpJsonTemplate);
+      setConfigCopied(true);
+      window.setTimeout(() => setConfigCopied(false), 1500);
+    } catch {
+      setError("Failed to copy MCP config to clipboard.");
     }
   }
 
@@ -137,6 +175,32 @@ export function MCPTokenPanel() {
                   <p className="text-xs text-muted-foreground">
                     Issued {issuedAt ?? "just now"}
                   </p>
+
+                  <div className="space-y-2">
+                    <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      Cursor <code className="font-mono text-[0.95em]">mcp.json</code>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Merge this into{" "}
+                      <code className="rounded bg-muted px-1 py-0.5 font-mono text-[0.95em]">
+                        ~/.cursor/mcp.json
+                      </code>{" "}
+                      or{" "}
+                      <code className="rounded bg-muted px-1 py-0.5 font-mono text-[0.95em]">
+                        .cursor/mcp.json
+                      </code>
+                      . Set environment variable{" "}
+                      <code className="font-mono text-[0.95em]">LIGHTHOUSE_MCP_TOKEN</code>{" "}
+                      to the token above (Cursor expands{" "}
+                      <code className="font-mono text-[0.95em]">${"{env:LIGHTHOUSE_MCP_TOKEN}"}</code>
+                      ).
+                    </p>
+                    <div className="border border-border bg-muted p-3">
+                      <pre className="max-h-64 overflow-auto text-xs leading-relaxed text-foreground font-mono">
+                        {mcpJsonTemplate}
+                      </pre>
+                    </div>
+                  </div>
                 </div>
               ) : (
                 <div className="border border-dashed border-border bg-muted px-4 py-3 text-xs text-muted-foreground">
@@ -152,14 +216,24 @@ export function MCPTokenPanel() {
 
               <div className="flex flex-wrap gap-2">
                 {tokenState?.has_token && tokenState.token ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={handleCopy}
-                  >
-                    {copied ? "Copied!" : "Copy Token"}
-                  </Button>
+                  <>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleCopy}
+                    >
+                      {copied ? "Copied!" : "Copy Token"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void handleCopyConfig()}
+                    >
+                      {configCopied ? "Copied!" : "Copy MCP config"}
+                    </Button>
+                  </>
                 ) : null}
 
                 <Button
