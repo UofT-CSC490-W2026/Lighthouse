@@ -21,6 +21,7 @@ from eval.harness import (
 )
 from eval.indexing import (
     DEFAULT_INGESTION_URL,
+    DEFAULT_PROGRESS_HEARTBEAT_SECONDS,
     DEFAULT_REPO_REGISTRY_OUTPUT,
     DEFAULT_STATUS_POLL_INTERVAL_SECONDS,
     DEFAULT_STATUS_TIMEOUT_SECONDS,
@@ -153,11 +154,30 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Seconds between ingestion status polls",
     )
     index_repos.add_argument(
+        "--progress-heartbeat-seconds",
+        type=float,
+        default=DEFAULT_PROGRESS_HEARTBEAT_SECONDS,
+        help="Seconds between 'still waiting' progress heartbeat lines",
+    )
+    index_repos.add_argument(
         "--status-timeout-seconds",
         type=float,
         default=DEFAULT_STATUS_TIMEOUT_SECONDS,
         help="Maximum total wait time for indexing completion",
     )
+    index_repos.add_argument(
+        "--stream-worker-logs",
+        dest="stream_worker_logs",
+        action="store_true",
+        help="Stream local ingestion-worker Docker logs while waiting for indexing",
+    )
+    index_repos.add_argument(
+        "--no-stream-worker-logs",
+        dest="stream_worker_logs",
+        action="store_false",
+        help="Disable local ingestion-worker Docker log streaming",
+    )
+    index_repos.set_defaults(stream_worker_logs=None)
 
     generate_baseline = subparsers.add_parser(
         "generate-baseline",
@@ -429,6 +449,8 @@ def _cmd_prepare_images(args: argparse.Namespace) -> int:
 
 def _cmd_index_repos(args: argparse.Namespace) -> int:
     _validate_slice_selection(args)
+    if args.progress_heartbeat_seconds < 1:
+        raise ValueError("--progress-heartbeat-seconds must be at least 1")
 
     tasks = load_swebench_slice(
         dataset_name=args.dataset_name,
@@ -443,7 +465,9 @@ def _cmd_index_repos(args: argparse.Namespace) -> int:
         ingestion_url=args.ingestion_url,
         output_path=Path(args.output),
         github_token=args.github_token,
+        stream_worker_logs=args.stream_worker_logs,
         poll_interval_seconds=args.status_poll_interval,
+        progress_heartbeat_seconds=args.progress_heartbeat_seconds,
         timeout_seconds=args.status_timeout_seconds,
     )
     print(f"Repository registry: {output_path}")

@@ -587,6 +587,21 @@ uv run --package eval python -m eval.cli index-repos \
   --output .cache/eval/repo-registry.json
 ```
 
+For local runs against `localhost`, `index-repos` automatically streams
+`ingestion-worker` Docker logs while it waits. It also prints periodic
+"Still waiting ..." heartbeat lines if the branch status has not changed for a
+while.
+
+If you want quieter output, disable the log stream explicitly:
+
+```bash
+uv run --package eval python -m eval.cli index-repos \
+  --max-instances 3 \
+  --ingestion-url http://localhost:8001 \
+  --no-stream-worker-logs \
+  --output .cache/eval/repo-registry.json
+```
+
 Expected output shape:
 
 ```text
@@ -596,7 +611,9 @@ Resolving GitHub metadata for astropy/astropy
     resolved -> github_repo_id=..., branch=main
 Submitting ... repository indexing request(s)
 Accepted workflows: index-...
+[ingestion-worker] ...
 Index status: astropy/astropy@main -> ...
+Still waiting after ...: astropy/astropy@main=indexing
 Index status: astropy/astropy@main -> indexed
 Repository registry: .cache/eval/repo-registry.json
 ```

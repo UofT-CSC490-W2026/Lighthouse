@@ -2,9 +2,15 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
+import sys
+import threading
 import time
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urlparse
 
 import httpx
 from shared.schemas.ingestion import (
@@ -21,6 +27,8 @@ DEFAULT_INGESTION_URL = "http://localhost:8001"
 DEFAULT_REPO_REGISTRY_OUTPUT = Path(".cache/eval/repo-registry.json")
 DEFAULT_STATUS_POLL_INTERVAL_SECONDS = 5.0
 DEFAULT_STATUS_TIMEOUT_SECONDS = 1_800.0
+DEFAULT_PROGRESS_HEARTBEAT_SECONDS = 30.0
+ACTIVE_INDEX_STATUSES = {"indexing", "pending", "in_progress"}
 
 
 @dataclass(frozen=True)
@@ -31,13 +39,94 @@ class ResolvedRepository:
     branch: str
 
 
+class IngestionWorkerLogStreamer(AbstractContextManager["IngestionWorkerLogStreamer"]):
+    def __init__(self, *, compose_root: Path | None, enabled: bool) -> None:
+        self.compose_root = compose_root
+        self.enabled = enabled
+        self._process: subprocess.Popen[str] | None = None
+        self._thread: threading.Thread | None = None
+
+    def __enter__(self) -> IngestionWorkerLogStreamer:
+        if not self.enabled:
+            return self
+        if self.compose_root is None:
+            print(
+                "Skipping ingestion-worker log streaming because no Docker Compose "
+                "project root was found."
+            )
+            return self
+
+        since = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        try:
+            self._process = subprocess.Popen(
+                [
+                    "docker",
+                    "compose",
+                    "logs",
+                    "--no-color",
+                    "--follow",
+                    "--since",
+                    since,
+                    "ingestion-worker",
+                ],
+                cwd=str(self.compose_root),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+            )
+        except FileNotFoundError:
+            print("Skipping ingestion-worker log streaming because Docker is not installed.")
+            self._process = None
+            return self
+        except OSError as exc:
+            print(f"Skipping ingestion-worker log streaming: {exc}")
+            self._process = None
+            return self
+
+        print("Streaming local ingestion-worker logs while indexing...")
+        self._thread = threading.Thread(target=self._pump_output, daemon=True)
+        self._thread.start()
+        return self
+
+    def __exit__(self, exc_type, exc, exc_tb) -> None:
+        process = self._process
+        if process is None:
+            return None
+
+        if process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=3)
+
+        thread = self._thread
+        if thread is not None:
+            thread.join(timeout=1)
+        return None
+
+    def _pump_output(self) -> None:
+        process = self._process
+        if process is None or process.stdout is None:
+            return
+        for raw_line in process.stdout:
+            line = raw_line.rstrip()
+            if not line:
+                continue
+            print(f"[ingestion-worker] {line}", flush=True)
+
+
 def index_swebench_repositories(
     *,
     tasks: list[SWEBenchTask],
     ingestion_url: str = DEFAULT_INGESTION_URL,
     output_path: Path = DEFAULT_REPO_REGISTRY_OUTPUT,
     github_token: str | None = None,
+    stream_worker_logs: bool | None = None,
     poll_interval_seconds: float = DEFAULT_STATUS_POLL_INTERVAL_SECONDS,
+    progress_heartbeat_seconds: float = DEFAULT_PROGRESS_HEARTBEAT_SECONDS,
     timeout_seconds: float = DEFAULT_STATUS_TIMEOUT_SECONDS,
 ) -> Path:
     if not tasks:
@@ -46,60 +135,91 @@ def index_swebench_repositories(
         raise ValueError("ingestion_url must not be empty.")
     if poll_interval_seconds <= 0:
         raise ValueError("poll_interval_seconds must be greater than 0.")
+    if progress_heartbeat_seconds <= 0:
+        raise ValueError("progress_heartbeat_seconds must be greater than 0.")
     if timeout_seconds <= 0:
         raise ValueError("timeout_seconds must be greater than 0.")
 
     token = github_token or os.environ.get("GITHUB_TOKEN")
     resolved_repos = resolve_repositories(tasks=tasks, github_token=token)
     normalized_ingestion_url = ingestion_url.rstrip("/")
+    compose_root = find_compose_project_root(Path.cwd())
+    should_stream_logs = resolve_stream_worker_logs_setting(
+        stream_worker_logs=stream_worker_logs,
+        ingestion_url=normalized_ingestion_url,
+        compose_root=compose_root,
+    )
 
-    with httpx.Client(timeout=30.0) as client:
-        already_indexed: dict[str, ResolvedRepository] = {}
-        to_index: list[ResolvedRepository] = []
+    with IngestionWorkerLogStreamer(
+        compose_root=compose_root,
+        enabled=should_stream_logs,
+    ):
+        with httpx.Client(timeout=30.0) as client:
+            already_indexed: dict[str, ResolvedRepository] = {}
+            already_indexing: dict[str, ResolvedRepository] = {}
+            to_index: list[ResolvedRepository] = []
+            initial_statuses: dict[str, str | None] = {}
 
-        for repo in resolved_repos:
-            status = get_index_status(
-                client=client,
-                ingestion_url=normalized_ingestion_url,
-                github_repo_id=repo.github_repo_id,
-            )
-            branch_status = branch_status_for(status, repo.branch) if status is not None else None
-            if branch_status == "indexed":
-                print(f"Already indexed: {repo.full_name}@{repo.branch}")
-                already_indexed[repo.full_name] = repo
+            for repo in resolved_repos:
+                status = get_index_status(
+                    client=client,
+                    ingestion_url=normalized_ingestion_url,
+                    github_repo_id=repo.github_repo_id,
+                )
+                branch_status = normalize_branch_status(
+                    branch_status_for(status, repo.branch) if status is not None else None
+                )
+                initial_statuses[repo.full_name] = branch_status
+                if branch_status == "indexed":
+                    print(f"Already indexed: {repo.full_name}@{repo.branch}")
+                    already_indexed[repo.full_name] = repo
+                elif branch_status in ACTIVE_INDEX_STATUSES:
+                    print(f"Already indexing: {repo.full_name}@{repo.branch}")
+                    already_indexing[repo.full_name] = repo
+                else:
+                    to_index.append(repo)
+
+            if to_index:
+                print(f"Submitting {len(to_index)} repository indexing request(s)")
+                request = IndexRequest(
+                    repositories=[
+                        RepoIndexRequest(
+                            github_repo_id=repo.github_repo_id,
+                            repo_url=repo.repo_url,
+                            full_name=repo.full_name,
+                            branches=[repo.branch],
+                            github_token=token,
+                        )
+                        for repo in to_index
+                    ]
+                )
+                response = client.post(
+                    f"{normalized_ingestion_url}/index",
+                    json=request.model_dump(mode="json"),
+                )
+                response.raise_for_status()
+                accepted = IndexAcceptedResponse.model_validate(response.json())
+                print(f"Accepted workflows: {', '.join(accepted.workflow_ids)}")
+            elif already_indexing:
+                print("Selected repositories already have indexing in progress.")
             else:
-                to_index.append(repo)
+                print(
+                    "All selected repositories are already indexed for the requested branches."
+                )
 
-        if to_index:
-            print(f"Submitting {len(to_index)} repository indexing request(s)")
-            request = IndexRequest(
-                repositories=[
-                    RepoIndexRequest(
-                        github_repo_id=repo.github_repo_id,
-                        repo_url=repo.repo_url,
-                        full_name=repo.full_name,
-                        branches=[repo.branch],
-                        github_token=token,
-                    )
-                    for repo in to_index
-                ]
-            )
-            response = client.post(
-                f"{normalized_ingestion_url}/index",
-                json=request.model_dump(mode="json"),
-            )
-            response.raise_for_status()
-            accepted = IndexAcceptedResponse.model_validate(response.json())
-            print(f"Accepted workflows: {', '.join(accepted.workflow_ids)}")
-            wait_for_indexing(
-                client=client,
-                ingestion_url=normalized_ingestion_url,
-                repos=to_index,
-                poll_interval_seconds=poll_interval_seconds,
-                timeout_seconds=timeout_seconds,
-            )
-        else:
-            print("All selected repositories are already indexed for the requested branches.")
+            if to_index or already_indexing:
+                wait_for_indexing(
+                    client=client,
+                    ingestion_url=normalized_ingestion_url,
+                    repos=[*already_indexing.values(), *to_index],
+                    initial_statuses=initial_statuses,
+                    allow_stale_terminal_statuses={
+                        repo.full_name for repo in to_index
+                    },
+                    poll_interval_seconds=poll_interval_seconds,
+                    progress_heartbeat_seconds=progress_heartbeat_seconds,
+                    timeout_seconds=timeout_seconds,
+                )
 
     registry = {
         repo.full_name: RepoRegistryEntry(
@@ -191,17 +311,54 @@ def branch_status_for(status: IndexStatusResponse, branch_name: str) -> str | No
     return None
 
 
+def normalize_branch_status(status: str | None) -> str | None:
+    if status is None:
+        return None
+    return status.strip().lower()
+
+
+def resolve_stream_worker_logs_setting(
+    *,
+    stream_worker_logs: bool | None,
+    ingestion_url: str,
+    compose_root: Path | None,
+) -> bool:
+    if stream_worker_logs is not None:
+        return stream_worker_logs
+    if compose_root is None:
+        return False
+
+    parsed = urlparse(ingestion_url if "://" in ingestion_url else f"http://{ingestion_url}")
+    hostname = (parsed.hostname or "").strip().lower()
+    return hostname in {"localhost", "127.0.0.1", "::1"}
+
+
+def find_compose_project_root(start: Path) -> Path | None:
+    current = start.resolve()
+    candidates = ("docker-compose.yml", "compose.yml", "compose.yaml")
+    for directory in (current, *current.parents):
+        if any((directory / candidate).exists() for candidate in candidates):
+            return directory
+    return None
+
+
 def wait_for_indexing(
     *,
     client: httpx.Client,
     ingestion_url: str,
     repos: list[ResolvedRepository],
+    initial_statuses: dict[str, str | None],
+    allow_stale_terminal_statuses: set[str],
     poll_interval_seconds: float,
+    progress_heartbeat_seconds: float,
     timeout_seconds: float,
 ) -> None:
+    start_time = time.monotonic()
     deadline = time.monotonic() + timeout_seconds
     pending = {repo.full_name: repo for repo in repos}
     last_seen_status: dict[str, str] = {}
+    seen_live_progress: set[str] = set()
+    last_heartbeat_at = start_time
 
     while pending:
         if time.monotonic() > deadline:
@@ -213,30 +370,66 @@ def wait_for_indexing(
                 f"{pending_display}"
             )
 
+        status_changed = False
         for full_name, repo in list(pending.items()):
             status = get_index_status(
                 client=client,
                 ingestion_url=ingestion_url,
                 github_repo_id=repo.github_repo_id,
             )
-            branch_status = branch_status_for(status, repo.branch) if status is not None else None
+            branch_status = normalize_branch_status(
+                branch_status_for(status, repo.branch) if status is not None else None
+            )
             normalized_status = branch_status or "pending"
 
             if last_seen_status.get(full_name) != normalized_status:
                 print(f"Index status: {repo.full_name}@{repo.branch} -> {normalized_status}")
                 last_seen_status[full_name] = normalized_status
+                status_changed = True
+
+            if normalized_status in ACTIVE_INDEX_STATUSES or normalized_status == "indexed":
+                seen_live_progress.add(full_name)
 
             if normalized_status == "indexed":
                 pending.pop(full_name)
                 continue
 
             if normalized_status in {"failed", "error"}:
+                initial_status = initial_statuses.get(full_name)
+                if (
+                    full_name in allow_stale_terminal_statuses
+                    and full_name not in seen_live_progress
+                    and initial_status in {"failed", "error"}
+                    and normalized_status == initial_status
+                ):
+                    continue
                 raise RuntimeError(
                     f"Repository indexing failed for {repo.full_name}@{repo.branch}"
                 )
 
         if pending:
+            now = time.monotonic()
+            if not status_changed and now - last_heartbeat_at >= progress_heartbeat_seconds:
+                elapsed = format_elapsed(now - start_time)
+                pending_display = ", ".join(
+                    f"{repo.full_name}@{repo.branch}={last_seen_status.get(full_name, 'pending')}"
+                    for full_name, repo in pending.items()
+                )
+                print(f"Still waiting after {elapsed}: {pending_display}")
+                sys.stdout.flush()
+                last_heartbeat_at = now
             time.sleep(poll_interval_seconds)
+
+
+def format_elapsed(seconds: float) -> str:
+    total_seconds = max(int(seconds), 0)
+    minutes, remaining_seconds = divmod(total_seconds, 60)
+    hours, remaining_minutes = divmod(minutes, 60)
+    if hours:
+        return f"{hours}h {remaining_minutes}m {remaining_seconds}s"
+    if minutes:
+        return f"{minutes}m {remaining_seconds}s"
+    return f"{remaining_seconds}s"
 
 
 def write_repo_registry(
