@@ -5,8 +5,12 @@ from pathlib import Path
 
 import httpx
 from shared.schemas.ingestion import IndexAcceptedResponse
-from shared.schemas.search import SearchRequest, SearchResult, WikiSearchRequest, WikiSearchResult
-from shared.schemas.wiki import GenerateWikiAcceptedResponse
+from shared.schemas.search import (
+    SearchRequest,
+    SearchResult,
+    WikiSearchRequest,
+    WikiSearchResult,
+)
 
 from eval.indexing import (
     DEFAULT_INGESTION_URL,
@@ -30,6 +34,7 @@ from eval.wiki import (
     ACTIVE_WIKI_STATUSES,
     get_wiki_status,
     normalize_wiki_status,
+    submit_wiki_generation_request,
     wait_for_wiki_generation,
 )
 from .prompts import (
@@ -79,8 +84,12 @@ def index_synthetic_repository(
         compose_root=compose_root,
     )
 
-    with IngestionWorkerLogStreamer(compose_root=compose_root, enabled=should_stream_logs):
-        with httpx.Client(timeout=30.0, headers=_build_internal_service_headers()) as client:
+    with IngestionWorkerLogStreamer(
+        compose_root=compose_root, enabled=should_stream_logs
+    ):
+        with httpx.Client(
+            timeout=30.0, headers=_build_internal_service_headers()
+        ) as client:
             status = get_index_status(
                 client=client,
                 ingestion_url=normalized_ingestion_url,
@@ -109,9 +118,13 @@ def index_synthetic_repository(
                 )
                 return workspace.repo_registry_path.resolve()
 
-            print(f"Submitting synthetic indexing request for {repo.full_name}@{repo.branch}")
+            print(
+                f"Submitting synthetic indexing request for {repo.full_name}@{repo.branch}"
+            )
             repo_url_override: str | None = None
-            if compose_root is not None and _is_local_service_url(normalized_ingestion_url):
+            if compose_root is not None and _is_local_service_url(
+                normalized_ingestion_url
+            ):
                 repo_url_override = synthetic_repo_url_for_container(
                     workspace,
                     compose_root=compose_root,
@@ -166,7 +179,9 @@ def prepare_synthetic_wiki(
     full_name = shared_resolved_repository(workspace).full_name
     normalized_ingestion_url = ingestion_url.rstrip("/")
 
-    with httpx.Client(timeout=30.0, headers=_build_internal_service_headers()) as client:
+    with httpx.Client(
+        timeout=30.0, headers=_build_internal_service_headers()
+    ) as client:
         status = get_wiki_status(
             client=client,
             ingestion_url=normalized_ingestion_url,
@@ -177,7 +192,9 @@ def prepare_synthetic_wiki(
 
         if normalized_status == "completed":
             page_count = 0 if status is None else status.page_count
-            print(f"Wiki already generated: {full_name}@{repo.branch} ({page_count} page(s))")
+            print(
+                f"Wiki already generated: {full_name}@{repo.branch} ({page_count} page(s))"
+            )
             return
 
         repos_to_wait_for = {full_name: repo}
@@ -185,12 +202,13 @@ def prepare_synthetic_wiki(
             print(f"Wiki already generating: {full_name}@{repo.branch}")
         else:
             request = build_synthetic_wiki_request(workspace)
-            response = client.post(
-                f"{normalized_ingestion_url}/generate-wiki",
-                json=request.model_dump(mode="json"),
+            accepted = submit_wiki_generation_request(
+                client=client,
+                ingestion_url=normalized_ingestion_url,
+                github_repo_id=request.github_repo_id,
+                branch=request.branch,
+                repo_display_name=f"{full_name}@{repo.branch}",
             )
-            response.raise_for_status()
-            accepted = GenerateWikiAcceptedResponse.model_validate(response.json())
             print(
                 f"Started wiki generation for {full_name}@{repo.branch} "
                 f"({accepted.workflow_id})"
@@ -224,10 +242,14 @@ def build_synthetic_lighthouse_messages(
     normalized_search_url = search_service_url.rstrip("/")
     messages: dict[str, str] = {}
 
-    with httpx.Client(timeout=30.0, headers=_build_internal_service_headers()) as client:
+    with httpx.Client(
+        timeout=30.0, headers=_build_internal_service_headers()
+    ) as client:
         for index, prepared in enumerate(workspace.tasks, start=1):
             task = prepared.task
-            print(f"[{index}/{len(workspace.tasks)}] Retrieving synthetic context for {task.task_id}")
+            print(
+                f"[{index}/{len(workspace.tasks)}] Retrieving synthetic context for {task.task_id}"
+            )
             if context_source == "code":
                 result = search_synthetic_code(
                     client=client,
@@ -300,7 +322,7 @@ def search_synthetic_wiki(
         top_k=top_k,
     )
     response = client.post(
-        f"{search_service_url}/search/wiki",
+        f"{search_service_url}/search",
         json=request.model_dump(mode="json", exclude_none=True),
     )
     _raise_for_search_response(response, context_label="synthetic wiki")

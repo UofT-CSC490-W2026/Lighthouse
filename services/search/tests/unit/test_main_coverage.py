@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from shared.schemas.search import SearchRequest, SearchResult
+from shared.schemas.search import SearchRequest, SearchResult, WikiSearchRequest, WikiSearchResult
 from search.main import _build_embedder, create_app, health, search
 from search.strategies.hybrid_strategy import HybridSearchStrategy
 
@@ -55,12 +55,33 @@ async def test_create_app_lifespan_initializes_and_closes(monkeypatch):
 @pytest.mark.asyncio
 async def test_search_endpoint_uses_app_strategy(monkeypatch):
     strategy = SimpleNamespace(search=AsyncMock(return_value=SearchResult(snippets=[], query="q", total_results=0)))
-    monkeypatch.setattr("search.main.app", SimpleNamespace(state=SimpleNamespace(strategy=strategy)))
+    monkeypatch.setattr(
+        "search.main.app",
+        SimpleNamespace(state=SimpleNamespace(strategy=strategy, wiki_strategy=MagicMock())),
+    )
 
     result = await search(SearchRequest(query="q", github_repo_id=1))
 
     assert result.query == "q"
     strategy.search.assert_awaited_once()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_search_endpoint_dispatches_wiki_requests(monkeypatch):
+    strategy = MagicMock()
+    wiki_strategy = SimpleNamespace(
+        search=AsyncMock(return_value=WikiSearchResult(snippets=[], query="q", total_results=0))
+    )
+    monkeypatch.setattr(
+        "search.main.app",
+        SimpleNamespace(state=SimpleNamespace(strategy=strategy, wiki_strategy=wiki_strategy)),
+    )
+
+    result = await search(WikiSearchRequest(query="q", github_repo_id=1))
+
+    assert result.query == "q"
+    wiki_strategy.search.assert_awaited_once()
 
 
 @pytest.mark.unit

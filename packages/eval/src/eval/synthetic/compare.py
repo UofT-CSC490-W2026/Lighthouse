@@ -46,6 +46,16 @@ class SyntheticRunComparison:
     task_comparisons: tuple[SyntheticTaskComparison, ...]
 
 
+@dataclass(frozen=True)
+class SyntheticScoreRow:
+    label: str
+    run_id: str
+    total_instances: int
+    resolved_instances: int
+    unresolved_instances: int
+    score_pct: float
+
+
 def compare_synthetic_runs(
     *,
     baseline_run_id: str,
@@ -71,7 +81,9 @@ def compare_synthetic_runs(
     baseline_by_task = {result.task_id: result for result in baseline.results}
     lighthouse_by_task = {result.task_id: result for result in lighthouse.results}
     baseline_instances = {instance.task_id: instance for instance in baseline.instances}
-    lighthouse_instances = {instance.task_id: instance for instance in lighthouse.instances}
+    lighthouse_instances = {
+        instance.task_id: instance for instance in lighthouse.instances
+    }
     baseline_ids = set(baseline_by_task)
     lighthouse_ids = set(lighthouse_by_task)
     if baseline_ids != lighthouse_ids:
@@ -117,8 +129,12 @@ def compare_synthetic_runs(
                 lighthouse_patch_successfully_applied=lighthouse_instance.patch_successfully_applied,
                 baseline_failing_tests=len(baseline_instance.fail_to_pass_failures),
                 lighthouse_failing_tests=len(lighthouse_instance.fail_to_pass_failures),
-                baseline_pass_to_pass_failures=len(baseline_instance.pass_to_pass_failures),
-                lighthouse_pass_to_pass_failures=len(lighthouse_instance.pass_to_pass_failures),
+                baseline_pass_to_pass_failures=len(
+                    baseline_instance.pass_to_pass_failures
+                ),
+                lighthouse_pass_to_pass_failures=len(
+                    lighthouse_instance.pass_to_pass_failures
+                ),
                 delta=delta,
             )
         )
@@ -170,16 +186,20 @@ def render_synthetic_comparison_tables(comparison: SyntheticRunComparison) -> st
         (
             "delta",
             _signed_delta(
-                comparison.lighthouse.total_instances - comparison.baseline.total_instances
+                comparison.lighthouse.total_instances
+                - comparison.baseline.total_instances
             ),
             _signed_delta(
-                comparison.lighthouse.submitted_instances - comparison.baseline.submitted_instances
+                comparison.lighthouse.submitted_instances
+                - comparison.baseline.submitted_instances
             ),
             _signed_delta(
-                comparison.lighthouse.completed_instances - comparison.baseline.completed_instances
+                comparison.lighthouse.completed_instances
+                - comparison.baseline.completed_instances
             ),
             _signed_delta(
-                comparison.lighthouse.resolved_instances - comparison.baseline.resolved_instances
+                comparison.lighthouse.resolved_instances
+                - comparison.baseline.resolved_instances
             ),
             _signed_delta(
                 comparison.lighthouse.unresolved_instances
@@ -189,7 +209,10 @@ def render_synthetic_comparison_tables(comparison: SyntheticRunComparison) -> st
                 comparison.lighthouse.empty_patch_instances
                 - comparison.baseline.empty_patch_instances
             ),
-            _signed_delta(comparison.lighthouse.error_instances - comparison.baseline.error_instances),
+            _signed_delta(
+                comparison.lighthouse.error_instances
+                - comparison.baseline.error_instances
+            ),
         ),
     ]
 
@@ -253,6 +276,47 @@ def render_synthetic_comparison_tables(comparison: SyntheticRunComparison) -> st
     return "\n".join(summary_lines)
 
 
+def build_synthetic_score_rows(
+    *,
+    baseline: SyntheticRunSummary,
+    retrieval_runs: dict[str, SyntheticRunSummary],
+) -> tuple[SyntheticScoreRow, ...]:
+    rows = [_score_row("baseline", baseline)]
+    for label in ("code", "wiki"):
+        summary = retrieval_runs.get(label)
+        if summary is None:
+            continue
+        rows.append(_score_row(label, summary))
+    for label, summary in sorted(retrieval_runs.items()):
+        if label in {"code", "wiki"}:
+            continue
+        rows.append(_score_row(label, summary))
+    return tuple(rows)
+
+
+def render_synthetic_score_table(rows: Sequence[SyntheticScoreRow]) -> str:
+    headers = (
+        "run",
+        "run_id",
+        "resolved_instances",
+        "total_instances",
+        "unresolved_instances",
+        "score_pct",
+    )
+    table_rows = [
+        (
+            row.label,
+            row.run_id,
+            str(row.resolved_instances),
+            str(row.total_instances),
+            str(row.unresolved_instances),
+            f"{row.score_pct:.1f}%",
+        )
+        for row in rows
+    ]
+    return _render_table(headers, table_rows)
+
+
 def _classify_delta(
     baseline: SyntheticTaskEvaluationResult,
     lighthouse: SyntheticTaskEvaluationResult,
@@ -266,9 +330,13 @@ def _classify_delta(
     if len(lighthouse.failing_tests) > len(baseline.failing_tests):
         return "regressed"
     if _task_status(lighthouse) != _task_status(baseline):
-        if _status_rank(_task_status(lighthouse)) > _status_rank(_task_status(baseline)):
+        if _status_rank(_task_status(lighthouse)) > _status_rank(
+            _task_status(baseline)
+        ):
             return "improved"
-        if _status_rank(_task_status(lighthouse)) < _status_rank(_task_status(baseline)):
+        if _status_rank(_task_status(lighthouse)) < _status_rank(
+            _task_status(baseline)
+        ):
             return "regressed"
     return "unchanged"
 
@@ -304,6 +372,19 @@ def _signed_delta(value: int) -> str:
 
 def _bool_cell(value: bool) -> str:
     return "true" if value else "false"
+
+
+def _score_row(label: str, summary: SyntheticRunSummary) -> SyntheticScoreRow:
+    total = summary.total_instances
+    score_pct = 0.0 if total == 0 else (summary.resolved_instances / total) * 100.0
+    return SyntheticScoreRow(
+        label=label,
+        run_id=summary.run_id,
+        total_instances=summary.total_instances,
+        resolved_instances=summary.resolved_instances,
+        unresolved_instances=summary.unresolved_instances,
+        score_pct=score_pct,
+    )
 
 
 def _format_experiment_line(label: str, summary: SyntheticRunSummary) -> str:

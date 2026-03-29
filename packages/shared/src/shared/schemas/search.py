@@ -9,6 +9,11 @@ class SearchMethod(str, Enum):
     hybrid = "hybrid"
 
 
+class SearchContextSource(str, Enum):
+    code = "code"
+    wiki = "wiki"
+
+
 class SearchRequest(BaseModel):
     query: str
     github_repo_id: int
@@ -16,6 +21,7 @@ class SearchRequest(BaseModel):
     file_path: str | None = None
     top_k: int = Field(default=10, ge=1, le=100)
     method: SearchMethod | None = None
+    context_source: SearchContextSource = SearchContextSource.code
 
 
 class HybridRequest(SearchRequest):
@@ -42,12 +48,9 @@ class SearchResult(BaseModel):
     total_results: int = 0
 
 
-class WikiSearchRequest(BaseModel):
+class WikiSearchRequest(SearchRequest):
     """Request payload for wiki search."""
-
-    query: str
-    github_repo_id: int
-    branch: str = Field(default="main", min_length=1)
+    context_source: SearchContextSource = SearchContextSource.wiki
     top_k: int = Field(default=5, ge=1, le=50)
 
 

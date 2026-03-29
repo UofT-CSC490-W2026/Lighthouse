@@ -154,7 +154,7 @@ class WikiEngine:
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 resp = await client.post(
-                    f"{search_url}/search/wiki",
+                    f"{search_url}/search",
                     json=search_request.model_dump(),
                 )
                 resp.raise_for_status()

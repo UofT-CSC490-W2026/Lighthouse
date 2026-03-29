@@ -10,7 +10,12 @@ from eval.bedrock import (
     DEFAULT_TEMPERATURE,
     BedrockPatchGenerator,
 )
-from eval.slice import DEFAULT_DATASET_NAME, DEFAULT_SPLIT, SWEBenchTask, load_swebench_slice
+from eval.slice import (
+    DEFAULT_DATASET_NAME,
+    DEFAULT_SPLIT,
+    SWEBenchTask,
+    load_swebench_slice,
+)
 
 from eval.harness import (
     DEFAULT_CACHE_LEVEL,
@@ -47,6 +52,7 @@ from eval.synthetic import (
 )
 from eval.synthetic.compare import (
     SyntheticRunComparison,
+    render_synthetic_score_table,
     compare_synthetic_runs,
     render_synthetic_comparison_tables,
 )
@@ -61,7 +67,9 @@ from eval.synthetic.experiment import (
     DEFAULT_SYNTHETIC_EXPERIMENT_ARTIFACTS_ROOT,
     DEFAULT_SYNTHETIC_PREDICTIONS_ROOT,
     SyntheticExperimentResult,
+    SyntheticExperimentSuiteResult,
     run_synthetic_experiment,
+    run_synthetic_experiment_suite,
 )
 from eval.synthetic.lighthouse import (
     build_synthetic_lighthouse_messages,
@@ -310,6 +318,29 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Disable local ingestion-worker Docker log streaming",
     )
     index_repos.set_defaults(stream_worker_logs=None)
+    index_repos.add_argument(
+        "--skip-wiki-preparation",
+        action="store_true",
+        help="Skip bundled wiki generation after repository indexing completes",
+    )
+    index_repos.add_argument(
+        "--wiki-poll-interval",
+        type=float,
+        default=DEFAULT_WIKI_POLL_INTERVAL_SECONDS,
+        help="Seconds between wiki status polls during bundled preprocessing",
+    )
+    index_repos.add_argument(
+        "--wiki-progress-heartbeat-seconds",
+        type=float,
+        default=DEFAULT_WIKI_PROGRESS_HEARTBEAT_SECONDS,
+        help="Seconds between bundled wiki preparation heartbeat lines",
+    )
+    index_repos.add_argument(
+        "--wiki-timeout-seconds",
+        type=float,
+        default=DEFAULT_WIKI_TIMEOUT_SECONDS,
+        help="Maximum total wait time for bundled wiki generation",
+    )
 
     prepare_wiki = subparsers.add_parser(
         "prepare-wiki",
@@ -668,6 +699,29 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Disable local ingestion-worker Docker log streaming",
     )
     index_synthetic.set_defaults(stream_worker_logs=None)
+    index_synthetic.add_argument(
+        "--skip-wiki-preparation",
+        action="store_true",
+        help="Skip bundled wiki generation after synthetic indexing completes",
+    )
+    index_synthetic.add_argument(
+        "--wiki-poll-interval",
+        type=float,
+        default=DEFAULT_WIKI_POLL_INTERVAL_SECONDS,
+        help="Seconds between wiki status polls during bundled preprocessing",
+    )
+    index_synthetic.add_argument(
+        "--wiki-progress-heartbeat-seconds",
+        type=float,
+        default=DEFAULT_WIKI_PROGRESS_HEARTBEAT_SECONDS,
+        help="Seconds between bundled wiki preparation heartbeat lines",
+    )
+    index_synthetic.add_argument(
+        "--wiki-timeout-seconds",
+        type=float,
+        default=DEFAULT_WIKI_TIMEOUT_SECONDS,
+        help="Maximum total wait time for bundled wiki generation",
+    )
 
     prepare_synthetic_wiki = subparsers.add_parser(
         "prepare-synthetic-wiki",
@@ -936,9 +990,9 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     run_synthetic_experiment.add_argument(
         "--context-source",
-        choices=["code", "wiki"],
+        choices=["code", "wiki", "all"],
         default="code",
-        help="Which Lighthouse retrieval source to use for the Lighthouse path",
+        help="Which Lighthouse retrieval source to use: code, wiki, or all (baseline + code + wiki)",
     )
     run_synthetic_experiment.add_argument(
         "--top-k",
@@ -1064,6 +1118,8 @@ def _cmd_index_repos(args: argparse.Namespace) -> int:
     _validate_slice_selection(args)
     if args.progress_heartbeat_seconds < 1:
         raise ValueError("--progress-heartbeat-seconds must be at least 1")
+    if args.wiki_progress_heartbeat_seconds < 1:
+        raise ValueError("--wiki-progress-heartbeat-seconds must be at least 1")
 
     tasks = load_swebench_slice(
         dataset_name=args.dataset_name,
@@ -1084,6 +1140,19 @@ def _cmd_index_repos(args: argparse.Namespace) -> int:
         timeout_seconds=args.status_timeout_seconds,
     )
     print(f"Repository registry: {output_path}")
+    if args.skip_wiki_preparation:
+        print("Skipping bundled wiki preparation.")
+        return 0
+
+    prepare_lighthouse_wiki(
+        tasks=tasks,
+        ingestion_url=args.ingestion_url,
+        repo_registry_path=Path(output_path),
+        poll_interval_seconds=args.wiki_poll_interval,
+        progress_heartbeat_seconds=args.wiki_progress_heartbeat_seconds,
+        timeout_seconds=args.wiki_timeout_seconds,
+    )
+    print("Wiki preparation completed.")
     return 0
 
 
@@ -1092,7 +1161,9 @@ def _cmd_prepare_wiki(args: argparse.Namespace) -> int:
     if args.progress_heartbeat_seconds < 1:
         raise ValueError("--progress-heartbeat-seconds must be at least 1")
     if args.github_repo_id is None and not args.repo_registry:
-        raise ValueError("Provide either --repo-registry or --github-repo-id for wiki preparation.")
+        raise ValueError(
+            "Provide either --repo-registry or --github-repo-id for wiki preparation."
+        )
 
     tasks = load_swebench_slice(
         dataset_name=args.dataset_name,
@@ -1274,7 +1345,12 @@ def _cmd_show_synthetic(args: argparse.Namespace) -> int:
         seed=args.seed,
         shared_library_repo_count=args.shared_library_repo_count,
     )
-    _print_synthetic_selection(family_name=family.config.family_name, family_version=family.config.family_version, seed=seed, tasks=tasks)
+    _print_synthetic_selection(
+        family_name=family.config.family_name,
+        family_version=family.config.family_version,
+        seed=seed,
+        tasks=tasks,
+    )
     return 0
 
 
@@ -1290,6 +1366,8 @@ def _cmd_prepare_synthetic(args: argparse.Namespace) -> int:
 def _cmd_index_synthetic(args: argparse.Namespace) -> int:
     if args.progress_heartbeat_seconds < 1:
         raise ValueError("--progress-heartbeat-seconds must be at least 1")
+    if args.wiki_progress_heartbeat_seconds < 1:
+        raise ValueError("--wiki-progress-heartbeat-seconds must be at least 1")
     workspace = _prepare_selected_synthetic_workspace(args)
     _print_prepared_synthetic_workspace(workspace)
     registry_path = index_synthetic_repository(
@@ -1302,6 +1380,18 @@ def _cmd_index_synthetic(args: argparse.Namespace) -> int:
         timeout_seconds=args.status_timeout_seconds,
     )
     print(f"Repository registry: {registry_path}")
+    if args.skip_wiki_preparation:
+        print("Skipping bundled synthetic wiki preparation.")
+        return 0
+
+    prepare_synthetic_wiki(
+        workspace=workspace,
+        ingestion_url=args.ingestion_url,
+        poll_interval_seconds=args.wiki_poll_interval,
+        progress_heartbeat_seconds=args.wiki_progress_heartbeat_seconds,
+        timeout_seconds=args.wiki_timeout_seconds,
+    )
+    print("Synthetic wiki preparation completed.")
     return 0
 
 
@@ -1464,6 +1554,46 @@ def _cmd_run_synthetic_experiment(args: argparse.Namespace) -> int:
     if args.wiki_progress_heartbeat_seconds < 1:
         raise ValueError("--wiki-progress-heartbeat-seconds must be at least 1")
 
+    if args.context_source == "all":
+        result = run_synthetic_experiment_suite(
+            family_name=args.family,
+            task_count=args.task_count,
+            task_type=args.task_type,
+            seed=args.seed,
+            shared_library_repo_count=args.shared_library_repo_count,
+            workspace_root=Path(args.workspace_root),
+            force_workspace=args.force_workspace,
+            run_prefix=args.run_prefix,
+            predictions_root=Path(args.predictions_root),
+            runs_root=Path(args.runs_root),
+            artifacts_root=Path(args.artifacts_root),
+            overwrite=args.overwrite,
+            validate_workspace=not args.skip_validation,
+            skip_index=args.skip_index,
+            skip_wiki_preparation=args.skip_wiki_preparation,
+            ingestion_url=args.ingestion_url,
+            search_service_url=args.search_url,
+            top_k=args.top_k,
+            github_token=args.github_token,
+            stream_worker_logs=args.stream_worker_logs,
+            index_poll_interval_seconds=args.status_poll_interval,
+            index_progress_heartbeat_seconds=args.progress_heartbeat_seconds,
+            index_timeout_seconds=args.status_timeout_seconds,
+            wiki_poll_interval_seconds=args.wiki_poll_interval,
+            wiki_progress_heartbeat_seconds=args.wiki_progress_heartbeat_seconds,
+            wiki_timeout_seconds=args.wiki_timeout_seconds,
+            model_name=args.model,
+            region_name=args.region_name,
+            temperature=args.temperature,
+            max_tokens=args.max_tokens,
+            indexing_embedding_strategy=args.indexing_embedding_strategy,
+            indexing_embedding_model=args.indexing_embedding_model,
+            query_embedding_strategy=args.query_embedding_strategy,
+            query_embedding_model=args.query_embedding_model,
+        )
+        _print_synthetic_experiment_suite_result(result)
+        return 0
+
     result = run_synthetic_experiment(
         family_name=args.family,
         task_count=args.task_count,
@@ -1505,7 +1635,9 @@ def _cmd_run_synthetic_experiment(args: argparse.Namespace) -> int:
     return 0
 
 
-def _prepare_selected_synthetic_workspace(args: argparse.Namespace) -> PreparedSyntheticWorkspace:
+def _prepare_selected_synthetic_workspace(
+    args: argparse.Namespace,
+) -> PreparedSyntheticWorkspace:
     return prepare_synthetic_workspace(
         family_name=args.family,
         task_count=args.task_count,
@@ -1577,7 +1709,9 @@ def _print_run_summary(summary: HarnessRunSummary) -> None:
     print("Per-instance results:")
     for instance in summary.instances:
         print(f"- {instance.instance_id}: {instance.status}")
-        print(f"  patch applied: {'yes' if instance.patch_successfully_applied else 'no'}")
+        print(
+            f"  patch applied: {'yes' if instance.patch_successfully_applied else 'no'}"
+        )
         print(
             "  FAIL_TO_PASS: "
             f"{len(instance.fail_to_pass_successes)} passed, "
@@ -1642,7 +1776,9 @@ def _print_synthetic_run_summary(summary: SyntheticRunSummary) -> None:
             f"{len(instance.fail_to_pass_successes)} passed, "
             f"{len(instance.fail_to_pass_failures)} failed"
         )
-        print(f"  patch applied: {'yes' if instance.patch_successfully_applied else 'no'}")
+        print(
+            f"  patch applied: {'yes' if instance.patch_successfully_applied else 'no'}"
+        )
         if instance.patch_apply_error:
             print(f"  patch error: {instance.patch_apply_error}")
         for test_name in instance.fail_to_pass_failures:
@@ -1662,6 +1798,23 @@ def _print_synthetic_experiment_result(result: SyntheticExperimentResult) -> Non
     print(f"Lighthouse predictions: {result.lighthouse_predictions_path.resolve()}")
     print("")
     _print_synthetic_comparison(result.comparison)
+
+
+def _print_synthetic_experiment_suite_result(
+    result: SyntheticExperimentSuiteResult,
+) -> None:
+    _print_prepared_synthetic_workspace(result.workspace)
+    print(f"Experiment report: {result.report_path.resolve()}")
+    print(f"Score table: {result.score_text_path.resolve()}")
+    print(f"Score JSON: {result.score_json_path.resolve()}")
+    print(f"Baseline predictions: {result.baseline_predictions_path.resolve()}")
+    for label in ("code", "wiki"):
+        predictions_path = result.lighthouse_predictions_paths.get(label)
+        if predictions_path is not None:
+            print(f"{label.capitalize()} predictions: {predictions_path.resolve()}")
+    print("")
+    print("Scores")
+    print(render_synthetic_score_table(result.score_rows))
 
 
 def _print_synthetic_experiment_metadata(summary: SyntheticRunSummary) -> None:

@@ -58,10 +58,11 @@ def test_search_synthetic_wiki_builds_search_request_for_shared_repo(tmp_path) -
     task = workspace.tasks[0].task
 
     def handler(request: Request) -> Response:
-        assert request.url.path == "/search/wiki"
+        assert request.url.path == "/search"
         payload = json.loads(request.content)
         assert payload["github_repo_id"] == 900000001
         assert payload["branch"] == "main"
+        assert payload["context_source"] == "wiki"
         assert task.test_context in payload["query"]
         return Response(
             200,

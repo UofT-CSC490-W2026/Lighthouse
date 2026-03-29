@@ -6,7 +6,14 @@ from pathlib import Path
 
 import pytest
 
-from eval.synthetic.compare import compare_synthetic_runs, render_synthetic_comparison_tables
+from eval.synthetic.compare import (
+    compare_synthetic_runs,
+    render_synthetic_comparison_tables,
+)
+from eval.synthetic.compare import (
+    build_synthetic_score_rows,
+    render_synthetic_score_table,
+)
 from eval.synthetic.eval import list_synthetic_run_ids
 
 
@@ -122,7 +129,9 @@ def test_compare_synthetic_runs_classifies_improvement_and_regression(tmp_path) 
 
 
 @pytest.mark.unit
-def test_render_synthetic_comparison_tables_includes_overall_and_per_task_tables(tmp_path) -> None:
+def test_render_synthetic_comparison_tables_includes_overall_and_per_task_tables(
+    tmp_path,
+) -> None:
     runs_root = tmp_path / "runs"
     summary_payload = {
         "family_name": "synthetic-ab-contracts",
@@ -219,6 +228,93 @@ def test_list_synthetic_run_ids_discovers_summary_directories(tmp_path) -> None:
     assert list_synthetic_run_ids(runs_root=tmp_path) == ("run-one",)
 
 
+@pytest.mark.unit
+def test_render_synthetic_score_table_includes_baseline_code_and_wiki_rows(
+    tmp_path,
+) -> None:
+    runs_root = tmp_path / "runs"
+    _write_summary(
+        runs_root / "baseline" / "summary.json",
+        {
+            "family_name": "synthetic-ab-contracts",
+            "family_version": "1",
+            "run_id": "baseline",
+            "run_dir": str((runs_root / "baseline").resolve()),
+            "predictions_path": "baseline.jsonl",
+            "total_tasks": 10,
+            "resolved_tasks": 2,
+            "unresolved_tasks": 8,
+            "patch_apply_failures": 0,
+            "error_tasks": 8,
+            "results": [],
+        },
+    )
+    _write_summary(
+        runs_root / "code" / "summary.json",
+        {
+            "family_name": "synthetic-ab-contracts",
+            "family_version": "1",
+            "run_id": "code",
+            "run_dir": str((runs_root / "code").resolve()),
+            "predictions_path": "code.jsonl",
+            "total_tasks": 10,
+            "resolved_tasks": 8,
+            "unresolved_tasks": 2,
+            "patch_apply_failures": 0,
+            "error_tasks": 2,
+            "results": [],
+        },
+    )
+    _write_summary(
+        runs_root / "wiki" / "summary.json",
+        {
+            "family_name": "synthetic-ab-contracts",
+            "family_version": "1",
+            "run_id": "wiki",
+            "run_dir": str((runs_root / "wiki").resolve()),
+            "predictions_path": "wiki.jsonl",
+            "total_tasks": 10,
+            "resolved_tasks": 7,
+            "unresolved_tasks": 3,
+            "patch_apply_failures": 0,
+            "error_tasks": 3,
+            "results": [],
+        },
+    )
+
+    baseline = compare_synthetic_runs(
+        baseline_run_id="baseline",
+        lighthouse_run_id="code",
+        runs_root=runs_root,
+    ).baseline
+    code = compare_synthetic_runs(
+        baseline_run_id="baseline",
+        lighthouse_run_id="code",
+        runs_root=runs_root,
+    ).lighthouse
+    wiki = compare_synthetic_runs(
+        baseline_run_id="baseline",
+        lighthouse_run_id="wiki",
+        runs_root=runs_root,
+    ).lighthouse
+
+    rows = build_synthetic_score_rows(
+        baseline=baseline,
+        retrieval_runs={"code": code, "wiki": wiki},
+    )
+    text = render_synthetic_score_table(rows)
+
+    assert "run_id" in text
+    assert "baseline" in text
+    assert "code" in text
+    assert "wiki" in text
+    assert "20.0%" in text
+    assert "80.0%" in text
+    assert "70.0%" in text
+
+
 def _write_summary(path: Path, payload: Mapping[str, object]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )

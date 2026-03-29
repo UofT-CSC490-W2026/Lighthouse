@@ -93,16 +93,13 @@ def prepare_lighthouse_wiki(
             print(f"Submitting {len(to_generate)} wiki generation request(s)")
             workflow_ids: list[str] = []
             for repo_name, repo_entry in to_generate.items():
-                request = GenerateWikiRequest(
+                accepted = submit_wiki_generation_request(
+                    client=client,
+                    ingestion_url=normalized_ingestion_url,
                     github_repo_id=repo_entry.github_repo_id,
                     branch=repo_entry.branch,
+                    repo_display_name=f"{repo_name}@{repo_entry.branch}",
                 )
-                response = client.post(
-                    f"{normalized_ingestion_url}/generate-wiki",
-                    json=request.model_dump(mode="json"),
-                )
-                response.raise_for_status()
-                accepted = GenerateWikiAcceptedResponse.model_validate(response.json())
                 workflow_ids.append(accepted.workflow_id)
                 print(
                     "Started wiki generation for "
@@ -157,7 +154,9 @@ def build_wiki_lighthouse_messages(
     ) as client:
         for index, task in enumerate(tasks, start=1):
             repo_entry = repo_entries[task.repo.lower()]
-            print(f"[{index}/{len(tasks)}] Retrieving wiki context for {task.instance_id}")
+            print(
+                f"[{index}/{len(tasks)}] Retrieving wiki context for {task.instance_id}"
+            )
             print(
                 "    repo target: "
                 f"{task.repo} (github_repo_id={repo_entry.github_repo_id}, branch={repo_entry.branch})"
@@ -170,7 +169,9 @@ def build_wiki_lighthouse_messages(
                 top_k=top_k,
             )
             print(f"    retrieved {len(result.snippets)} wiki snippet(s)")
-            messages[task.instance_id] = build_wiki_lighthouse_user_message(task, result.snippets)
+            messages[task.instance_id] = build_wiki_lighthouse_user_message(
+                task, result.snippets
+            )
     return messages
 
 
@@ -191,7 +192,7 @@ def search_lighthouse_wiki(
 
     try:
         response = client.post(
-            f"{search_service_url}/search/wiki",
+            f"{search_service_url}/search",
             json=request.model_dump(mode="json", exclude_none=True),
         )
         response.raise_for_status()
@@ -239,6 +240,36 @@ def get_wiki_status(
     return WikiStatusResponse.model_validate(response.json())
 
 
+def submit_wiki_generation_request(
+    *,
+    client: httpx.Client,
+    ingestion_url: str,
+    github_repo_id: int,
+    branch: str,
+    repo_display_name: str,
+) -> GenerateWikiAcceptedResponse:
+    request = GenerateWikiRequest(github_repo_id=github_repo_id, branch=branch)
+
+    try:
+        response = client.post(
+            f"{ingestion_url}/generate-wiki",
+            json=request.model_dump(mode="json"),
+        )
+        response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        raise RuntimeError(
+            "Wiki generation request failed for "
+            f"{repo_display_name}: {exc.response.status_code} {exc.response.text}"
+        ) from exc
+    except httpx.RequestError as exc:
+        raise RuntimeError(
+            "Could not reach the Lighthouse ingestion service at "
+            f"{ingestion_url}: {exc}"
+        ) from exc
+
+    return GenerateWikiAcceptedResponse.model_validate(response.json())
+
+
 def wait_for_wiki_generation(
     *,
     client: httpx.Client,
@@ -274,7 +305,9 @@ def wait_for_wiki_generation(
                 continue
 
             if normalized_status == "failed":
-                raise RuntimeError(f"Wiki generation failed for {repo_name}@{repo_entry.branch}")
+                raise RuntimeError(
+                    f"Wiki generation failed for {repo_name}@{repo_entry.branch}"
+                )
 
         for repo_name in completed_this_round:
             pending.pop(repo_name, None)
@@ -286,7 +319,8 @@ def wait_for_wiki_generation(
         elapsed_seconds = now - started_at
         if elapsed_seconds > timeout_seconds:
             pending_display = ", ".join(
-                f"{repo_name}@{repo_entry.branch}" for repo_name, repo_entry in pending.items()
+                f"{repo_name}@{repo_entry.branch}"
+                for repo_name, repo_entry in pending.items()
             )
             raise TimeoutError(
                 "Timed out waiting for wiki generation to finish for: "
@@ -295,7 +329,8 @@ def wait_for_wiki_generation(
 
         if now - last_heartbeat_at >= progress_heartbeat_seconds:
             pending_display = ", ".join(
-                f"{repo_name}@{repo_entry.branch}" for repo_name, repo_entry in pending.items()
+                f"{repo_name}@{repo_entry.branch}"
+                for repo_name, repo_entry in pending.items()
             )
             print(
                 f"Still waiting after {int(elapsed_seconds)}s for wiki generation: "

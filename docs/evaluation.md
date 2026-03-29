@@ -187,8 +187,12 @@ It:
 
 - calls the ingestion service at `POST /generate-wiki`
 - polls the ingestion service at `GET /wiki-status/{github_repo_id}`
-- calls the search service at `POST /search/wiki`
+- calls the search service at `POST /search` with `context_source=wiki`
 - builds prompt-ready wiki context for each SWE-bench task
+
+By default, bundled wiki generation now uses the ingestion service's Bedrock
+LLM path. If wiki generation is misconfigured, preprocessing fails immediately
+with the ingestion service error instead of waiting on Temporal retries.
 
 ### `summary.py`
 
@@ -319,7 +323,7 @@ Available commands today:
 - `show-slice`
 - `prepare-images`
 - `index-repos`
-- `prepare-wiki`
+- `prepare-wiki` (optional manual/backfill command)
 - `generate-baseline`
 - `generate-lighthouse`
 - `evaluate`
@@ -327,7 +331,7 @@ Available commands today:
 - `show-synthetic`
 - `prepare-synthetic`
 - `index-synthetic`
-- `prepare-synthetic-wiki`
+- `prepare-synthetic-wiki` (optional manual/backfill command)
 - `generate-synthetic-baseline`
 - `generate-synthetic-lighthouse`
 - `evaluate-synthetic`
@@ -418,8 +422,8 @@ Supported arguments:
 ### `prepare-wiki`
 
 Generate Lighthouse wiki documentation for the repositories referenced by a
-selected SWE-bench slice. This command assumes the repositories were already
-indexed with `index-repos`.
+selected SWE-bench slice. This is now bundled into `index-repos` by default,
+so this command is mainly useful for backfills or reruns.
 
 Supported arguments:
 
@@ -508,7 +512,8 @@ repo path from the materialized workspace.
 ### `prepare-synthetic-wiki`
 
 Generate Lighthouse wiki documentation for the shared synthetic provider
-repository. This assumes `index-synthetic` has already completed.
+repository. This is now bundled into `index-synthetic` by default, so this
+command is mainly useful for backfills or reruns.
 
 ### `generate-synthetic-baseline`
 
@@ -578,19 +583,24 @@ Supported arguments:
 
 ```bash
 uv run --package eval python -m eval.cli run-synthetic-experiment \
-  --task-count 3 \
+  --task-count 10 \
   --seed 1 \
-  --run-prefix synthetic-code-3 \
-  --context-source code \
+  --run-prefix synthetic-all-10 \
+  --context-source all \
   --model bedrock/us.amazon.nova-pro-v1:0
 ```
 
 This writes:
 
 - baseline predictions under `.cache/eval/runs/`
-- Lighthouse predictions under `.cache/eval/runs/`
+- code and wiki Lighthouse predictions under `.cache/eval/runs/`
 - run summaries under `.cache/eval/synthetic_runs/`
-- comparison and experiment artifacts under `.cache/eval/synthetic_experiments/`
+- score tables, pairwise comparisons, and experiment artifacts under `.cache/eval/synthetic_experiments/`
+
+`--context-source all` runs baseline, raw-code retrieval, and wiki retrieval in
+one command and prints a single score table with all three rows. You can still
+run only one retrieval leg with `--context-source code` or
+`--context-source wiki`.
 
 If you want to compare different embedding configurations, reconfigure the
 running ingestion and search services, re-index with this command, and either:
@@ -627,7 +637,7 @@ This materializes:
 - a repo registry JSON for the shared provider repo
 - a validation report proving the checked-in gold patches still resolve the tasks
 
-### 3. Index The Shared Provider Repo
+### 3. Preprocess The Shared Provider Repo
 
 ```bash
 uv run --package eval python -m eval.cli index-synthetic \
@@ -635,18 +645,14 @@ uv run --package eval python -m eval.cli index-synthetic \
   --seed 1
 ```
 
-This indexes the shared provider repo only. Consumer repos are not indexed in
-v1.
+This now performs the synthetic preprocessing bundle:
 
-### 4. Optionally Generate Provider Wiki Documentation
+- index the shared provider repo for raw code retrieval
+- generate provider wiki documentation for wiki retrieval
 
-```bash
-uv run --package eval python -m eval.cli prepare-synthetic-wiki \
-  --task-count 3 \
-  --seed 1
-```
+Consumer repos are not indexed in v1.
 
-### 5. Generate Baseline Synthetic Predictions
+### 4. Generate Baseline Synthetic Predictions
 
 ```bash
 uv run --package eval python -m eval.cli generate-synthetic-baseline \
@@ -655,7 +661,7 @@ uv run --package eval python -m eval.cli generate-synthetic-baseline \
   --output .cache/eval/runs/synthetic-baseline-3.jsonl
 ```
 
-### 6. Generate Retrieval-Augmented Synthetic Predictions
+### 5. Generate Retrieval-Augmented Synthetic Predictions
 
 Code retrieval:
 
@@ -677,7 +683,7 @@ uv run --package eval python -m eval.cli generate-synthetic-lighthouse \
   --output .cache/eval/runs/synthetic-wiki-3.jsonl
 ```
 
-### 7. Evaluate Synthetic Predictions Locally
+### 6. Evaluate Synthetic Predictions Locally
 
 ```bash
 uv run --package eval python -m eval.cli evaluate-synthetic \
@@ -687,14 +693,14 @@ uv run --package eval python -m eval.cli evaluate-synthetic \
   --run-id synthetic-baseline-3
 ```
 
-### 8. Summarize The Synthetic Run
+### 7. Summarize The Synthetic Run
 
 ```bash
 uv run --package eval python -m eval.cli summarize-synthetic \
   --run-id synthetic-baseline-3
 ```
 
-### 9. Compare Baseline And Lighthouse
+### 8. Compare Baseline And Lighthouse
 
 ```bash
 uv run --package eval python -m eval.cli compare-synthetic \
@@ -1016,42 +1022,12 @@ Repository registry: .cache/eval/repo-registry.json
 The resulting registry file is the input you can reuse for later
 `generate-lighthouse` runs.
 
-### 6. Prepare Lighthouse Wiki Generation
-
-If you want to evaluate the doc-generation path, run wiki generation after the
-repositories are indexed.
-
-For the current 3-instance smoke slice:
-
-```bash
-uv run --package eval python -m eval.cli prepare-wiki \
-  --max-instances 3 \
-  --ingestion-url http://localhost:8001 \
-  --repo-registry .cache/eval/repo-registry.json
-```
-
-Expected output shape:
-
-```text
-SWE-bench slice: 3 instance(s) from princeton-nlp/SWE-bench_Lite [test]
-...
-Ingestion service URL: http://localhost:8001
-Repository registry: .cache/eval/repo-registry.json
-Submitting ... wiki generation request(s)
-Started wiki generation for astropy/astropy@main (wiki-...)
-Accepted workflows: wiki-...
-Still waiting after ...s for wiki generation: astropy/astropy@main
-Wiki ready: astropy/astropy@main (... page(s))
-Wiki preparation completed.
-```
-
-### 7. Generate Lighthouse-Augmented Predictions
+### 6. Generate Lighthouse-Augmented Predictions
 
 Before using Lighthouse retrieval, make sure:
 
 - the search service is running
-- the repository for the selected SWE-bench tasks has already been indexed
-- wiki generation has already completed if you plan to use `--context-source wiki`
+- the repository for the selected SWE-bench tasks has already been preprocessed with `index-repos`
 - you know either:
   - the indexed repository's `github_repo_id`, or
   - a registry file that maps `owner/repo` to `github_repo_id` and `branch`
@@ -1124,7 +1100,7 @@ Then inspect the file directly:
 sed -n '1,5p' .cache/eval/runs/lighthouse-1.jsonl
 ```
 
-### 8. Evaluate Predictions
+### 7. Evaluate Predictions
 
 Once you have a predictions file, run the official SWE-bench harness through
 the new wrapper.
@@ -1205,7 +1181,7 @@ uv run --package eval python -m eval.cli evaluate \
   --max-workers 1
 ```
 
-### 9. Summarize A Completed Run
+### 8. Summarize A Completed Run
 
 Once an evaluation has finished, you can print a compact summary without
 opening the raw harness JSON files manually.

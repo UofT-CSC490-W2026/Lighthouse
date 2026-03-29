@@ -18,7 +18,13 @@ from shared.config import (
     WIKI_MILVUS_COLLECTION_NAME,
     default_embedding_model,
 )
-from shared.schemas.search import SearchRequest, SearchResult, WikiSearchRequest, WikiSearchResult
+from shared.schemas.search import (
+    SearchContextSource,
+    SearchRequest,
+    SearchResult,
+    WikiSearchRequest,
+    WikiSearchResult,
+)
 from vectordb import MilvusClient
 
 from search.config import SearchSettings
@@ -103,16 +109,29 @@ def create_app(
 app = create_app(settings=SearchSettings())
 
 
-@app.post("/search", response_model=SearchResult, dependencies=[Depends(verify_internal_token)])
-async def search(request: SearchRequest) -> SearchResult:
+async def _search_impl(request: SearchRequest) -> SearchResult | WikiSearchResult:
+    if request.context_source is SearchContextSource.wiki:
+        strategy: SearchStrategy[WikiSearchRequest, WikiSearchResult] = app.state.wiki_strategy
+        wiki_request = WikiSearchRequest.model_validate(request.model_dump(mode="json"))
+        return await strategy.search(wiki_request)
+
     strategy: SearchStrategy[SearchRequest, SearchResult] = app.state.strategy
     return await strategy.search(request)
 
 
+@app.post(
+    "/search",
+    response_model=SearchResult | WikiSearchResult,
+    dependencies=[Depends(verify_internal_token)],
+)
+async def search(request: SearchRequest) -> SearchResult | WikiSearchResult:
+    return await _search_impl(request)
+
+
 @app.post("/search/wiki", response_model=WikiSearchResult, dependencies=[Depends(verify_internal_token)])
 async def search_wiki(request: WikiSearchRequest) -> WikiSearchResult:
-    strategy: SearchStrategy[WikiSearchRequest, WikiSearchResult] = app.state.wiki_strategy
-    return await strategy.search(request)
+    result = await _search_impl(request)
+    return WikiSearchResult.model_validate(result.model_dump(mode="json"))
 
 
 @app.get("/health")
