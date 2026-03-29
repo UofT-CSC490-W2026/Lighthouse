@@ -2,6 +2,7 @@ from .database import BaseModel, DatabaseManager
 from .models import (
     Chunk,
     IndexedBranch,
+    IndexedFile,
     Repository,
     Session,
     StagingChunk,
@@ -17,6 +18,7 @@ __all__ = [
     "Chunk",
     "DatabaseManager",
     "IndexedBranch",
+    "IndexedFile",
     "Repository",
     "Session",
     "StagingChunk",

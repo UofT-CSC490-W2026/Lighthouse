@@ -7,6 +7,7 @@ from db import (
     Chunk,
     DatabaseManager,
     IndexedBranch,
+    IndexedFile,
     Repository,
     Session,
     StagingChunk,
@@ -21,6 +22,7 @@ ALL_MODELS = [
     UserHiddenRepository,
     Session,
     IndexedBranch,
+    IndexedFile,
     StagingChunk,
     Chunk,
     WikiPage,
@@ -29,6 +31,12 @@ ALL_MODELS = [
     Repository,
     User,
 ]
+
+
+def _rebind_database_manager(manager: DatabaseManager) -> None:
+    """Force a fresh Peewee proxy binding for the shared manager."""
+    manager._database = None  # noqa: SLF001
+    manager.connect()
 
 
 @pytest.fixture(scope="session")
@@ -44,12 +52,9 @@ def db_manager_session(pg_dsn: str) -> Generator[DatabaseManager, None, None]:
 @pytest.fixture
 def db_manager(db_manager_session: DatabaseManager) -> Generator[DatabaseManager, None, None]:
     """Function-scoped: yield the shared manager, then truncate all tables for isolation."""
+    _rebind_database_manager(db_manager_session)
     yield db_manager_session
-    # Re-connect if the proxy was unbound (e.g. a code path created a separate
-    # DatabaseManager and called close(), which unbinds the class-level proxy).
-    if not db_manager_session.is_connected:
-        db_manager_session._database = None  # noqa: SLF001
-        db_manager_session.connect()
+    _rebind_database_manager(db_manager_session)
     with db_manager_session.connection_context():
         for model in ALL_MODELS:
             model.delete().execute()

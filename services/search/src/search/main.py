@@ -4,8 +4,9 @@ import logging
 from contextlib import asynccontextmanager
 
 from db import DatabaseManager
-from fastapi import FastAPI
-from shared.config import MILVUS_COLLECTION_NAME, WIKI_MILVUS_COLLECTION_NAME
+from fastapi import Depends, FastAPI
+from shared.auth import verify_internal_token
+from shared.config import EMBEDDING_MODEL, MILVUS_COLLECTION_NAME, WIKI_MILVUS_COLLECTION_NAME
 from shared.schemas.search import SearchRequest, SearchResult, WikiSearchRequest, WikiSearchResult
 from vectordb import MilvusClient
 
@@ -30,6 +31,7 @@ def create_app(
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         s = _settings or SearchSettings()
+        app.state.settings = s
 
         db_manager = DatabaseManager(s.postgres_dsn)
         db_manager.connect()
@@ -67,16 +69,19 @@ def create_app(
     return FastAPI(title="Lighthouse Search Service", lifespan=lifespan)
 
 
-app = create_app()
+app = create_app(
+    settings=SearchSettings(),
+    embedder=OpenAIEmbeddingProvider(api_key=SearchSettings().openai_api_key, model=EMBEDDING_MODEL),
+)
 
 
-@app.post("/search", response_model=SearchResult)
+@app.post("/search", response_model=SearchResult, dependencies=[Depends(verify_internal_token)])
 async def search(request: SearchRequest) -> SearchResult:
     strategy: SearchStrategy[SearchRequest, SearchResult] = app.state.strategy
     return await strategy.search(request)
 
 
-@app.post("/search/wiki", response_model=WikiSearchResult)
+@app.post("/search/wiki", response_model=WikiSearchResult, dependencies=[Depends(verify_internal_token)])
 async def search_wiki(request: WikiSearchRequest) -> WikiSearchResult:
     strategy: SearchStrategy[WikiSearchRequest, WikiSearchResult] = app.state.wiki_strategy
     return await strategy.search(request)

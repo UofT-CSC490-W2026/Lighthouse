@@ -1,14 +1,21 @@
-import json
 import uuid
+
 import pytest
-from db import Chunk, Repository, StagingChunk, DatabaseManager
-from vectordb import MilvusClient
+from db import Chunk, IndexedFile
 from shared.schemas.search import SearchRequest
 from search.strategies.hybrid_strategy import HybridSearchStrategy
 from testing_utils.mock_embedding import MockEmbeddingProvider
 from testing_utils.factories import create_repository
 
-def _seed_chunks(db_manager, milvus_client, repo, texts, branch="main", dim=8):
+def _seed_chunks(
+    db_manager,
+    milvus_client,
+    repo,
+    texts,
+    branch="main",
+    dim=8,
+    publish_id="legacy",
+):
     """Seed chunks into both Postgres and Milvus for testing."""
     embedder = MockEmbeddingProvider(dimension=dim)
     embeddings = embedder.embed_batch(texts)
@@ -27,6 +34,7 @@ def _seed_chunks(db_manager, milvus_client, repo, texts, branch="main", dim=8):
                 content=text,
                 language="python",
                 chunk_hash=uuid.uuid4().hex,
+                publish_id=publish_id,
             )
     milvus_records = [
         {
@@ -36,6 +44,7 @@ def _seed_chunks(db_manager, milvus_client, repo, texts, branch="main", dim=8):
             "repository_id": repo.id,
             "file_path": f"file{i}.py",
             "branch": branch,
+            "publish_id": publish_id,
         }
         for i, (cid, emb) in enumerate(zip(chunk_ids, embeddings))
     ]
@@ -89,3 +98,49 @@ class TestHybridSearchStrategy:
         request = SearchRequest(query="chunk content", github_repo_id=repo.github_repo_id, branch="main", top_k=3)
         result = await strategy.search(request)
         assert len(result.snippets) <= 3
+
+    @pytest.mark.asyncio
+    async def test_search_only_returns_active_publish(
+        self, db_manager, milvus_client, mock_embedder
+    ):
+        repo = create_repository(db_manager)
+        old_text = "old implementation details"
+        new_text = "new implementation details"
+        _seed_chunks(
+            db_manager,
+            milvus_client,
+            repo,
+            [old_text],
+            publish_id="legacy",
+        )
+        _seed_chunks(
+            db_manager,
+            milvus_client,
+            repo,
+            [new_text],
+            publish_id="batch-123",
+        )
+        with db_manager.connection_context():
+            IndexedFile.create(
+                repository=repo,
+                branch_name="main",
+                file_path="file0.py",
+                active_publish_id="batch-123",
+            )
+
+        strategy = HybridSearchStrategy(
+            db_manager=db_manager,
+            milvus=milvus_client,
+            embedder=mock_embedder,
+        )
+        request = SearchRequest(
+            query="implementation details",
+            github_repo_id=repo.github_repo_id,
+            branch="main",
+            top_k=5,
+        )
+        result = await strategy.search(request)
+
+        contents = [snippet.content for snippet in result.snippets]
+        assert new_text in contents
+        assert old_text not in contents

@@ -6,7 +6,9 @@ import json
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Request
+from db import DatabaseManager
+from fastapi import Depends, FastAPI, HTTPException, Request
+from shared.auth import verify_internal_token
 from shared.schemas.ingestion import (
     BranchStatus,
     IndexAcceptedResponse,
@@ -19,10 +21,12 @@ from shared.schemas.wiki import (
     WikiStatusResponse,
 )
 from temporalio.client import Client
+from temporalio.exceptions import WorkflowAlreadyStartedError
 
+from .temporal import GenerateWikiWorkflow, IncrementalIndexWorkflow, IndexBranchWorkflow
+from .temporal.activities import GenerateWikiInput, IncrementalIndexInput, IndexBranchInput
 from .utilities import IngestionSettings
-from .temporal import GenerateWikiWorkflow, IncrementalIndexWorkflow, IndexRepositoryWorkflow
-from .temporal.activities import GenerateWikiInput, IncrementalIndexInput, IndexRepoInput
+from .utilities.services import RepositoryService
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -43,29 +47,62 @@ app = FastAPI(title="Lighthouse Ingestion Service", lifespan=lifespan)
 # --- Endpoints ---
 
 
-@app.post("/index", response_model=IndexAcceptedResponse)
+def _ensure_repository_record(
+    settings: IngestionSettings,
+    github_repo_id: int,
+    repo_url: str,
+    full_name: str,
+) -> str:
+    db = DatabaseManager(settings.postgres_dsn)
+    db.connect()
+    try:
+        return RepositoryService(db).ensure(github_repo_id, repo_url, full_name)
+    finally:
+        db.close()
+
+
+@app.post("/index", response_model=IndexAcceptedResponse, dependencies=[Depends(verify_internal_token)])
 async def index_repos(request: IndexRequest):
-    """Kick off indexing workflows for the specified repositories."""
+    """Kick off indexing workflows for the specified repository branches."""
     temporal: Client = app.state.temporal_client
     settings: IngestionSettings = app.state.settings
     workflow_ids: list[str] = []
 
     for repo in request.repositories:
-        workflow_id = f"index-{repo.github_repo_id}"
-        await temporal.start_workflow(
-            IndexRepositoryWorkflow.run,
-            IndexRepoInput(
-                github_repo_id=repo.github_repo_id,
-                repo_url=repo.repo_url,
-                full_name=repo.full_name.strip().lower(),
-                branches=repo.branches,
-                github_token=repo.github_token,
-            ),
-            id=workflow_id,
-            task_queue=settings.temporal_task_queue,
+        full_name = repo.full_name.strip().lower()
+        repository_id = _ensure_repository_record(
+            settings=settings,
+            github_repo_id=repo.github_repo_id,
+            repo_url=repo.repo_url,
+            full_name=full_name,
         )
-        workflow_ids.append(workflow_id)
-        logger.info("Started indexing workflow %s", workflow_id)
+
+        for branch in repo.branches:
+            workflow_id = f"index-branch-{repo.github_repo_id}-{branch}"
+            try:
+                await temporal.start_workflow(
+                    IndexBranchWorkflow.run,
+                    IndexBranchInput(
+                        repository_id=repository_id,
+                        github_repo_id=repo.github_repo_id,
+                        repo_url=repo.repo_url,
+                        full_name=full_name,
+                        branch=branch,
+                        github_token=repo.github_token,
+                    ),
+                    id=workflow_id,
+                    task_queue=settings.temporal_task_queue,
+                )
+            except WorkflowAlreadyStartedError:
+                logger.info(
+                    "Skipping duplicate indexing workflow for repo %s branch %s",
+                    repo.github_repo_id,
+                    branch,
+                )
+                continue
+
+            workflow_ids.append(workflow_id)
+            logger.info("Started indexing workflow %s", workflow_id)
 
     return IndexAcceptedResponse(workflow_ids=workflow_ids)
 
@@ -137,7 +174,7 @@ async def github_webhook(request: Request):
     return {"status": "accepted", "workflow_id": workflow_id}
 
 
-@app.get("/status/{github_repo_id:int}", response_model=IndexStatusResponse)
+@app.get("/status/{github_repo_id:int}", response_model=IndexStatusResponse, dependencies=[Depends(verify_internal_token)])
 async def get_status(github_repo_id: int):
     """Return indexing status for all branches of a repository."""
     from db import DatabaseManager, IndexedBranch, Repository
@@ -177,7 +214,11 @@ async def get_status(github_repo_id: int):
         db.close()
 
 
-@app.post("/generate-wiki", response_model=GenerateWikiAcceptedResponse)
+@app.post(
+    "/generate-wiki",
+    response_model=GenerateWikiAcceptedResponse,
+    dependencies=[Depends(verify_internal_token)],
+)
 async def generate_wiki(request: GenerateWikiRequest):
     """Kick off wiki generation for an already-indexed repository."""
     from db import DatabaseManager, Repository
@@ -219,7 +260,11 @@ async def generate_wiki(request: GenerateWikiRequest):
         db.close()
 
 
-@app.get("/wiki-status/{github_repo_id:int}", response_model=WikiStatusResponse)
+@app.get(
+    "/wiki-status/{github_repo_id:int}",
+    response_model=WikiStatusResponse,
+    dependencies=[Depends(verify_internal_token)],
+)
 async def get_wiki_status(github_repo_id: int, branch: str = "main"):
     """Return the latest wiki generation status for a repository."""
     from db import DatabaseManager, Repository, WikiGeneration

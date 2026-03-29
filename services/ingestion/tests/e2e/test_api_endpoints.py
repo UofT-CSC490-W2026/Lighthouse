@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import httpx
@@ -48,7 +49,12 @@ class TestIngestionEndpoints:
         assert resp.json()["status"] == "ok"
 
     @pytest.mark.asyncio
-    async def test_index_repos(self, client):
+    async def test_index_repos_starts_one_workflow_per_branch(self, client, monkeypatch):
+        monkeypatch.setattr(
+            "ingestion.main._ensure_repository_record",
+            lambda **_: "repo-12345",
+        )
+
         resp = await client.post(
             "/index",
             json={
@@ -57,7 +63,7 @@ class TestIngestionEndpoints:
                         "github_repo_id": 12345,
                         "repo_url": "https://github.com/owner/repo",
                         "full_name": "owner/repo",
-                        "branches": ["main"],
+                        "branches": ["main", "feature-x"],
                     }
                 ]
             },
@@ -65,7 +71,54 @@ class TestIngestionEndpoints:
         assert resp.status_code == 200
         data = resp.json()
         assert data["status"] == "accepted"
-        assert len(data["workflow_ids"]) == 1
+        assert data["workflow_ids"] == [
+            "index-branch-12345-main",
+            "index-branch-12345-feature-x",
+        ]
+
+        start_calls = client._transport.app.state.temporal_client.start_workflow.await_args_list
+        assert len(start_calls) == 2
+        assert start_calls[0].kwargs["id"] == "index-branch-12345-main"
+        assert start_calls[1].kwargs["id"] == "index-branch-12345-feature-x"
+
+    @pytest.mark.asyncio
+    async def test_index_repos_skips_duplicate_branch_workflow(self, client, monkeypatch):
+        class FakeWorkflowAlreadyStartedError(Exception):
+            pass
+
+        async def fake_start_workflow(*args, **kwargs):
+            if kwargs["id"] == "index-branch-12345-main":
+                raise FakeWorkflowAlreadyStartedError("already running")
+            return SimpleNamespace(id=kwargs["id"])
+
+        monkeypatch.setattr(
+            "ingestion.main._ensure_repository_record",
+            lambda **_: "repo-12345",
+        )
+        monkeypatch.setattr(
+            "ingestion.main.WorkflowAlreadyStartedError",
+            FakeWorkflowAlreadyStartedError,
+        )
+        client._transport.app.state.temporal_client.start_workflow = AsyncMock(
+            side_effect=fake_start_workflow
+        )
+
+        resp = await client.post(
+            "/index",
+            json={
+                "repositories": [
+                    {
+                        "github_repo_id": 12345,
+                        "repo_url": "https://github.com/owner/repo",
+                        "full_name": "owner/repo",
+                        "branches": ["main", "feature-x"],
+                    }
+                ]
+            },
+        )
+
+        assert resp.status_code == 200
+        assert resp.json()["workflow_ids"] == ["index-branch-12345-feature-x"]
 
     @pytest.mark.asyncio
     async def test_status_not_found(self, client):

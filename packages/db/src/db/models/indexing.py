@@ -66,11 +66,38 @@ class Chunk(BaseModel):
     content = TextField()
     language = CharField(null=True)
     chunk_hash = CharField()
+    publish_id = CharField(default="legacy")
     created_at = DateTimeField(default=_utcnow)
     updated_at = DateTimeField(default=_utcnow)
 
     class Meta:
         table_name = "chunks"
+        indexes = ((("repository", "branch", "file_path", "publish_id"), False),)
+
+
+class IndexedFile(BaseModel):
+    """Track the active published chunk version for a specific file."""
+
+    id = CharField(primary_key=True, default=_uuid_text)
+    repository = ForeignKeyField(
+        Repository,
+        backref="indexed_files",
+        column_name="repository_id",
+        on_delete="CASCADE",
+        index=True,
+    )
+    branch_name = CharField()
+    file_path = CharField()
+    active_publish_id = CharField(null=True)
+    created_at = DateTimeField(default=_utcnow)
+    updated_at = DateTimeField(default=_utcnow)
+
+    class Meta:
+        table_name = "indexed_files"
+        indexes = (
+            (("repository", "branch_name", "file_path"), True),
+            (("repository", "branch_name"), False),
+        )
 
 
 class StagingChunk(BaseModel):

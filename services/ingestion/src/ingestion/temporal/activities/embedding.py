@@ -16,6 +16,7 @@ async def embed_chunk_batch(input: EmbedBatchInput) -> str:
     embedder = get_embedding_provider(
         EmbeddingStrategy(input.embedding_strategy),
         api_key=settings.openai_api_key,
+        model=settings.embedding_model,
     )
     try:
         svc = ChunkService(db)

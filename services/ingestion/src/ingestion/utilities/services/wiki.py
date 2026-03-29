@@ -171,6 +171,7 @@ class WikiService:
                             "repository_id": row.repository_id,
                             "file_path": row.slug,
                             "branch": row.branch,
+                            "publish_id": "legacy",
                         }
                     )
                 milvus_batches.append(milvus_records)

@@ -1,9 +1,9 @@
 import json
 import uuid
+
 import pytest
-from db import Chunk, StagingChunk, DatabaseManager
-from vectordb import MilvusClient
-from ingestion.utilities.services.chunk import ChunkService
+from db import Chunk, IndexedFile, StagingChunk
+from ingestion.utilities.services.chunk import ChunkService, FilePublishCleanupTarget
 from testing_utils.factories import create_repository
 from testing_utils.mock_embedding import MockEmbeddingProvider
 
@@ -133,3 +133,75 @@ class TestChunkServiceFinal:
         assert deleted == 1
         with db_manager.connection_context():
             assert Chunk.select().where(Chunk.repository == repo.id).count() == 2
+
+    def test_publish_incremental_batch_skips_missing_embeddings(self, db_manager, milvus_client):
+        repo = create_repository(db_manager)
+        svc = ChunkService(db_manager, milvus_client)
+        batch_id = str(uuid.uuid4())
+        svc.write_staging(
+            batch_id,
+            [
+                {
+                    "chunk_id": str(uuid.uuid4()),
+                    "repository_id": repo.id,
+                    "branch": "main",
+                    "file_path": "file0.py",
+                    "start_line": 1,
+                    "end_line": 10,
+                    "content": "content without embedding",
+                    "language": "python",
+                    "chunk_hash": f"hash-{uuid.uuid4().hex}",
+                }
+            ],
+        )
+
+        cleanup_targets = svc.publish_incremental_batch(
+            batch_id=batch_id,
+            repository_id=repo.id,
+            branch="main",
+            changed_files=["file0.py"],
+        )
+
+        assert cleanup_targets == []
+        with db_manager.connection_context():
+            indexed_file = IndexedFile.get(
+                IndexedFile.repository == repo.id,
+                IndexedFile.branch_name == "main",
+                IndexedFile.file_path == "file0.py",
+            )
+            chunk = Chunk.get(
+                Chunk.repository == repo.id,
+                Chunk.branch == "main",
+                Chunk.file_path == "file0.py",
+            )
+            assert indexed_file.active_publish_id == batch_id
+            assert chunk.publish_id == batch_id
+
+    def test_delete_by_publish_targets_skips_none_publish_ids(self, db_manager, milvus_client):
+        repo = create_repository(db_manager)
+        svc, batch_id = self._stage_with_embeddings(db_manager, milvus_client, repo.id, count=1)
+        svc.move_to_final(batch_id)
+
+        deleted = svc.delete_by_publish_targets(
+            repository_id=repo.id,
+            branch="main",
+            cleanup_targets=[
+                FilePublishCleanupTarget(
+                    file_path="file0.py",
+                    previous_publish_id=None,
+                )
+            ],
+        )
+
+        assert deleted == 0
+        with db_manager.connection_context():
+            assert (
+                Chunk.select()
+                .where(
+                    Chunk.repository == repo.id,
+                    Chunk.branch == "main",
+                    Chunk.file_path == "file0.py",
+                )
+                .count()
+                == 1
+            )

@@ -1,5 +1,5 @@
 import pytest
-from db import Repository, IndexedBranch
+from db import IndexedBranch
 from ingestion.utilities.services.branch import BranchService
 from testing_utils.factories import create_repository
 

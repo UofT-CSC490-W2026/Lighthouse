@@ -15,6 +15,7 @@ from ..utilities import IngestionSettings
 
 from .activities import (
     chunk_files,
+    cleanup_inactive_chunks,
     cleanup_staging,
     cleanup_staging_wiki,
     delete_chunks_for_files,
@@ -26,6 +27,7 @@ from .activities import (
     generate_wiki_structure,
     get_changed_files,
     git_clone_or_fetch,
+    publish_staged_chunks,
     store_chunks,
     store_wiki_pages,
     update_branch_status,
@@ -35,7 +37,6 @@ from .workflows import (
     GenerateWikiWorkflow,
     IncrementalIndexWorkflow,
     IndexBranchWorkflow,
-    IndexRepositoryWorkflow,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -56,7 +57,6 @@ async def main() -> None:
         client,
         task_queue=settings.temporal_task_queue,
         workflows=[
-            IndexRepositoryWorkflow,
             IndexBranchWorkflow,
             IncrementalIndexWorkflow,
             GenerateWikiWorkflow,
@@ -70,6 +70,8 @@ async def main() -> None:
             delete_existing_chunks,
             delete_chunks_for_files,
             embed_chunk_batch,
+            publish_staged_chunks,
+            cleanup_inactive_chunks,
             store_chunks,
             cleanup_staging,
             generate_wiki_structure,
