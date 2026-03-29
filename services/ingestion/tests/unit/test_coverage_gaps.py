@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import hmac
-from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -66,121 +65,6 @@ def test_embedding_registry_registers_and_rejects_unknown():
     register_embedding_provider(EmbeddingStrategy.OPENAI, DummyProvider)  # type: ignore[arg-type]
     provider = get_embedding_provider(EmbeddingStrategy.OPENAI, api_key="key")
     assert provider.kwargs == {"api_key": "key"}
-
-
-@pytest.mark.unit
-def test_chunk_service_requires_milvus():
-    service = ChunkService(MagicMock(), milvus=None)
-
-    with pytest.raises(RuntimeError, match="MilvusClient not provided"):
-        service.move_to_final("batch")
-
-
-@pytest.mark.unit
-def test_chunk_service_move_to_final_returns_zero_when_empty():
-    @contextmanager
-    def connection_context():
-        yield
-
-    db = SimpleNamespace(connection_context=connection_context)
-    service = ChunkService(db, milvus=MagicMock())
-    select_query = MagicMock()
-    select_query.where.return_value.order_by.return_value.tuples.return_value = []
-
-    with pytest.MonkeyPatch.context() as mp:
-        mp.setattr("ingestion.utilities.services.chunk.StagingChunk.select", MagicMock(return_value=select_query))
-        assert service.move_to_final("batch") == 0
-
-
-@pytest.mark.unit
-def test_chunk_service_move_to_final_skips_missing_embeddings(monkeypatch):
-    @contextmanager
-    def connection_context():
-        yield
-
-    row = SimpleNamespace(
-        id="chunk-1",
-        embedding=None,
-        repository_id="repo-1",
-        branch="main",
-        file_path="a.py",
-        start_line=1,
-        end_line=1,
-        content="x",
-        language="python",
-        chunk_hash="hash",
-    )
-    delete_query = MagicMock()
-    delete_query.where.return_value.execute.return_value = 1
-    insert_query = MagicMock()
-    insert_query.on_conflict_ignore.return_value.execute.return_value = 1
-    select_query = MagicMock()
-    select_query.where.return_value.order_by.return_value.tuples.return_value = [
-        (
-            row.id,
-            row.repository_id,
-            row.branch,
-            row.file_path,
-            row.start_line,
-            row.end_line,
-            row.content,
-            row.language,
-            row.chunk_hash,
-            row.embedding,
-        )
-    ]
-
-    db = SimpleNamespace(connection_context=connection_context)
-    milvus = MagicMock()
-    service = ChunkService(db, milvus=milvus)
-
-    with pytest.MonkeyPatch.context() as mp:
-        mp.setattr("ingestion.utilities.services.chunk.StagingChunk.select", MagicMock(return_value=select_query))
-        mp.setattr("ingestion.utilities.services.chunk.StagingChunk.delete", MagicMock(return_value=delete_query))
-        mp.setattr("ingestion.utilities.services.chunk.Chunk.insert_many", MagicMock(return_value=insert_query))
-        assert service.move_to_final("batch") == 1
-
-    milvus.insert.assert_not_called()
-
-
-@pytest.mark.unit
-def test_chunk_service_move_to_final_inserts_legacy_publish_id_into_milvus():
-    @contextmanager
-    def connection_context():
-        yield
-
-    row = (
-        "chunk-1",
-        "repo-1",
-        "main",
-        "a.py",
-        1,
-        1,
-        "x",
-        "python",
-        "hash",
-        b"[0.1, 0.2, 0.3]",
-    )
-    delete_query = MagicMock()
-    delete_query.where.return_value.execute.return_value = 1
-    insert_query = MagicMock()
-    insert_query.on_conflict_ignore.return_value.execute.return_value = 1
-    select_query = MagicMock()
-    select_query.where.return_value.order_by.return_value.tuples.return_value = [row]
-
-    db = SimpleNamespace(connection_context=connection_context)
-    milvus = MagicMock()
-    service = ChunkService(db, milvus=milvus)
-
-    with pytest.MonkeyPatch.context() as mp:
-        mp.setattr("ingestion.utilities.services.chunk.StagingChunk.select", MagicMock(return_value=select_query))
-        mp.setattr("ingestion.utilities.services.chunk.StagingChunk.delete", MagicMock(return_value=delete_query))
-        mp.setattr("ingestion.utilities.services.chunk.Chunk.insert_many", MagicMock(return_value=insert_query))
-        assert service.move_to_final("batch") == 1
-
-    milvus.insert.assert_called_once()
-    inserted_batch = milvus.insert.call_args.args[0]
-    assert inserted_batch[0]["publish_id"] == "legacy"
 
 
 @pytest.mark.unit

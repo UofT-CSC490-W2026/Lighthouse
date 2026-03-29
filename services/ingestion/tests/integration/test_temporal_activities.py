@@ -21,25 +21,21 @@ from ingestion.temporal.activities.inputs import (
     CleanupInactiveChunksInput,
     ChunkFilesInput,
     CleanupStagingInput,
-    DeleteChunksForFilesInput,
-    DeleteChunksInput,
     EmbedBatchInput,
     EnsureRepoInput,
     FilePublishCleanup,
     GetChangedFilesInput,
     GitCloneFetchInput,
+    PublishFullBranchInput,
     PublishStagedChunksInput,
-    StoreChunksInput,
     UpdateBranchStatusInput,
 )
 from ingestion.temporal.activities.repository import ensure_repository_record
 from ingestion.temporal.activities.storage import (
     cleanup_inactive_chunks,
     cleanup_staging,
-    delete_chunks_for_files,
-    delete_existing_chunks,
+    publish_full_branch,
     publish_staged_chunks,
-    store_chunks,
 )
 from testing_utils.factories import create_repository, create_staging_chunk
 from testing_utils.mock_embedding import MockEmbeddingProvider
@@ -406,44 +402,6 @@ class TestEmbedChunkBatch:
 
 
 # ---------------------------------------------------------------------------
-# store_chunks
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.integration
-class TestStoreChunks:
-    async def test_moves_staging_to_final(
-        self, activity_environment, db_manager, milvus_client, inject_settings
-    ):
-        repo = create_repository(db_manager)
-        batch_id = str(uuid.uuid4())
-        _seed_staging_with_embeddings(db_manager, repo, batch_id, count=2)
-
-        with patch(
-            "ingestion.temporal.activities.helpers.EMBEDDING_DIMENSION",
-            TEST_DIM,
-        ), patch(
-            "ingestion.temporal.activities.helpers.MILVUS_COLLECTION_NAME",
-            "test_embeddings",
-        ):
-            count = await activity_environment.run(
-                store_chunks,
-                StoreChunksInput(batch_id=batch_id),
-            )
-        assert count == 2
-        _reconnect(db_manager)
-        with db_manager.connection_context():
-            assert Chunk.select().where(Chunk.repository == repo).count() == 2
-            assert (
-                StagingChunk.select()
-                .where(StagingChunk.batch_id == batch_id)
-                .count()
-                == 0
-            )
-            assert Chunk.get(Chunk.repository == repo).publish_id == "legacy"
-
-
-# ---------------------------------------------------------------------------
 # publish_staged_chunks
 # ---------------------------------------------------------------------------
 
@@ -556,6 +514,88 @@ class TestPublishStagedChunks:
 
 
 # ---------------------------------------------------------------------------
+# publish_full_branch
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+class TestPublishFullBranch:
+    async def test_publishes_all_staged_chunks_and_handles_deleted_files(
+        self, activity_environment, db_manager, milvus_client, inject_settings
+    ):
+        repo = create_repository(db_manager)
+        old_publish_id = "old-batch"
+
+        # Pre-existing indexed file that simulates a file deleted from the repo
+        with db_manager.connection_context():
+            Chunk.create(
+                repository=repo,
+                branch="main",
+                file_path="deleted.py",
+                start_line=1,
+                end_line=5,
+                content="old chunk",
+                chunk_hash="old-hash",
+                publish_id=old_publish_id,
+            )
+            IndexedFile.create(
+                repository=repo,
+                branch_name="main",
+                file_path="deleted.py",
+                active_publish_id=old_publish_id,
+            )
+
+        # Stage a new chunk for a different file (full re-index result)
+        batch_id = str(uuid.uuid4())
+        _seed_staging_with_embeddings(db_manager, repo, batch_id, count=1)
+        # _seed_staging_with_embeddings creates file0.py
+        with patch(
+            "ingestion.temporal.activities.helpers.EMBEDDING_DIMENSION",
+            TEST_DIM,
+        ), patch(
+            "ingestion.temporal.activities.helpers.MILVUS_COLLECTION_NAME",
+            "test_embeddings",
+        ):
+            result = await activity_environment.run(
+                publish_full_branch,
+                PublishFullBranchInput(
+                    batch_id=batch_id,
+                    repository_id=repo.id,
+                    branch="main",
+                ),
+            )
+
+        _reconnect(db_manager)
+        with db_manager.connection_context():
+            # New file should be active
+            new_indexed = IndexedFile.get(
+                IndexedFile.repository == repo,
+                IndexedFile.branch_name == "main",
+                IndexedFile.file_path == "file0.py",
+            )
+            assert new_indexed.active_publish_id == batch_id
+
+            # Deleted file should have active_publish_id cleared
+            deleted_indexed = IndexedFile.get(
+                IndexedFile.repository == repo,
+                IndexedFile.branch_name == "main",
+                IndexedFile.file_path == "deleted.py",
+            )
+            assert deleted_indexed.active_publish_id is None
+
+            # Staging cleaned up
+            assert (
+                StagingChunk.select()
+                .where(StagingChunk.batch_id == batch_id)
+                .count()
+                == 0
+            )
+
+        # deleted.py had old_publish_id → should appear in cleanup_targets
+        assert any(t.file_path == "deleted.py" for t in result.cleanup_targets)
+
+
+# ---------------------------------------------------------------------------
 # cleanup_inactive_chunks
 # ---------------------------------------------------------------------------
 
@@ -646,92 +686,6 @@ class TestCleanupInactiveChunks:
             )
             assert len(remaining) == 1
             assert remaining[0].publish_id == "batch-123"
-
-
-# ---------------------------------------------------------------------------
-# delete_existing_chunks
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.integration
-class TestDeleteExistingChunks:
-    async def test_deletes_all_branch_chunks(
-        self, activity_environment, db_manager, milvus_client, inject_settings
-    ):
-        repo = create_repository(db_manager)
-        batch_id = str(uuid.uuid4())
-        _seed_staging_with_embeddings(db_manager, repo, batch_id, count=2)
-
-        # Move to final first so there's data to delete
-        with patch(
-            "ingestion.temporal.activities.helpers.EMBEDDING_DIMENSION",
-            TEST_DIM,
-        ), patch(
-            "ingestion.temporal.activities.helpers.MILVUS_COLLECTION_NAME",
-            "test_embeddings",
-        ):
-            await activity_environment.run(
-                store_chunks,
-                StoreChunksInput(batch_id=batch_id),
-            )
-            deleted = await activity_environment.run(
-                delete_existing_chunks,
-                DeleteChunksInput(repository_id=repo.id, branch="main"),
-            )
-        assert deleted >= 2
-        _reconnect(db_manager)
-        with db_manager.connection_context():
-            assert (
-                Chunk.select()
-                .where(Chunk.repository == repo, Chunk.branch == "main")
-                .count()
-                == 0
-            )
-
-
-# ---------------------------------------------------------------------------
-# delete_chunks_for_files
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.integration
-class TestDeleteChunksForFiles:
-    async def test_deletes_specific_file_chunks(
-        self, activity_environment, db_manager, milvus_client, inject_settings
-    ):
-        repo = create_repository(db_manager)
-        batch_id = str(uuid.uuid4())
-        _seed_staging_with_embeddings(db_manager, repo, batch_id, count=3)
-
-        with patch(
-            "ingestion.temporal.activities.helpers.EMBEDDING_DIMENSION",
-            TEST_DIM,
-        ), patch(
-            "ingestion.temporal.activities.helpers.MILVUS_COLLECTION_NAME",
-            "test_embeddings",
-        ):
-            await activity_environment.run(
-                store_chunks,
-                StoreChunksInput(batch_id=batch_id),
-            )
-            deleted = await activity_environment.run(
-                delete_chunks_for_files,
-                DeleteChunksForFilesInput(
-                    repository_id=repo.id,
-                    branch="main",
-                    file_paths=["file0.py"],
-                ),
-            )
-        assert deleted >= 1
-        _reconnect(db_manager)
-        with db_manager.connection_context():
-            remaining = list(
-                Chunk.select().where(
-                    Chunk.repository == repo, Chunk.branch == "main"
-                )
-            )
-            for c in remaining:
-                assert c.file_path != "file0.py"
 
 
 # ---------------------------------------------------------------------------

@@ -137,7 +137,7 @@ async def index_repos(request: IndexRequest):
         )
 
         for branch in repo.branches:
-            workflow_id = f"index-branch-{repo.github_repo_id}-{branch}"
+            workflow_id = f"index-branch-{repo.github_repo_id}-{full_name.replace('/', '-')}-{branch}"
             try:
                 await temporal.start_workflow(
                     IndexBranchWorkflow.run,

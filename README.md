@@ -42,7 +42,7 @@ monorepo/
 
 1. Install [Docker Desktop](https://docs.docker.com/desktop/)
 2. Install [`uv`](https://docs.astral.sh/uv/getting-started/installation/) for Python package management.
-3. Run `uv sync --all-packages` to install dependencies for the entire monorepo.
+3. Run `uv sync --all-packages --dev` to install dependencies for the entire monorepo.
 
 ### Documentation
 

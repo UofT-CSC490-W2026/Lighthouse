@@ -73,6 +73,13 @@ export interface User {
   email: string | null;
 }
 
+export type BranchStatus = "PENDING" | "INDEXING" | "INDEXED" | "FAILED";
+
+export interface BranchInfo {
+  branch_name: string;
+  status: BranchStatus;
+}
+
 export interface UserRepo {
   id: string;
   github_repo_id: number;
@@ -80,7 +87,8 @@ export interface UserRepo {
   repo_url: string;
   display_name: string;
   added_at: string;
-  index_status: string | null;
+  index_status: BranchStatus | null;
+  branches: BranchInfo[];
 }
 
 export interface MCPTokenState {
@@ -91,14 +99,9 @@ export interface MCPTokenState {
 
 export interface CodeContextRequest {
   repository_name: string;
-  task_description: string;
+  query: string;
   branch?: string;
-  latest_commit?: string;
   file_path?: string;
-  start_line?: number;
-  end_line?: number;
-  selected_text?: string;
-  surrounding_context?: string;
 }
 
 export interface CodeContextSnippet {
@@ -114,16 +117,8 @@ export interface CodeContextResponse {
   message: string;
   repository_name: string;
   branch: string;
-  latest_commit: string | null;
-  task_description: string;
+  query: string;
   requested_by_user_id: string;
-  highlight: {
-    file_path: string | null;
-    start_line: number | null;
-    end_line: number | null;
-    selected_text: string | null;
-    surrounding_context: string | null;
-  };
   snippets: CodeContextSnippet[];
   follow_up: string[];
 }

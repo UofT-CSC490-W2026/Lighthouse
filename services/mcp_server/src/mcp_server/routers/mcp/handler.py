@@ -26,10 +26,9 @@ The primary retrieval entrypoint is `get_code_context`.
 
 When calling `get_code_context`, provide:
 - the repository you are working in
-- the task you are trying to complete
-- the branch and latest commit when available
-- any highlighted file path, line range, selected code, or surrounding context that would
-  help narrow the search
+- the search query or task you are trying to complete
+- the branch you want to search
+- an optional file path when you want to narrow the search to a specific file
 
 Use Lighthouse to answer questions like:
 - What context is missing for this change?

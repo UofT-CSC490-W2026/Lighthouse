@@ -4,8 +4,6 @@ from .inputs import (
     ChunkFilesInput,
     ChunkFilesOutput,
     CleanupStagingInput,
-    DeleteChunksForFilesInput,
-    DeleteChunksInput,
     EmbedBatchInput,
     EnsureRepoInput,
     FilePublishCleanup,
@@ -14,9 +12,9 @@ from .inputs import (
     GitCloneFetchOutput,
     IncrementalIndexInput,
     IndexBranchInput,
+    PublishFullBranchInput,
     PublishStagedChunksInput,
     PublishStagedChunksOutput,
-    StoreChunksInput,
     UpdateBranchStatusInput,
 )
 from .branch import update_branch_status
@@ -27,10 +25,8 @@ from .repository import ensure_repository_record
 from .storage import (
     cleanup_inactive_chunks,
     cleanup_staging,
-    delete_chunks_for_files,
-    delete_existing_chunks,
+    publish_full_branch,
     publish_staged_chunks,
-    store_chunks,
 )
 from .wiki import (
     WIKI_EMBED_BATCH_SIZE,
@@ -59,8 +55,6 @@ __all__ = [
     "ChunkFilesInput",
     "ChunkFilesOutput",
     "CleanupStagingInput",
-    "DeleteChunksForFilesInput",
-    "DeleteChunksInput",
     "EmbedBatchInput",
     "EnsureRepoInput",
     "FilePublishCleanup",
@@ -69,9 +63,9 @@ __all__ = [
     "GitCloneFetchOutput",
     "IncrementalIndexInput",
     "IndexBranchInput",
+    "PublishFullBranchInput",
     "PublishStagedChunksInput",
     "PublishStagedChunksOutput",
-    "StoreChunksInput",
     "UpdateBranchStatusInput",
     # Wiki Input/Output dataclasses
     "CleanupStagingWikiInput",
@@ -86,14 +80,12 @@ __all__ = [
     "chunk_files",
     "cleanup_inactive_chunks",
     "cleanup_staging",
-    "delete_chunks_for_files",
-    "delete_existing_chunks",
     "embed_chunk_batch",
     "ensure_repository_record",
     "get_changed_files",
     "git_clone_or_fetch",
+    "publish_full_branch",
     "publish_staged_chunks",
-    "store_chunks",
     "update_branch_status",
     # Wiki Activities
     "cleanup_staging_wiki",

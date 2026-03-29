@@ -1,5 +1,27 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { apiFetch, type MCPTokenState } from "@/lib/api";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+
+function buildMcpJsonTemplate(mcpBaseUrl: string): string {
+  const base = mcpBaseUrl.replace(/\/$/, "");
+  return JSON.stringify(
+    {
+      mcpServers: {
+        lighthouse: {
+          url: `${base}/mcp`,
+          headers: {
+            Authorization: "Bearer ${env:LIGHTHOUSE_MCP_TOKEN}",
+          },
+        },
+      },
+    },
+    null,
+    2
+  );
+}
 
 export function MCPTokenPanel() {
   const [tokenState, setTokenState] = useState<MCPTokenState | null>(null);
@@ -7,7 +29,17 @@ export function MCPTokenPanel() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [configCopied, setConfigCopied] = useState(false);
   const [expanded, setExpanded] = useState(false);
+
+  const mcpJsonTemplate = useMemo(() => {
+    const base =
+      typeof import.meta.env.VITE_MCP_URL === "string" &&
+      import.meta.env.VITE_MCP_URL.trim()
+        ? import.meta.env.VITE_MCP_URL.trim()
+        : "http://localhost:8000";
+    return buildMcpJsonTemplate(base);
+  }, []);
 
   useEffect(() => {
     void loadToken();
@@ -28,9 +60,7 @@ export function MCPTokenPanel() {
   }
 
   async function handleCopy() {
-    if (!tokenState?.token) {
-      return;
-    }
+    if (!tokenState?.token) return;
 
     try {
       await navigator.clipboard.writeText(tokenState.token);
@@ -38,6 +68,16 @@ export function MCPTokenPanel() {
       window.setTimeout(() => setCopied(false), 1500);
     } catch {
       setError("Failed to copy token to clipboard.");
+    }
+  }
+
+  async function handleCopyConfig() {
+    try {
+      await navigator.clipboard.writeText(mcpJsonTemplate);
+      setConfigCopied(true);
+      window.setTimeout(() => setConfigCopied(false), 1500);
+    } catch {
+      setError("Failed to copy MCP config to clipboard.");
     }
   }
 
@@ -64,11 +104,7 @@ export function MCPTokenPanel() {
 
     try {
       await apiFetch("/v1/auth/mcp-token", { method: "DELETE" });
-      setTokenState({
-        token: null,
-        issued_at: null,
-        has_token: false,
-      });
+      setTokenState({ token: null, issued_at: null, has_token: false });
       setCopied(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to revoke MCP token.");
@@ -82,110 +118,153 @@ export function MCPTokenPanel() {
     : null;
 
   return (
-    <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-      <button
-        type="button"
-        onClick={() => setExpanded((current) => !current)}
-        className="flex w-full items-center justify-between text-left"
-        aria-expanded={expanded}
-      >
-        <div className="space-y-1">
-          <h2 className="text-lg font-semibold text-gray-900">MCP Token</h2>
-          <p className="text-sm text-gray-600">
-            Manage the long-lived token used by Cursor and other MCP clients.
-          </p>
-        </div>
-        <span className="text-sm font-medium text-gray-500">
-          {expanded ? "Hide" : "Show"}
-        </span>
-      </button>
-
-      {expanded ? (
-        <div className="mt-4 space-y-4">
-          <div className="space-y-2">
-            <p className="text-sm text-gray-600">
-              Use this long-lived token in Cursor or another MCP client. It is
-              separate from your current web sign-in and does not expire
-              automatically. Rotating or revoking it does not sign you out of
-              the dashboard.
+    <Card>
+      <CardContent className="p-5">
+        <button
+          type="button"
+          onClick={() => setExpanded((current) => !current)}
+          className="flex w-full items-center justify-between text-left"
+          aria-expanded={expanded}
+        >
+          <div className="space-y-0.5">
+            <h2 className="text-base font-semibold text-foreground">MCP Token</h2>
+            <p className="text-xs text-muted-foreground">
+              Manage the long-lived token used by Cursor and other MCP clients.
             </p>
-            <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-sm text-blue-900">
-              Authenticate your MCP client by sending this header:
-              <code className="mt-2 block overflow-x-auto rounded bg-white px-3 py-2 text-xs text-blue-950">
-                Authorization: Bearer YOUR_MCP_TOKEN
-              </code>
-            </div>
           </div>
+          <ChevronDown
+            className={cn(
+              "size-4 text-muted-foreground transition-transform duration-200",
+              expanded && "rotate-180"
+            )}
+          />
+        </button>
 
-          <div className="space-y-4">
-            {loading ? (
-              <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-500">
-                Loading token details...
+        {expanded ? (
+          <div className="mt-4 space-y-4">
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground">
+                Use this long-lived token in Cursor or another MCP client. It is
+                separate from your current web sign-in and does not expire
+                automatically. Rotating or revoking it does not sign you out of
+                the dashboard.
+              </p>
+              <div className="border border-border bg-muted px-3 py-2.5 text-xs text-foreground">
+                Authenticate your MCP client by sending this header:
+                <code className="mt-1.5 block overflow-x-auto bg-background px-3 py-1.5 text-xs text-muted-foreground font-mono">
+                  Authorization: Bearer YOUR_MCP_TOKEN
+                </code>
               </div>
-            ) : tokenState?.has_token && tokenState.token ? (
-              <div className="space-y-3">
-                <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
-                  <div className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                    Token
-                  </div>
-                  <code className="mt-2 block overflow-x-auto break-all text-sm text-gray-900">
-                    {tokenState.token}
-                  </code>
+            </div>
+
+            <div className="space-y-4">
+              {loading ? (
+                <div className="border border-border bg-muted px-4 py-3 text-xs text-muted-foreground">
+                  Loading token details...
                 </div>
-                <p className="text-xs text-gray-500">
-                  Issued {issuedAt ?? "just now"}
-                </p>
-              </div>
-            ) : (
-              <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4 text-sm text-gray-600">
-                No MCP token has been generated yet.
-              </div>
-            )}
+              ) : tokenState?.has_token && tokenState.token ? (
+                <div className="space-y-3">
+                  <div className="border border-border bg-muted p-3">
+                    <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      Token
+                    </div>
+                    <code className="mt-2 block overflow-x-auto break-all text-xs text-foreground font-mono">
+                      {tokenState.token}
+                    </code>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Issued {issuedAt ?? "just now"}
+                  </p>
 
-            {error && (
-              <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">
-                {error}
-              </div>
-            )}
+                  <div className="space-y-2">
+                    <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      Cursor <code className="font-mono text-[0.95em]">mcp.json</code>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Merge this into{" "}
+                      <code className="rounded bg-muted px-1 py-0.5 font-mono text-[0.95em]">
+                        ~/.cursor/mcp.json
+                      </code>{" "}
+                      or{" "}
+                      <code className="rounded bg-muted px-1 py-0.5 font-mono text-[0.95em]">
+                        .cursor/mcp.json
+                      </code>
+                      . Set environment variable{" "}
+                      <code className="font-mono text-[0.95em]">LIGHTHOUSE_MCP_TOKEN</code>{" "}
+                      to the token above (Cursor expands{" "}
+                      <code className="font-mono text-[0.95em]">${"{env:LIGHTHOUSE_MCP_TOKEN}"}</code>
+                      ).
+                    </p>
+                    <div className="border border-border bg-muted p-3">
+                      <pre className="max-h-64 overflow-auto text-xs leading-relaxed text-foreground font-mono">
+                        {mcpJsonTemplate}
+                      </pre>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="border border-dashed border-border bg-muted px-4 py-3 text-xs text-muted-foreground">
+                  No MCP token has been generated yet.
+                </div>
+              )}
 
-            <div className="flex flex-wrap gap-3">
-              {tokenState?.has_token && tokenState.token ? (
-                <button
+              {error && (
+                <div className="border border-destructive/50 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                  {error}
+                </div>
+              )}
+
+              <div className="flex flex-wrap gap-2">
+                {tokenState?.has_token && tokenState.token ? (
+                  <>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleCopy}
+                    >
+                      {copied ? "Copied!" : "Copy Token"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void handleCopyConfig()}
+                    >
+                      {configCopied ? "Copied!" : "Copy MCP config"}
+                    </Button>
+                  </>
+                ) : null}
+
+                <Button
                   type="button"
-                  onClick={handleCopy}
-                  className="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
-                >
-                  {copied ? "Copied" : "Copy Token"}
-                </button>
-              ) : null}
-
-              <button
-                type="button"
-                disabled={submitting}
-                onClick={handleRotate}
-                className="inline-flex items-center rounded-md bg-gray-900 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {submitting
-                  ? "Working..."
-                  : tokenState?.has_token
-                    ? "Refresh Token"
-                    : "Generate Token"}
-              </button>
-
-              {tokenState?.has_token ? (
-                <button
-                  type="button"
+                  size="sm"
                   disabled={submitting}
-                  onClick={handleRevoke}
-                  className="inline-flex items-center rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  onClick={handleRotate}
                 >
-                  Revoke Token
-                </button>
-              ) : null}
+                  {submitting
+                    ? "Working..."
+                    : tokenState?.has_token
+                      ? "Refresh Token"
+                      : "Generate Token"}
+                </Button>
+
+                {tokenState?.has_token ? (
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    disabled={submitting}
+                    onClick={handleRevoke}
+                  >
+                    Revoke Token
+                  </Button>
+                ) : null}
+              </div>
             </div>
           </div>
-        </div>
-      ) : null}
-    </section>
+        ) : null}
+      </CardContent>
+    </Card>
   );
 }

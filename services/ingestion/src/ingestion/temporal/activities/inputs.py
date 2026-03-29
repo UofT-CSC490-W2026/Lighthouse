@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 
 EMBED_BATCH_SIZE = 64
@@ -61,29 +59,11 @@ class GetChangedFilesInput:
 
 
 @dataclass
-class DeleteChunksInput:
-    repository_id: str
-    branch: str
-
-
-@dataclass
-class DeleteChunksForFilesInput:
-    repository_id: str
-    branch: str
-    file_paths: list[str] = field(default_factory=list)
-
-
-@dataclass
 class EmbedBatchInput:
     batch_id: str
     offset: int
     limit: int
     embedding_strategy: str = "openai"
-
-
-@dataclass
-class StoreChunksInput:
-    batch_id: str
 
 
 @dataclass
@@ -110,6 +90,13 @@ class CleanupInactiveChunksInput:
     repository_id: str
     branch: str
     cleanup_targets: list[FilePublishCleanup] = field(default_factory=list)
+
+
+@dataclass
+class PublishFullBranchInput:
+    batch_id: str
+    repository_id: str
+    branch: str
 
 
 @dataclass
