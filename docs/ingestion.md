@@ -23,7 +23,7 @@ The service is currently built around:
 
 - a FastAPI app with typed settings
 - a Temporal client used to start indexing workflows
-- parent and child workflows for repository and branch indexing
+- top-level branch workflows for full indexing and incremental indexing workflows for push events
 - activity-based steps for git, chunking, embedding, storage, and branch updates
 - PostgreSQL tables for repository, branch, final chunk, and staging chunk state
 - Milvus storage for vector embeddings
@@ -63,7 +63,6 @@ services/ingestion/src/ingestion/
   temporal/
     worker.py
     workflows/
-      index_repository.py
       index_branch.py
       incremental.py
     activities/
@@ -104,9 +103,7 @@ workflows and returns accepted responses.
 
 The service splits orchestration into:
 
-- `IndexRepositoryWorkflow`: ensure the repository record exists, then fan out one
-  child workflow per requested branch
-- `IndexBranchWorkflow`: run the full branch indexing pipeline
+- `IndexBranchWorkflow`: run the full branch indexing pipeline for one repository branch
 - `IncrementalIndexWorkflow`: re-index only files changed by a push event
 
 ### Activity Model
@@ -139,18 +136,24 @@ The current HTTP routes are:
 
 ### `POST /index`
 
-This endpoint accepts `IndexRequest` and starts one top-level repository workflow
-per requested repository.
+This endpoint accepts `IndexRequest` and starts one top-level branch workflow
+per requested repository branch.
 
 The response is `IndexAcceptedResponse` with:
 
 - `status = "accepted"`
-- `workflow_ids`
+- `workflow_ids` for the workflows that were actually started
 
 Workflow IDs currently use the form:
 
-- `index-<github_repo_id>` for the parent `IndexRepositoryWorkflow`
-- `index-branch-<github_repo_id>-<branch>` for each child `IndexBranchWorkflow`
+- `index-branch-<github_repo_id>-<branch>` for each `IndexBranchWorkflow`
+
+Current behavior notes:
+
+- the handler ensures the shared repository row exists before starting any branch workflow
+- different branches of the same repository can be started in separate requests without conflict
+- if the exact same repo and branch workflow is already running, that branch is skipped rather than causing the whole request to fail
+- the response only includes workflow IDs for branches that were newly started
 
 ### `POST /webhook`
 
@@ -182,20 +185,20 @@ Each branch entry includes:
 
 ## Initial Indexing Flow
 
-Initial indexing begins with `IndexRepositoryWorkflow` in
-`services/ingestion/src/ingestion/temporal/workflows/index_repository.py`.
+Initial indexing begins in `POST /index`, which ensures the repository record
+exists and then starts one `IndexBranchWorkflow` per requested branch.
 
 The current flow is:
 
-1. ensure the shared repository row exists
-2. start one `IndexBranchWorkflow` child workflow per requested branch
-3. wait for all child workflows to finish
-4. return a text summary of branch successes and failures
+1. normalize the repository full name and ensure the shared repository row exists
+2. start one top-level `IndexBranchWorkflow` per requested branch using workflow ID
+   `index-branch-<github_repo_id>-<branch>`
+3. skip any branch whose workflow is already running for that repo and branch
+4. return accepted with the list of workflow IDs that were newly started
 
 ### Branch Indexing Flow
 
-`IndexBranchWorkflow` runs as a child workflow (see workflow IDs above) and
-currently performs:
+`IndexBranchWorkflow` runs as a top-level workflow and currently performs:
 
 1. mark the branch as `indexing` (optionally persisting an encrypted GitHub token
    when provided)
@@ -384,6 +387,8 @@ Important implementation details:
 
 - the HTTP service starts workflows, but the actual indexing work is expected to
   run on the Temporal worker defined in `services/ingestion/src/ingestion/temporal/worker.py`
+- `POST /index` performs repository upsert inline before starting branch workflows;
+  the remaining indexing pipeline stays inside Temporal
 - git operations use `clone_base_dir` as local working storage for repositories
 - embedding work is batched inside workflows using `EMBED_BATCH_SIZE`; each
   workflow schedules one Temporal activity per batch and runs all batch
