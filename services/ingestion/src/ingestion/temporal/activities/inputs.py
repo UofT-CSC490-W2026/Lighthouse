@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from shared.config import DEFAULT_EMBEDDING_STRATEGY
 
-EMBED_BATCH_SIZE = 512
+EMBED_BATCH_SIZE = 64
 
 
 # --- Activity-level input / output dataclasses ---
