@@ -89,9 +89,7 @@ export default function Search() {
 
   const canSubmit = !!repositoryName.trim() && !!query.trim() && !reposLoading && !submitting;
   const selectedRepo = repos.find((r) => r.full_name === repositoryName) ?? null;
-  const availableBranches = (selectedRepo?.branches ?? []).filter(
-    (b) => b.status === "INDEXED"
-  );
+  const availableBranches = (selectedRepo?.branches ?? []).filter((b) => b.status === "INDEXED");
 
   return (
     <>
@@ -123,11 +121,7 @@ export default function Search() {
                 {reposLoading ? (
                   <Skeleton className="h-9 w-full" />
                 ) : (
-                  <Select
-                    value={repositoryName}
-                    onValueChange={setRepositoryName}
-                    disabled={repos.length === 0}
-                  >
+                  <Select value={repositoryName} onValueChange={setRepositoryName} disabled={repos.length === 0}>
                     <SelectTrigger id="repository-name" className="rounded-none">
                       <SelectValue
                         placeholder={repos.length === 0 ? "No repositories available" : "Select a repository"}
@@ -149,7 +143,7 @@ export default function Search() {
                 {reposLoading ? (
                   <Skeleton className="h-9 w-full" />
                 ) : availableBranches.length > 0 ? (
-                  <Select value={branch} onValueChange={setBranch} disabled={!repositoryName}>
+                  <Select value={branch} onValueChange={setBranch} disabled={repos.length === 0 || !repositoryName}>
                     <SelectTrigger id="branch" className="w-full rounded-none">
                       <SelectValue placeholder="Select a branch" />
                     </SelectTrigger>
@@ -162,7 +156,13 @@ export default function Search() {
                     </SelectContent>
                   </Select>
                 ) : (
-                  <Input id="branch" value={branch} onChange={(e) => setBranch(e.target.value)} placeholder="main" />
+                  <Input
+                    id="branch"
+                    value={branch}
+                    onChange={(e) => setBranch(e.target.value)}
+                    placeholder="main"
+                    disabled={repos.length === 0}
+                  />
                 )}
               </div>
             </div>
