@@ -30,7 +30,6 @@ from .activities import (
 from .workflows import (
     IncrementalIndexWorkflow,
     IndexBranchWorkflow,
-    IndexRepositoryWorkflow,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -51,7 +50,6 @@ async def main() -> None:
         client,
         task_queue=settings.temporal_task_queue,
         workflows=[
-            IndexRepositoryWorkflow,
             IndexBranchWorkflow,
             IncrementalIndexWorkflow,
         ],

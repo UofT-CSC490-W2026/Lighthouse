@@ -26,7 +26,6 @@ from ingestion.temporal.activities.inputs import (
     GitCloneFetchInput,
     GitCloneFetchOutput,
     IndexBranchInput,
-    IndexRepoInput,
     IncrementalIndexInput,
     PublishStagedChunksInput,
     PublishStagedChunksOutput,
@@ -34,7 +33,6 @@ from ingestion.temporal.activities.inputs import (
     UpdateBranchStatusInput,
 )
 from ingestion.temporal.workflows.index_branch import IndexBranchWorkflow
-from ingestion.temporal.workflows.index_repository import IndexRepositoryWorkflow
 from ingestion.temporal.workflows.incremental import IncrementalIndexWorkflow
 
 
@@ -320,102 +318,6 @@ class TestIndexBranchWorkflow:
         status_calls = [inp for name, inp in tracker.calls if name == "update_branch_status"]
         assert any(s.status == "failed" for s in status_calls)
         assert "cleanup_staging" in names
-
-
-# ---------------------------------------------------------------------------
-# IndexRepositoryWorkflow tests
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.e2e
-class TestIndexRepositoryWorkflow:
-    async def test_single_branch_success(self, workflow_environment):
-        tracker = ActivityTracker(chunk_count=5)
-        queue = _queue()
-        async with Worker(
-            workflow_environment.client,
-            task_queue=queue,
-            workflows=[IndexRepositoryWorkflow, IndexBranchWorkflow],
-            activities=make_mock_activities(tracker),
-            workflow_runner=UnsandboxedWorkflowRunner(),
-        ):
-            result = await workflow_environment.client.execute_workflow(
-                IndexRepositoryWorkflow.run,
-                IndexRepoInput(
-                    github_repo_id=1,
-                    repo_url="https://github.com/o/r",
-                    full_name="o/r",
-                    branches=["main"],
-                ),
-                id=f"test-{uuid.uuid4().hex[:8]}",
-                task_queue=queue,
-            )
-        assert "1/1 branches succeeded" in result
-        assert "ensure_repository_record" == _activity_names(tracker)[0]
-
-    async def test_multi_branch_fan_out(self, workflow_environment):
-        tracker = ActivityTracker(chunk_count=5)
-        queue = _queue()
-        async with Worker(
-            workflow_environment.client,
-            task_queue=queue,
-            workflows=[IndexRepositoryWorkflow, IndexBranchWorkflow],
-            activities=make_mock_activities(tracker),
-            workflow_runner=UnsandboxedWorkflowRunner(),
-        ):
-            result = await workflow_environment.client.execute_workflow(
-                IndexRepositoryWorkflow.run,
-                IndexRepoInput(
-                    github_repo_id=1,
-                    repo_url="https://github.com/o/r",
-                    full_name="o/r",
-                    branches=["main", "dev"],
-                ),
-                id=f"test-{uuid.uuid4().hex[:8]}",
-                task_queue=queue,
-            )
-        assert "2/2 branches succeeded" in result
-
-    async def test_partial_failure(self, workflow_environment):
-        """One branch fails (git error), other succeeds."""
-        call_count = {"git": 0}
-
-        @activity.defn(name="git_clone_or_fetch")
-        async def git_fail_second(input: GitCloneFetchInput) -> GitCloneFetchOutput:
-            call_count["git"] += 1
-            # Fail for the second branch
-            if call_count["git"] > 1:
-                raise RuntimeError("git failure on second branch")
-            return GitCloneFetchOutput(
-                repo_path="/tmp/repos/test", latest_commit="abc123"
-            )
-
-        tracker = ActivityTracker(chunk_count=5)
-        mock_acts = make_mock_activities(tracker)
-        # Replace git activity with the one that fails on second call
-        mock_acts = [a for a in mock_acts if a.__name__ != "mock_git_clone"]
-        mock_acts.append(git_fail_second)
-
-        queue = _queue()
-        async with Worker(
-            workflow_environment.client,
-            task_queue=queue,
-            workflows=[IndexRepositoryWorkflow, IndexBranchWorkflow],
-            activities=mock_acts,
-            workflow_runner=UnsandboxedWorkflowRunner(),
-        ):
-            result = await workflow_environment.client.execute_workflow(
-                IndexRepositoryWorkflow.run,
-                IndexRepoInput(
-                    github_repo_id=1,
-                    repo_url="https://github.com/o/r",
-                    full_name="o/r",
-                    branches=["main", "dev"],
-                ),
-                id=f"test-{uuid.uuid4().hex[:8]}",
-                task_queue=queue,
-            )
-        assert "1 failed" in result
 
 
 # ---------------------------------------------------------------------------
