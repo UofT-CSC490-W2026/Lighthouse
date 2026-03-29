@@ -23,10 +23,13 @@ from ingestion.main import _ensure_repository_record
 from ingestion.main import github_webhook
 from ingestion.main import lifespan as ingestion_lifespan
 from ingestion.temporal.activities.chunking import chunk_files
+from ingestion.temporal.activities.embedding import embed_chunk_batch
 from ingestion.temporal.activities.inputs import ChunkFilesInput
+from ingestion.temporal.activities.inputs import EmbedBatchInput
 from ingestion.temporal.activities.helpers import get_settings as activity_get_settings
 from ingestion.temporal.activities.helpers import make_db, make_milvus, set_settings_factory
 from ingestion.temporal.worker import main as worker_main
+from ingestion.utilities.config import IngestionSettings
 from ingestion.utilities.services.chunk import ChunkService
 
 
@@ -62,10 +65,7 @@ def test_embedding_registry_registers_and_rejects_unknown():
 
     register_embedding_provider(EmbeddingStrategy.OPENAI, DummyProvider)  # type: ignore[arg-type]
     provider = get_embedding_provider(EmbeddingStrategy.OPENAI, api_key="key")
-    assert provider.kwargs == {
-        "api_key": "key",
-        "model": OPENAI_DEFAULT_EMBEDDING_MODEL,
-    }
+    assert provider.kwargs == {"api_key": "key"}
 
 
 @pytest.mark.unit
@@ -263,6 +263,66 @@ def test_chunk_files_skips_blank_content(monkeypatch, tmp_path):
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_embed_chunk_batch_uses_strategy_specific_default_model(monkeypatch):
+    captured: dict[str, object] = {}
+    fake_db = SimpleNamespace(close=MagicMock())
+    fake_chunk = SimpleNamespace(content="hello world")
+    fake_service = SimpleNamespace(
+        read_staging_batch=MagicMock(return_value=[fake_chunk]),
+        write_staging_embeddings=MagicMock(),
+    )
+    fake_embedder = SimpleNamespace(embed_batch=MagicMock(return_value=[[0.1] * 8]))
+
+    settings = IngestionSettings(
+        embedding_strategy="bedrock",
+        embedding_model="",
+        embedding_dimension=0,
+        openai_api_key="",
+    )
+
+    monkeypatch.setattr(
+        "ingestion.temporal.activities.embedding.get_settings",
+        lambda: settings,
+    )
+    monkeypatch.setattr(
+        "ingestion.temporal.activities.embedding.make_db",
+        lambda _settings: fake_db,
+    )
+    monkeypatch.setattr(
+        "ingestion.temporal.activities.embedding.ChunkService",
+        lambda _db: fake_service,
+    )
+
+    def fake_get_embedding_provider(strategy, **kwargs):
+        captured["strategy"] = strategy
+        captured["kwargs"] = kwargs
+        return fake_embedder
+
+    monkeypatch.setattr(
+        "ingestion.temporal.activities.embedding.get_embedding_provider",
+        fake_get_embedding_provider,
+    )
+
+    result = await embed_chunk_batch(
+        EmbedBatchInput(
+            batch_id="batch-1",
+            offset=0,
+            limit=1,
+            embedding_strategy="bedrock",
+        )
+    )
+
+    assert result == "embedded_1"
+    assert captured["kwargs"] == {
+        "model": "amazon.titan-embed-text-v2:0",
+        "dimensions": 1024,
+    }
+    fake_service.write_staging_embeddings.assert_called_once()
+    fake_db.close.assert_called_once()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_webhook_missing_signature_and_fields(monkeypatch):
     app_state = SimpleNamespace(
         settings=SimpleNamespace(github_webhook_secret="secret", temporal_task_queue="queue"),
@@ -325,7 +385,13 @@ async def test_temporal_worker_main(monkeypatch):
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_ingestion_lifespan_and_activity_helpers(monkeypatch):
-    settings = SimpleNamespace(temporal_address="temporal:7233", postgres_dsn="postgres://db", milvus_uri="http://milvus")
+    settings = SimpleNamespace(
+        temporal_address="temporal:7233",
+        postgres_dsn="postgres://db",
+        milvus_uri="http://milvus",
+        embedding_strategy="openai",
+        embedding_dimension=0,
+    )
     app = SimpleNamespace(state=SimpleNamespace())
     client = object()
     db = MagicMock()
