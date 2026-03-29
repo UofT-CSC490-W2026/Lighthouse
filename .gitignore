@@ -66,3 +66,4 @@ dist/
 .conductor/
 .coverage
 .cache
+eval-package-plan.md

@@ -120,16 +120,16 @@ services:
     env_file:
       - services/ingestion/.env
     environment:
-      POSTGRES_DSN: postgresql://lighthouse:lighthouse@postgres:5432/lighthouse
-      MILVUS_URI: http://milvus:19530
-      TEMPORAL_ADDRESS: temporal:7233
-      EMBEDDING_STRATEGY: ${EMBEDDING_STRATEGY:-bedrock}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
-      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
-      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-}
-      AWS_PROFILE: ${AWS_PROFILE:-}
+      - POSTGRES_DSN=postgresql://lighthouse:lighthouse@postgres:5432/lighthouse
+      - MILVUS_URI=http://milvus:19530
+      - TEMPORAL_ADDRESS=temporal:7233
+      - EMBEDDING_STRATEGY=${EMBEDDING_STRATEGY:-bedrock}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - AWS_ACCESS_KEY_ID
+      - AWS_SECRET_ACCESS_KEY
+      - AWS_SESSION_TOKEN
+      - AWS_DEFAULT_REGION
+      - AWS_PROFILE
     volumes:
       - ${HOME}/.aws:/root/.aws:ro
     depends_on:
@@ -153,16 +153,16 @@ services:
     env_file:
       - services/ingestion/.env
     environment:
-      POSTGRES_DSN: postgresql://lighthouse:lighthouse@postgres:5432/lighthouse
-      MILVUS_URI: http://milvus:19530
-      TEMPORAL_ADDRESS: temporal:7233
-      EMBEDDING_STRATEGY: ${EMBEDDING_STRATEGY:-bedrock}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
-      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
-      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-}
-      AWS_PROFILE: ${AWS_PROFILE:-}
+      - POSTGRES_DSN=postgresql://lighthouse:lighthouse@postgres:5432/lighthouse
+      - MILVUS_URI=http://milvus:19530
+      - TEMPORAL_ADDRESS=temporal:7233
+      - EMBEDDING_STRATEGY=${EMBEDDING_STRATEGY:-bedrock}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - AWS_ACCESS_KEY_ID
+      - AWS_SECRET_ACCESS_KEY
+      - AWS_SESSION_TOKEN
+      - AWS_DEFAULT_REGION
+      - AWS_PROFILE
     volumes:
       - ${HOME}/.aws:/root/.aws:ro
     depends_on:
@@ -182,15 +182,15 @@ services:
     env_file:
       - services/search/.env
     environment:
-      POSTGRES_DSN: postgresql://lighthouse:lighthouse@postgres:5432/lighthouse
-      MILVUS_URI: http://milvus:19530
-      EMBEDDING_STRATEGY: ${EMBEDDING_STRATEGY:-bedrock}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
-      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
-      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-}
-      AWS_PROFILE: ${AWS_PROFILE:-}
+      - POSTGRES_DSN=postgresql://lighthouse:lighthouse@postgres:5432/lighthouse
+      - MILVUS_URI=http://milvus:19530
+      - EMBEDDING_STRATEGY=${EMBEDDING_STRATEGY:-bedrock}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - AWS_ACCESS_KEY_ID
+      - AWS_SECRET_ACCESS_KEY
+      - AWS_SESSION_TOKEN
+      - AWS_DEFAULT_REGION
+      - AWS_PROFILE
     volumes:
       - ${HOME}/.aws:/root/.aws:ro
     depends_on:
