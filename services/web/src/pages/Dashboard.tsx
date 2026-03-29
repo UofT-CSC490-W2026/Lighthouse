@@ -1,30 +1,14 @@
-import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { apiFetch, type User } from "@/lib/api";
-import { clearApiToken, getApiToken } from "@/lib/auth";
+import { Link } from "react-router-dom";
 import { MCPTokenPanel } from "@/components/MCPTokenPanel";
 import { Navbar } from "@/components/Navbar";
 import { RepoList } from "@/components/RepoList";
+import { Button } from "@/components/ui/button";
+import { useUser } from "@/lib/hooks";
 
 export default function Dashboard() {
-  const navigate = useNavigate();
-  const [user, setUser] = useState<User | null>(null);
+  const { user, isLoading } = useUser();
 
-  useEffect(() => {
-    if (!getApiToken()) {
-      navigate("/login", { replace: true });
-      return;
-    }
-
-    apiFetch<User>("/v1/auth/me")
-      .then(setUser)
-      .catch(() => {
-        clearApiToken();
-        navigate("/login", { replace: true });
-      });
-  }, [navigate]);
-
-  if (!user) return null;
+  if (isLoading && !user) return null;
 
   return (
     <>
@@ -33,22 +17,14 @@ export default function Dashboard() {
         <div className="space-y-6">
           <MCPTokenPanel />
           <div className="flex items-center justify-between">
-            <h1 className="text-xl font-semibold text-gray-900">
-              Repositories
-            </h1>
+            <h1 className="text-xl font-semibold text-foreground">Repositories</h1>
             <div className="flex items-center gap-3">
-              <Link
-                to="/dashboard/search"
-                className="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
-              >
-                Search Indexed Code
-              </Link>
-              <Link
-                to="/dashboard/add-repo"
-                className="inline-flex items-center rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-blue-700"
-              >
-                + Add Repository
-              </Link>
+              <Button variant="outline" size="sm" asChild>
+                <Link to="/dashboard/search">Search Indexed Code</Link>
+              </Button>
+              <Button size="sm" asChild>
+                <Link to="/dashboard/add-repo">+ Add Repository</Link>
+              </Button>
             </div>
           </div>
           <RepoList />
