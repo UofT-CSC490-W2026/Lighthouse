@@ -1,13 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronDown, Search as SearchIcon } from "lucide-react";
-import {
-  apiFetch,
-  type CodeContextRequest,
-  type CodeContextResponse,
-  type User,
-  type UserRepo,
-} from "@/lib/api";
+import { apiFetch, type CodeContextRequest, type CodeContextResponse, type User, type UserRepo } from "@/lib/api";
 import { clearApiToken, getApiToken } from "@/lib/auth";
 import { Navbar } from "@/components/Navbar";
 import { SnippetCard } from "@/components/SnippetCard";
@@ -16,18 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
 function toOptionalNumber(value: string): number | undefined {
@@ -67,10 +51,7 @@ export default function Search() {
       return;
     }
 
-    void Promise.all([
-      apiFetch<User>("/v1/auth/me"),
-      apiFetch<UserRepo[]>("/v1/user/repos"),
-    ])
+    void Promise.all([apiFetch<User>("/v1/auth/me"), apiFetch<UserRepo[]>("/v1/user/repos")])
       .then(([currentUser, userRepos]) => {
         setUser(currentUser);
         setRepos(userRepos);
@@ -120,13 +101,10 @@ export default function Search() {
     }
 
     try {
-      const response = await apiFetch<CodeContextResponse>(
-        "/v1/search/code-context",
-        {
-          method: "POST",
-          body: payload,
-        }
-      );
+      const response = await apiFetch<CodeContextResponse>("/v1/search/code-context", {
+        method: "POST",
+        body: payload,
+      });
       setResult(response);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Search request failed.");
@@ -137,8 +115,7 @@ export default function Search() {
 
   if (!user) return null;
 
-  const canSubmit =
-    !!repositoryName.trim() && !!taskDescription.trim() && !reposLoading && !submitting;
+  const canSubmit = !!repositoryName.trim() && !!taskDescription.trim() && !reposLoading && !submitting;
 
   return (
     <>
@@ -146,12 +123,8 @@ export default function Search() {
       <main className="min-h-screen bg-background">
         {/* Hero section */}
         <div className="mx-auto max-w-3xl px-4 pt-16 pb-10 text-center">
-          <h1 className="text-4xl font-semibold tracking-tight text-foreground">
-            Lighthouse
-          </h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Search indexed code across your repositories
-          </p>
+          <h1 className="text-4xl font-semibold tracking-tight text-foreground">Lighthouse</h1>
+          <p className="mt-2 text-sm text-muted-foreground">Search indexed code across your repositories</p>
         </div>
 
         {/* Search form */}
@@ -199,12 +172,7 @@ export default function Search() {
 
               <div className="space-y-1.5">
                 <Label htmlFor="branch">Branch</Label>
-                <Input
-                  id="branch"
-                  value={branch}
-                  onChange={(e) => setBranch(e.target.value)}
-                  placeholder="main"
-                />
+                <Input id="branch" value={branch} onChange={(e) => setBranch(e.target.value)} placeholder="main" />
               </div>
             </div>
 
@@ -218,10 +186,7 @@ export default function Search() {
                   className="gap-1.5 px-0 text-muted-foreground hover:text-foreground hover:bg-transparent"
                 >
                   <ChevronDown
-                    className={cn(
-                      "size-4 transition-transform duration-200",
-                      filtersOpen && "rotate-180"
-                    )}
+                    className={cn("size-4 transition-transform duration-200", filtersOpen && "rotate-180")}
                   />
                   Advanced Filters
                 </Button>
@@ -366,9 +331,7 @@ export default function Search() {
               {/* Follow-up suggestions */}
               {result.follow_up.length > 0 && (
                 <div className="border border-border p-4 space-y-2">
-                  <h2 className="text-xs font-medium text-foreground uppercase tracking-wide">
-                    Follow-up Suggestions
-                  </h2>
+                  <h2 className="text-xs font-medium text-foreground uppercase tracking-wide">Follow-up Suggestions</h2>
                   <ul className="space-y-1">
                     {result.follow_up.map((item) => (
                       <li key={item} className="text-xs text-muted-foreground">

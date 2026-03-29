@@ -34,9 +34,7 @@ export default function Dashboard() {
         <div className="space-y-6">
           <MCPTokenPanel />
           <div className="flex items-center justify-between">
-            <h1 className="text-xl font-semibold text-foreground">
-              Repositories
-            </h1>
+            <h1 className="text-xl font-semibold text-foreground">Repositories</h1>
             <div className="flex items-center gap-3">
               <Button variant="outline" size="sm" asChild>
                 <Link to="/dashboard/search">Search Indexed Code</Link>
