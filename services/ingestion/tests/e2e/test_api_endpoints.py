@@ -72,14 +72,14 @@ class TestIngestionEndpoints:
         data = resp.json()
         assert data["status"] == "accepted"
         assert data["workflow_ids"] == [
-            "index-branch-12345-main",
-            "index-branch-12345-feature-x",
+            "index-branch-12345-owner-repo-main",
+            "index-branch-12345-owner-repo-feature-x",
         ]
 
         start_calls = client._transport.app.state.temporal_client.start_workflow.await_args_list
         assert len(start_calls) == 2
-        assert start_calls[0].kwargs["id"] == "index-branch-12345-main"
-        assert start_calls[1].kwargs["id"] == "index-branch-12345-feature-x"
+        assert start_calls[0].kwargs["id"] == "index-branch-12345-owner-repo-main"
+        assert start_calls[1].kwargs["id"] == "index-branch-12345-owner-repo-feature-x"
 
     @pytest.mark.asyncio
     async def test_index_repos_skips_duplicate_branch_workflow(self, client, monkeypatch):
@@ -87,7 +87,7 @@ class TestIngestionEndpoints:
             pass
 
         async def fake_start_workflow(*args, **kwargs):
-            if kwargs["id"] == "index-branch-12345-main":
+            if kwargs["id"] == "index-branch-12345-owner-repo-main":
                 raise FakeWorkflowAlreadyStartedError("already running")
             return SimpleNamespace(id=kwargs["id"])
 
@@ -118,7 +118,7 @@ class TestIngestionEndpoints:
         )
 
         assert resp.status_code == 200
-        assert resp.json()["workflow_ids"] == ["index-branch-12345-feature-x"]
+        assert resp.json()["workflow_ids"] == ["index-branch-12345-owner-repo-feature-x"]
 
     @pytest.mark.asyncio
     async def test_status_not_found(self, client):
