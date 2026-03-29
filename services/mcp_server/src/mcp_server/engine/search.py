@@ -16,6 +16,10 @@ if TYPE_CHECKING:
     from .engine import Engine
 
 
+# Backward-compatible alias used by older tests and callers.
+SearchRequest = HybridRequest
+
+
 class SearchEngine:
     """Expose coding-context retrieval entrypoints for agents."""
 
@@ -92,7 +96,7 @@ class SearchEngine:
             )
 
         try:
-            search_request = HybridRequest(
+            search_request = SearchRequest(
                 query=search_query,
                 github_repo_id=github_repo_id,
                 branch=branch.strip() or "main",

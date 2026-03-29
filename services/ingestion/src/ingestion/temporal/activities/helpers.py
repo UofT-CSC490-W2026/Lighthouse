@@ -13,6 +13,7 @@ from vectordb import MilvusClient
 from ...utilities.config import IngestionSettings
 
 _settings_factory: Callable[[], IngestionSettings] | None = None
+EMBEDDING_DIMENSION = default_embedding_dimension("bedrock")
 
 
 def set_settings_factory(factory: Callable[[], IngestionSettings] | None) -> None:
@@ -41,8 +42,10 @@ def make_milvus(settings: IngestionSettings) -> MilvusClient:
         uri=settings.milvus_uri,
         collection_name=MILVUS_COLLECTION_NAME,
     )
-    dimension = settings.embedding_dimension or default_embedding_dimension(
-        settings.embedding_strategy
+    dimension = (
+        settings.embedding_dimension
+        or EMBEDDING_DIMENSION
+        or default_embedding_dimension(settings.embedding_strategy)
     )
     milvus.ensure_collection(dimension=dimension)
     return milvus
