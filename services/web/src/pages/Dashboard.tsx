@@ -5,6 +5,7 @@ import { clearApiToken, getApiToken } from "@/lib/auth";
 import { MCPTokenPanel } from "@/components/MCPTokenPanel";
 import { Navbar } from "@/components/Navbar";
 import { RepoList } from "@/components/RepoList";
+import { Button } from "@/components/ui/button";
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -33,22 +34,16 @@ export default function Dashboard() {
         <div className="space-y-6">
           <MCPTokenPanel />
           <div className="flex items-center justify-between">
-            <h1 className="text-xl font-semibold text-gray-900">
+            <h1 className="text-xl font-semibold text-foreground">
               Repositories
             </h1>
             <div className="flex items-center gap-3">
-              <Link
-                to="/dashboard/search"
-                className="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
-              >
-                Search Indexed Code
-              </Link>
-              <Link
-                to="/dashboard/add-repo"
-                className="inline-flex items-center rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-blue-700"
-              >
-                + Add Repository
-              </Link>
+              <Button variant="outline" size="sm" asChild>
+                <Link to="/dashboard/search">Search Indexed Code</Link>
+              </Button>
+              <Button size="sm" asChild>
+                <Link to="/dashboard/add-repo">+ Add Repository</Link>
+              </Button>
             </div>
           </div>
           <RepoList />

@@ -1,6 +1,7 @@
 import useSWR from "swr";
 import { apiFetch, type UserRepo } from "@/lib/api";
 import { RepoCard } from "./RepoCard";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const fetcher = () => apiFetch<UserRepo[]>("/v1/user/repos");
 
@@ -20,10 +21,7 @@ export function RepoList() {
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {[1, 2, 3].map((i) => (
-          <div
-            key={i}
-            className="h-28 rounded-lg border border-gray-200 bg-gray-50 animate-pulse"
-          />
+          <Skeleton key={i} className="h-28 w-full" />
         ))}
       </div>
     );
@@ -31,7 +29,7 @@ export function RepoList() {
 
   if (error) {
     return (
-      <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+      <div className="border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
         Failed to load repositories. Please try again.
       </div>
     );
@@ -39,9 +37,9 @@ export function RepoList() {
 
   if (!data || data.length === 0) {
     return (
-      <div className="rounded-lg border border-gray-200 bg-gray-50 p-8 text-center">
-        <p className="text-gray-500">No repositories added yet.</p>
-        <p className="mt-1 text-sm text-gray-400">
+      <div className="border border-border bg-muted px-8 py-10 text-center">
+        <p className="text-sm text-muted-foreground">No repositories added yet.</p>
+        <p className="mt-1 text-xs text-muted-foreground/70">
           Add a GitHub repository to start indexing.
         </p>
       </div>
