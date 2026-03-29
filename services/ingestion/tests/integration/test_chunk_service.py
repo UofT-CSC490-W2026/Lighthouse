@@ -8,6 +8,14 @@ from testing_utils.factories import create_repository
 from testing_utils.mock_embedding import MockEmbeddingProvider
 
 @pytest.mark.integration
+class TestChunkServiceMilvusGuard:
+    def test_requires_milvus_for_publish_operations(self, db_manager):
+        svc = ChunkService(db_manager, milvus=None)
+        with pytest.raises(RuntimeError, match="MilvusClient not provided"):
+            svc.publish_full_batch("batch", "repo", "main")
+
+
+@pytest.mark.integration
 class TestChunkServiceStaging:
     def _make_chunks(self, repo_id, count=3):
         return [
@@ -106,33 +114,6 @@ class TestChunkServiceFinal:
         embeddings = embedder.embed_batch(texts)
         svc.write_staging_embeddings(batch_id, 0, embeddings)
         return svc, batch_id
-
-    def test_move_to_final(self, db_manager, milvus_client):
-        repo = create_repository(db_manager)
-        svc, batch_id = self._stage_with_embeddings(db_manager, milvus_client, repo.id)
-        count = svc.move_to_final(batch_id)
-        assert count == 3
-        with db_manager.connection_context():
-            assert Chunk.select().where(Chunk.repository == repo.id).count() == 3
-            assert StagingChunk.select().where(StagingChunk.batch_id == batch_id).count() == 0
-
-    def test_delete_by_branch(self, db_manager, milvus_client):
-        repo = create_repository(db_manager)
-        svc, batch_id = self._stage_with_embeddings(db_manager, milvus_client, repo.id)
-        svc.move_to_final(batch_id)
-        deleted = svc.delete_by_branch(repo.id, "main")
-        assert deleted == 3
-        with db_manager.connection_context():
-            assert Chunk.select().where(Chunk.repository == repo.id).count() == 0
-
-    def test_delete_by_files(self, db_manager, milvus_client):
-        repo = create_repository(db_manager)
-        svc, batch_id = self._stage_with_embeddings(db_manager, milvus_client, repo.id, count=3)
-        svc.move_to_final(batch_id)
-        deleted = svc.delete_by_files(repo.id, "main", ["file0.py"])
-        assert deleted == 1
-        with db_manager.connection_context():
-            assert Chunk.select().where(Chunk.repository == repo.id).count() == 2
 
     def test_publish_incremental_batch_skips_missing_embeddings(self, db_manager, milvus_client):
         repo = create_repository(db_manager)
@@ -286,8 +267,19 @@ class TestChunkServiceFinal:
 
     def test_delete_by_publish_targets_skips_none_publish_ids(self, db_manager, milvus_client):
         repo = create_repository(db_manager)
-        svc, batch_id = self._stage_with_embeddings(db_manager, milvus_client, repo.id, count=1)
-        svc.move_to_final(batch_id)
+        svc = ChunkService(db_manager, milvus_client)
+        with db_manager.connection_context():
+            from db import Chunk
+            Chunk.create(
+                repository=repo,
+                branch="main",
+                file_path="file0.py",
+                start_line=1,
+                end_line=5,
+                content="content",
+                chunk_hash=f"hash-{uuid.uuid4().hex}",
+                publish_id="some-batch",
+            )
 
         deleted = svc.delete_by_publish_targets(
             repository_id=repo.id,

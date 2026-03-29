@@ -18,7 +18,6 @@ from ingestion.temporal.activities.inputs import (
     ChunkFilesInput,
     ChunkFilesOutput,
     CleanupStagingInput,
-    DeleteChunksInput,
     EmbedBatchInput,
     EnsureRepoInput,
     FilePublishCleanup,
@@ -30,7 +29,6 @@ from ingestion.temporal.activities.inputs import (
     PublishFullBranchInput,
     PublishStagedChunksInput,
     PublishStagedChunksOutput,
-    StoreChunksInput,
     UpdateBranchStatusInput,
 )
 from ingestion.temporal.workflows.index_branch import IndexBranchWorkflow
@@ -99,18 +97,6 @@ def make_mock_activities(tracker: ActivityTracker):
             raise RuntimeError("mock embed failure")
         return f"embedded_{input.limit}"
 
-    @activity.defn(name="delete_existing_chunks")
-    async def mock_delete(input: DeleteChunksInput) -> int:
-        tracker.calls.append(("delete_existing_chunks", input))
-        return 5
-
-    @activity.defn(name="store_chunks")
-    async def mock_store(input: StoreChunksInput) -> int:
-        tracker.calls.append(("store_chunks", input))
-        if tracker.fail_on == "store_chunks":
-            raise RuntimeError("mock store failure")
-        return tracker.chunk_count
-
     @activity.defn(name="publish_staged_chunks")
     async def mock_publish(input: PublishStagedChunksInput) -> PublishStagedChunksOutput:
         tracker.calls.append(("publish_staged_chunks", input))
@@ -153,8 +139,6 @@ def make_mock_activities(tracker: ActivityTracker):
         mock_get_changed,
         mock_chunk,
         mock_embed,
-        mock_delete,
-        mock_store,
         mock_publish,
         mock_publish_full,
         mock_cleanup_inactive,

@@ -8,56 +8,11 @@ from .helpers import make_db, make_milvus
 from .inputs import (
     CleanupInactiveChunksInput,
     CleanupStagingInput,
-    DeleteChunksForFilesInput,
-    DeleteChunksInput,
     FilePublishCleanup,
     PublishFullBranchInput,
     PublishStagedChunksInput,
     PublishStagedChunksOutput,
-    StoreChunksInput,
 )
-
-
-@activity.defn
-async def delete_existing_chunks(input: DeleteChunksInput) -> int:
-    """Delete all chunks for a repo+branch from postgres and Milvus."""
-    settings = get_settings()
-    db = make_db(settings)
-    milvus = make_milvus(settings)
-    try:
-        svc = ChunkService(db, milvus)
-        return svc.delete_by_branch(input.repository_id, input.branch)
-    finally:
-        db.close()
-        milvus.close()
-
-
-@activity.defn
-async def delete_chunks_for_files(input: DeleteChunksForFilesInput) -> int:
-    """Delete chunks for specific files from postgres and Milvus."""
-    settings = get_settings()
-    db = make_db(settings)
-    milvus = make_milvus(settings)
-    try:
-        svc = ChunkService(db, milvus)
-        return svc.delete_by_files(input.repository_id, input.branch, input.file_paths)
-    finally:
-        db.close()
-        milvus.close()
-
-
-@activity.defn
-async def store_chunks(input: StoreChunksInput) -> int:
-    """Move staging chunks to final tables and Milvus."""
-    settings = get_settings()
-    db = make_db(settings)
-    milvus = make_milvus(settings)
-    try:
-        svc = ChunkService(db, milvus)
-        return svc.move_to_final(input.batch_id)
-    finally:
-        db.close()
-        milvus.close()
 
 
 @activity.defn

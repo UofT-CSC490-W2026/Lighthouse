@@ -61,29 +61,11 @@ class GetChangedFilesInput:
 
 
 @dataclass
-class DeleteChunksInput:
-    repository_id: str
-    branch: str
-
-
-@dataclass
-class DeleteChunksForFilesInput:
-    repository_id: str
-    branch: str
-    file_paths: list[str] = field(default_factory=list)
-
-
-@dataclass
 class EmbedBatchInput:
     batch_id: str
     offset: int
     limit: int
     embedding_strategy: str = "openai"
-
-
-@dataclass
-class StoreChunksInput:
-    batch_id: str
 
 
 @dataclass
