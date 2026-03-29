@@ -23,10 +23,7 @@ export function Navbar({ user }: { user: User | null }) {
       <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-14 items-center justify-between">
           <div className="flex items-center gap-6">
-            <Link
-              to="/dashboard"
-              className="flex items-center text-foreground hover:text-primary transition-colors"
-            >
+            <Link to="/dashboard" className="flex items-center text-foreground hover:text-primary transition-colors">
               <SiLighthouse className="size-5" />
             </Link>
             {user ? (
@@ -44,16 +41,10 @@ export function Navbar({ user }: { user: User | null }) {
           {user ? (
             <div className="flex items-center gap-3">
               {user.avatar_url && (
-                <img
-                  src={user.avatar_url}
-                  alt={user.github_login}
-                  className="h-7 w-7 rounded-full"
-                />
+                <img src={user.avatar_url} alt={user.github_login} className="h-7 w-7 rounded-full" />
               )}
-              <span className="text-sm text-muted-foreground">
-                {user.github_login}
-              </span>
-              <Button variant="ghost" size="sm" onClick={handleLogout}>
+              <span className="text-sm text-muted-foreground">{user.github_login}</span>
+              <Button variant="outline" size="sm" onClick={handleLogout}>
                 Sign out
               </Button>
             </div>
