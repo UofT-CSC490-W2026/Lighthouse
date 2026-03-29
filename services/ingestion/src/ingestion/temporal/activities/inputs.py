@@ -113,6 +113,13 @@ class CleanupInactiveChunksInput:
 
 
 @dataclass
+class PublishFullBranchInput:
+    batch_id: str
+    repository_id: str
+    branch: str
+
+
+@dataclass
 class CleanupStagingInput:
     batch_id: str
 

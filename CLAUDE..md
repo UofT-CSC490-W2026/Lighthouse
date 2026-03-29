@@ -6,7 +6,7 @@
 
 ## Build, Test, and Development Commands
 
-Install Python workspace dependencies with `uv sync --all-packages --dev`. Start local infra with `docker compose up -d`.
+Install Python workspace dependencies with `uv sync --all-packages --dev`. Start local infra with `docker compose up -d`. When you make changes to the code, make sure test coverage is still at 100%, by running `uv run pytest --cov` and checking the coverage report.
 
 - `uv run pytest`: run the full Python test suite.
 - `uv run pytest -m unit|integration|e2e`: run one test slice.

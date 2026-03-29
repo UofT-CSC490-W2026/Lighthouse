@@ -27,6 +27,7 @@ from ingestion.temporal.activities.inputs import (
     GitCloneFetchOutput,
     IndexBranchInput,
     IncrementalIndexInput,
+    PublishFullBranchInput,
     PublishStagedChunksInput,
     PublishStagedChunksOutput,
     StoreChunksInput,
@@ -122,6 +123,17 @@ def make_mock_activities(tracker: ActivityTracker):
             ]
         )
 
+    @activity.defn(name="publish_full_branch")
+    async def mock_publish_full(input: PublishFullBranchInput) -> PublishStagedChunksOutput:
+        tracker.calls.append(("publish_full_branch", input))
+        if tracker.fail_on == "publish_full_branch":
+            raise RuntimeError("mock publish_full_branch failure")
+        return PublishStagedChunksOutput(
+            cleanup_targets=[
+                FilePublishCleanup(file_path="a.py", previous_publish_id="legacy"),
+            ]
+        )
+
     @activity.defn(name="cleanup_inactive_chunks")
     async def mock_cleanup_inactive(input: CleanupInactiveChunksInput) -> int:
         tracker.calls.append(("cleanup_inactive_chunks", input))
@@ -144,6 +156,7 @@ def make_mock_activities(tracker: ActivityTracker):
         mock_delete,
         mock_store,
         mock_publish,
+        mock_publish_full,
         mock_cleanup_inactive,
         mock_cleanup,
     ]
@@ -192,13 +205,14 @@ class TestIndexBranchWorkflow:
         assert names[0] == "update_branch_status"
         assert names[1] == "git_clone_or_fetch"
         assert names[2] == "chunk_files"
-        assert names[3] == "delete_existing_chunks"
         assert "embed_chunk_batch" in names
-        assert "store_chunks" in names
-        # Final status update
-        assert names[-1] == "update_branch_status"
-        last_status = tracker.calls[-1][1]
-        assert last_status.status == "indexed"
+        assert "publish_full_branch" in names
+        assert "cleanup_inactive_chunks" in names
+        assert "delete_existing_chunks" not in names
+        assert "store_chunks" not in names
+        # Final status update (indexed) comes before best-effort cleanup
+        status_calls = [inp for name, inp in tracker.calls if name == "update_branch_status"]
+        assert status_calls[-1].status == "indexed"
 
     async def test_zero_chunks_early_exit(self, workflow_environment):
         tracker = ActivityTracker(chunk_count=0)
@@ -224,12 +238,14 @@ class TestIndexBranchWorkflow:
             )
         assert "No chunks" in result
         names = _activity_names(tracker)
-        assert "delete_existing_chunks" not in names
+        assert "publish_full_branch" not in names
         assert "embed_chunk_batch" not in names
+        assert "cleanup_inactive_chunks" not in names
+        assert "delete_existing_chunks" not in names
         assert "store_chunks" not in names
         # Should still mark as indexed
-        last_status = tracker.calls[-1][1]
-        assert last_status.status == "indexed"
+        status_calls = [inp for name, inp in tracker.calls if name == "update_branch_status"]
+        assert status_calls[-1].status == "indexed"
 
     async def test_parallel_embed_batches(self, workflow_environment):
         tracker = ActivityTracker(chunk_count=1024)

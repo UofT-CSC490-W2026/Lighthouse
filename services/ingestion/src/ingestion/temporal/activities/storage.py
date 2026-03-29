@@ -11,6 +11,7 @@ from .inputs import (
     DeleteChunksForFilesInput,
     DeleteChunksInput,
     FilePublishCleanup,
+    PublishFullBranchInput,
     PublishStagedChunksInput,
     PublishStagedChunksOutput,
     StoreChunksInput,
@@ -74,6 +75,35 @@ async def publish_staged_chunks(
             repository_id=input.repository_id,
             branch=input.branch,
             changed_files=input.changed_files,
+        )
+        return PublishStagedChunksOutput(
+            cleanup_targets=[
+                FilePublishCleanup(
+                    file_path=target.file_path,
+                    previous_publish_id=target.previous_publish_id,
+                )
+                for target in cleanup_targets
+            ]
+        )
+    finally:
+        db.close()
+        milvus.close()
+
+
+@activity.defn
+async def publish_full_branch(
+    input: PublishFullBranchInput,
+) -> PublishStagedChunksOutput:
+    """Publish all staged chunks for a full re-index and switch active file versions."""
+    settings = get_settings()
+    db = make_db(settings)
+    milvus = make_milvus(settings)
+    try:
+        svc = ChunkService(db, milvus)
+        cleanup_targets = svc.publish_full_batch(
+            batch_id=input.batch_id,
+            repository_id=input.repository_id,
+            branch=input.branch,
         )
         return PublishStagedChunksOutput(
             cleanup_targets=[
