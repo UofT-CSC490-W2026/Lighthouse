@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from shared.schemas.search import SearchRequest, SearchResult
-from search.main import create_app, health, search
+from search.main import _build_embedder, create_app, health, search
 from search.strategies.hybrid_strategy import HybridSearchStrategy
 
 
@@ -21,12 +21,24 @@ async def test_create_app_lifespan_initializes_and_closes(monkeypatch):
     )
     db_manager = MagicMock()
     milvus = MagicMock()
+    wiki_milvus = MagicMock()
     embedder = MagicMock()
     strategy = MagicMock()
+    wiki_strategy = MagicMock()
 
     monkeypatch.setattr("search.main.DatabaseManager", MagicMock(return_value=db_manager))
-    monkeypatch.setattr("search.main.MilvusClient", MagicMock(return_value=milvus))
-    monkeypatch.setattr("search.main.HybridSearchStrategy", MagicMock(return_value=strategy))
+    monkeypatch.setattr(
+        "search.main.MilvusClient",
+        MagicMock(side_effect=[milvus, wiki_milvus]),
+    )
+    monkeypatch.setattr(
+        "search.main.HybridSearchStrategy",
+        MagicMock(return_value=strategy),
+    )
+    monkeypatch.setattr(
+        "search.main.HybridWikiSearchStrategy",
+        MagicMock(return_value=wiki_strategy),
+    )
 
     app = create_app(settings=settings, embedder=embedder)
 
@@ -36,6 +48,7 @@ async def test_create_app_lifespan_initializes_and_closes(monkeypatch):
     db_manager.connect.assert_called_once_with()
     db_manager.close.assert_called_once_with()
     milvus.close.assert_called_once_with()
+    wiki_milvus.close.assert_called_once_with()
 
 
 @pytest.mark.unit
@@ -54,6 +67,29 @@ async def test_search_endpoint_uses_app_strategy(monkeypatch):
 @pytest.mark.asyncio
 async def test_health_endpoint():
     assert await health() == {"status": "ok"}
+
+
+@pytest.mark.unit
+def test_build_embedder_uses_configured_strategy(monkeypatch):
+    fake_provider = MagicMock()
+    get_provider = MagicMock(return_value=fake_provider)
+    monkeypatch.setattr("search.main.get_embedding_provider", get_provider)
+
+    settings = SimpleNamespace(
+        embedding_strategy="bedrock",
+        embedding_model="amazon.titan-embed-text-v2:0",
+        openai_api_key="",
+    )
+
+    result = _build_embedder(settings, embedder=None)
+
+    assert result is fake_provider
+    get_provider.assert_called_once()
+    strategy = get_provider.call_args.args[0]
+    kwargs = get_provider.call_args.kwargs
+    assert str(strategy) == "bedrock"
+    assert kwargs["model"] == "amazon.titan-embed-text-v2:0"
+    assert "api_key" not in kwargs
 
 
 @pytest.mark.unit

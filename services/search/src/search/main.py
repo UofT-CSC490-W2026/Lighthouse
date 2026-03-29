@@ -5,9 +5,19 @@ from contextlib import asynccontextmanager
 
 from db import DatabaseManager
 from fastapi import Depends, FastAPI
-from embedding import EmbeddingProvider, OpenAIEmbeddingProvider
+from embedding import (
+    EmbeddingProvider,
+    EmbeddingStrategy,
+    OpenAIEmbeddingProvider,
+    get_embedding_provider,
+)
 from shared.auth import verify_internal_token
-from shared.config import EMBEDDING_MODEL, MILVUS_COLLECTION_NAME, WIKI_MILVUS_COLLECTION_NAME
+from shared.config import (
+    DEFAULT_EMBEDDING_STRATEGY,
+    MILVUS_COLLECTION_NAME,
+    WIKI_MILVUS_COLLECTION_NAME,
+    default_embedding_model,
+)
 from shared.schemas.search import SearchRequest, SearchResult, WikiSearchRequest, WikiSearchResult
 from vectordb import MilvusClient
 
@@ -18,6 +28,27 @@ from search.strategies.wiki_search_strategy import HybridWikiSearchStrategy
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+def _build_embedder(
+    settings: SearchSettings,
+    embedder: EmbeddingProvider | None,
+) -> EmbeddingProvider:
+    if embedder is not None:
+        return embedder
+
+    normalized_strategy = settings.embedding_strategy.strip().lower()
+    if not normalized_strategy:
+        normalized_strategy = DEFAULT_EMBEDDING_STRATEGY
+    strategy = EmbeddingStrategy(normalized_strategy)
+
+    provider_kwargs: dict[str, object] = {
+        "model": settings.embedding_model or default_embedding_model(strategy.value),
+    }
+    if strategy is EmbeddingStrategy.OPENAI:
+        provider_kwargs["api_key"] = settings.openai_api_key
+
+    return get_embedding_provider(strategy, **provider_kwargs)
 
 
 def create_app(
@@ -41,7 +72,7 @@ def create_app(
             collection_name=MILVUS_COLLECTION_NAME,
         )
 
-        emb = _embedder or OpenAIEmbeddingProvider(api_key=s.openai_api_key)
+        emb = _build_embedder(s, _embedder)
 
         wiki_milvus = MilvusClient(
             uri=s.milvus_uri,
@@ -69,10 +100,7 @@ def create_app(
     return FastAPI(title="Lighthouse Search Service", lifespan=lifespan)
 
 
-app = create_app(
-    settings=SearchSettings(),
-    embedder=OpenAIEmbeddingProvider(api_key=SearchSettings().openai_api_key, model=EMBEDDING_MODEL),
-)
+app = create_app(settings=SearchSettings())
 
 
 @app.post("/search", response_model=SearchResult, dependencies=[Depends(verify_internal_token)])

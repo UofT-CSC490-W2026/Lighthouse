@@ -22,6 +22,7 @@ def test_settings(pg_dsn):
         openai_api_key="test-key",
         github_webhook_secret="test-secret",
         temporal_address="localhost:7233",
+        embedding_strategy="bedrock",
     )
 
 
@@ -80,6 +81,8 @@ class TestIngestionEndpoints:
         assert len(start_calls) == 2
         assert start_calls[0].kwargs["id"] == "index-branch-12345-main"
         assert start_calls[1].kwargs["id"] == "index-branch-12345-feature-x"
+        assert start_calls[0].args[1].embedding_strategy == "bedrock"
+        assert start_calls[1].args[1].embedding_strategy == "bedrock"
 
     @pytest.mark.asyncio
     async def test_index_repos_skips_duplicate_branch_workflow(self, client, monkeypatch):
@@ -168,6 +171,8 @@ class TestIngestionEndpoints:
         )
         assert resp.status_code == 200
         assert resp.json()["status"] == "accepted"
+        start_call = client._transport.app.state.temporal_client.start_workflow.await_args
+        assert start_call.args[1].embedding_strategy == "bedrock"
 
     @pytest.mark.asyncio
     async def test_webhook_invalid_signature(self, client):

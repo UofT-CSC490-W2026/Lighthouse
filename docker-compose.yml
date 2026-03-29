@@ -124,14 +124,8 @@ services:
       MILVUS_URI: http://milvus:19530
       TEMPORAL_ADDRESS: temporal:7233
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-}
-      EMBEDDING_STRATEGY: ${EMBEDDING_STRATEGY:-openai}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
-      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
-      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-}
-      AWS_PROFILE: ${AWS_PROFILE:-}
     volumes:
+      - .:/workspace:ro
       - ${HOME}/.aws:/root/.aws:ro
     depends_on:
       postgres:
@@ -157,14 +151,8 @@ services:
       POSTGRES_DSN: postgresql://lighthouse:lighthouse@postgres:5432/lighthouse
       MILVUS_URI: http://milvus:19530
       TEMPORAL_ADDRESS: temporal:7233
-      EMBEDDING_STRATEGY: ${EMBEDDING_STRATEGY:-openai}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
-      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
-      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-}
-      AWS_PROFILE: ${AWS_PROFILE:-}
     volumes:
+      - .:/workspace:ro
       - ${HOME}/.aws:/root/.aws:ro
     depends_on:
       postgres:
@@ -186,8 +174,6 @@ services:
       POSTGRES_DSN: postgresql://lighthouse:lighthouse@postgres:5432/lighthouse
       MILVUS_URI: http://milvus:19530
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      COHERE_API_KEY: ${COHERE_API_KEY:-}
     depends_on:
       postgres:
         condition: service_healthy
