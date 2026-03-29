@@ -21,6 +21,7 @@ class IngestionSettings(BaseSettings):
     embedding_strategy: str = "openai"
     embedding_model: str = ""
     embedding_dimension: int = 0
+    llm_strategy: str = "openai"
 
     model_config = {"env_prefix": "", "env_file": ".env", "extra": "ignore"}
 

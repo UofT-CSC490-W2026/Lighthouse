@@ -9,6 +9,7 @@ dependencies = [
     "db",
     "vectordb",
     "embedding",
+    "llm",
     "gitpython>=3.1",
     "pydantic-settings>=2.0",
     "xxhash>=3.6.0",
@@ -19,6 +20,7 @@ shared = { workspace = true }
 db = { workspace = true }
 vectordb = { workspace = true }
 embedding = { workspace = true }
+llm = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]

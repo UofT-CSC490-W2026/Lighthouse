@@ -20,6 +20,7 @@ members = [
     "eval",
     "ingestion",
     "lighthouse",
+    "llm",
     "mcp-server",
     "search",
     "shared",
@@ -1752,6 +1753,7 @@ dependencies = [
     { name = "embedding" },
     { name = "fastapi", extra = ["standard"] },
     { name = "gitpython" },
+    { name = "llm" },
     { name = "pydantic-settings" },
     { name = "shared" },
     { name = "temporalio" },
@@ -1765,6 +1767,7 @@ requires-dist = [
     { name = "embedding", editable = "packages/embedding" },
     { name = "fastapi", extras = ["standard"], specifier = ">=0.115" },
     { name = "gitpython", specifier = ">=3.1" },
+    { name = "llm", editable = "packages/llm" },
     { name = "pydantic-settings", specifier = ">=2.0" },
     { name = "shared", editable = "packages/shared" },
     { name = "temporalio", specifier = ">=1.7" },
@@ -2031,6 +2034,21 @@ dev = [
     { name = "testcontainers", extras = ["milvus", "postgres"], specifier = ">=4.14.2" },
     { name = "testing", editable = "packages/testing" },
     { name = "ty", specifier = ">=0.0.24" },
+]
+
+[[package]]
+name = "llm"
+version = "0.1.0"
+source = { editable = "packages/llm" }
+dependencies = [
+    { name = "openai" },
+    { name = "shared" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "openai", specifier = ">=1.0" },
+    { name = "shared", editable = "packages/shared" },
 ]
 
 [[package]]
@@ -4075,6 +4093,7 @@ source = { editable = "packages/testing" }
 dependencies = [
     { name = "db" },
     { name = "embedding" },
+    { name = "llm" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "shared" },
@@ -4086,6 +4105,7 @@ dependencies = [
 requires-dist = [
     { name = "db", editable = "packages/db" },
     { name = "embedding", editable = "packages/embedding" },
+    { name = "llm", editable = "packages/llm" },
     { name = "pytest", specifier = ">=9.0.2" },
     { name = "pytest-asyncio", specifier = ">=1.3.0" },
     { name = "shared", editable = "packages/shared" },

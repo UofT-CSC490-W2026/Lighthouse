@@ -17,6 +17,7 @@ members = [
   "packages/vectordb",
   "packages/db",
   "packages/embedding",
+  "packages/llm",
   "packages/testing",
 ]
 
@@ -59,6 +60,7 @@ source = [
   "packages/db/src",
   "packages/vectordb/src",
   "packages/embedding/src",
+  "packages/llm/src",
   "packages/shared/src",
   "services/ingestion/src",
   "services/search/src",

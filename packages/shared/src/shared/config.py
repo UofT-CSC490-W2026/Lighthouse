@@ -10,7 +10,8 @@ EMBEDDING_DIMENSION = OPENAI_EMBEDDING_DIMENSION
 MILVUS_COLLECTION_NAME = "chunk_embeddings"
 CHUNK_MAX_LINES = 50
 CHUNK_OVERLAP_LINES = 10
-
+LLM_MODEL = "gpt-4.1"
+WIKI_MILVUS_COLLECTION_NAME = "wiki_embeddings"
 
 def default_embedding_model(strategy: str) -> str:
     normalized = strategy.strip().lower()

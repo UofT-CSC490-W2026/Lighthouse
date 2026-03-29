@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from .auth import AuthEngine
 from .search import SearchEngine
 from .user import UserEngine
+from .wiki import WikiEngine
 from ..utilities import get_logger, httproute
 
 if TYPE_CHECKING:
@@ -20,6 +21,7 @@ class Engine:
     auth: AuthEngine
     search: SearchEngine
     user: UserEngine
+    wiki: WikiEngine
 
     def __init__(self, app: App) -> None:
         """Create the engine and its service subobjects for the given app."""
@@ -28,10 +30,11 @@ class Engine:
         self.auth = AuthEngine(self)
         self.search = SearchEngine(self)
         self.user = UserEngine(self)
+        self.wiki = WikiEngine(self)
 
     def registries(self) -> tuple[object, ...]:
         """Return the objects that contribute HTTP routes and MCP tools."""
-        return (self, self.auth, self.user, self.search)
+        return (self, self.auth, self.user, self.search, self.wiki)
 
     @httproute(
         "GET",
