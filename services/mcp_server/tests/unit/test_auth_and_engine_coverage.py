@@ -300,7 +300,7 @@ async def test_auth_engine_covers_redirect_and_logout_paths(monkeypatch):
 async def test_search_and_user_engines_cover_error_paths(monkeypatch):
     auth = AuthenticatedUser(id="user-1", github_id=1, github_login="octo", display_name=None, avatar_url=None, email=None)
     app = SimpleNamespace(
-        settings=SimpleNamespace(search_service_url="http://search", ingestion_service_url="http://ingest"),
+        settings=SimpleNamespace(search_service_url="http://search", ingestion_service_url="http://ingest", internal_service_token=""),
         database=SimpleNamespace(connection_context=contextmanager(lambda: (yield))()),
         authenticator=SimpleNamespace(
             list_visible_private_repository_ids=AsyncMock(return_value={11}),
@@ -443,7 +443,7 @@ async def test_user_engine_trigger_ingestion_service_errors():
         default_branch="main",
     )
     app = SimpleNamespace(
-        settings=SimpleNamespace(ingestion_service_url="http://ingest"),
+        settings=SimpleNamespace(ingestion_service_url="http://ingest", internal_service_token=""),
         authenticator=SimpleNamespace(_get_github_access_token_sync=MagicMock(return_value="gh-token")),
     )
     engine = UserEngine(SimpleNamespace(app=app))
@@ -481,7 +481,7 @@ async def test_user_engine_trigger_ingestion_success_and_search_resolve_none(db_
         default_branch="main",
     )
     app = SimpleNamespace(
-        settings=SimpleNamespace(ingestion_service_url="http://ingest"),
+        settings=SimpleNamespace(ingestion_service_url="http://ingest", internal_service_token=""),
         authenticator=SimpleNamespace(_get_github_access_token_sync=MagicMock(return_value="gh-token")),
         database=db_manager,
     )

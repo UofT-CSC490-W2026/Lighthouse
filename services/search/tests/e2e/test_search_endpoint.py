@@ -40,6 +40,7 @@ async def client(search_settings, mock_embedder, db_manager, e2e_milvus_client):
     from search.main import app
     from search.strategies.hybrid_strategy import HybridSearchStrategy
 
+    app.state.settings = search_settings
     app.state.strategy = HybridSearchStrategy(
         db_manager=db_manager,
         milvus=e2e_milvus_client,
