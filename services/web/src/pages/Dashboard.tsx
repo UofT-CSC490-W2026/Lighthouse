@@ -1,31 +1,14 @@
-import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { apiFetch, type User } from "@/lib/api";
-import { clearApiToken, getApiToken } from "@/lib/auth";
+import { Link } from "react-router-dom";
 import { MCPTokenPanel } from "@/components/MCPTokenPanel";
 import { Navbar } from "@/components/Navbar";
 import { RepoList } from "@/components/RepoList";
 import { Button } from "@/components/ui/button";
+import { useUser } from "@/lib/hooks";
 
 export default function Dashboard() {
-  const navigate = useNavigate();
-  const [user, setUser] = useState<User | null>(null);
+  const { user, isLoading } = useUser();
 
-  useEffect(() => {
-    if (!getApiToken()) {
-      navigate("/login", { replace: true });
-      return;
-    }
-
-    apiFetch<User>("/v1/auth/me")
-      .then(setUser)
-      .catch(() => {
-        clearApiToken();
-        navigate("/login", { replace: true });
-      });
-  }, [navigate]);
-
-  if (!user) return null;
+  if (isLoading && !user) return null;
 
   return (
     <>

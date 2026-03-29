@@ -1,30 +1,12 @@
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { apiFetch, type User } from "@/lib/api";
-import { clearApiToken, getApiToken } from "@/lib/auth";
 import { Navbar } from "@/components/Navbar";
 import { AddRepoForm } from "@/components/AddRepoForm";
 import { Card, CardContent } from "@/components/ui/card";
+import { useUser } from "@/lib/hooks";
 
 export default function AddRepo() {
-  const navigate = useNavigate();
-  const [user, setUser] = useState<User | null>(null);
+  const { user, isLoading } = useUser();
 
-  useEffect(() => {
-    if (!getApiToken()) {
-      navigate("/login", { replace: true });
-      return;
-    }
-
-    apiFetch<User>("/v1/auth/me")
-      .then(setUser)
-      .catch(() => {
-        clearApiToken();
-        navigate("/login", { replace: true });
-      });
-  }, [navigate]);
-
-  if (!user) return null;
+  if (isLoading && !user) return null;
 
   return (
     <>

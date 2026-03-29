@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { ChevronDown, Search as SearchIcon } from "lucide-react";
-import { apiFetch, type CodeContextRequest, type CodeContextResponse, type User, type UserRepo } from "@/lib/api";
-import { clearApiToken, getApiToken } from "@/lib/auth";
+import { apiFetch, type CodeContextRequest, type CodeContextResponse, type UserRepo } from "@/lib/api";
 import { Navbar } from "@/components/Navbar";
+import { useUser } from "@/lib/hooks";
 import { SnippetCard } from "@/components/SnippetCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,8 +24,7 @@ const textareaClass =
   "w-full resize-none border border-input bg-transparent px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground rounded-none outline-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50";
 
 export default function Search() {
-  const navigate = useNavigate();
-  const [user, setUser] = useState<User | null>(null);
+  const { user, isLoading: userLoading } = useUser();
   const [repos, setRepos] = useState<UserRepo[]>([]);
   const [reposLoading, setReposLoading] = useState(true);
   const [reposError, setReposError] = useState<string | null>(null);
@@ -46,14 +44,10 @@ export default function Search() {
   const [surroundingContext, setSurroundingContext] = useState("");
 
   useEffect(() => {
-    if (!getApiToken()) {
-      navigate("/login", { replace: true });
-      return;
-    }
+    if (!user) return;
 
-    void Promise.all([apiFetch<User>("/v1/auth/me"), apiFetch<UserRepo[]>("/v1/user/repos")])
-      .then(([currentUser, userRepos]) => {
-        setUser(currentUser);
+    void apiFetch<UserRepo[]>("/v1/user/repos")
+      .then((userRepos) => {
         setRepos(userRepos);
         setRepositoryName((current) => current || userRepos[0]?.full_name || "");
         if (!branch.trim()) {
@@ -61,8 +55,6 @@ export default function Search() {
         }
       })
       .catch((err) => {
-        clearApiToken();
-        navigate("/login", { replace: true });
         if (err instanceof Error) {
           setReposError(err.message);
         }
@@ -70,9 +62,9 @@ export default function Search() {
       .finally(() => {
         setReposLoading(false);
       });
-  }, [navigate]);
+  }, [user]);
 
-  async function handleSubmit(event: React.FormEvent) {
+async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     setSubmitting(true);
     setError(null);
@@ -113,7 +105,7 @@ export default function Search() {
     }
   }
 
-  if (!user) return null;
+  if (userLoading && !user) return null;
 
   const canSubmit = !!repositoryName.trim() && !!taskDescription.trim() && !reposLoading && !submitting;
 
