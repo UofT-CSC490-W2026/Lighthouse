@@ -175,7 +175,7 @@ async function handleSubmit(event: React.FormEvent) {
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="gap-1.5 px-0 text-muted-foreground hover:text-foreground hover:bg-transparent"
+                  className="gap-1.5 text-muted-foreground hover:text-foreground hover:bg-transparent"
                 >
                   <ChevronDown
                     className={cn("size-4 transition-transform duration-200", filtersOpen && "rotate-180")}
