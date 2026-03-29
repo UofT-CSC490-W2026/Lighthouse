@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any, cast
 
 import openai
 from shared.config import LLM_MODEL
@@ -16,18 +17,24 @@ class OpenAILLMProvider(LLMProvider):
         self.model = model
 
     def complete(self, messages: list[dict[str, str]], **kwargs) -> str:
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            **kwargs,
+        response = cast(
+            Any,
+            self.client.chat.completions.create(
+                model=self.model,
+                messages=cast(list[Any], messages),
+                **kwargs,
+            ),
         )
         return response.choices[0].message.content or ""
 
     def complete_json(self, messages: list[dict[str, str]], **kwargs) -> dict:
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            response_format={"type": "json_object"},
-            **kwargs,
+        response = cast(
+            Any,
+            self.client.chat.completions.create(
+                model=self.model,
+                messages=cast(list[Any], messages),
+                response_format={"type": "json_object"},
+                **kwargs,
+            ),
         )
         return json.loads(response.choices[0].message.content or "{}")

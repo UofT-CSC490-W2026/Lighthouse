@@ -378,7 +378,10 @@ object from AWS Systems Manager Parameter Store and use it as a settings source.
 - `embedding_strategy`
 - `embedding_model`
 - `embedding_dimension`
+- `llm_strategy` for wiki generation. This now defaults to `bedrock`.
+- `llm_model` to override the default model for the selected wiki LLM strategy
 - `openai_api_key` when `EMBEDDING_STRATEGY=openai`
+- `openai_api_key` when `LLM_STRATEGY=openai`
 - `github_webhook_secret`
 - `clone_base_dir`
 - `temporal_address`

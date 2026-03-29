@@ -2041,12 +2041,14 @@ name = "llm"
 version = "0.1.0"
 source = { editable = "packages/llm" }
 dependencies = [
+    { name = "boto3" },
     { name = "openai" },
     { name = "shared" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "boto3", specifier = ">=1.35" },
     { name = "openai", specifier = ">=1.0" },
     { name = "shared", editable = "packages/shared" },
 ]

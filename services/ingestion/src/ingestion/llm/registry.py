@@ -2,14 +2,16 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-from llm import LLMProvider, OpenAILLMProvider
+from llm import BedrockLLMProvider, LLMProvider, OpenAILLMProvider
 
 
 class LLMStrategy(StrEnum):
+    BEDROCK = "bedrock"
     OPENAI = "openai"
 
 
 _REGISTRY: dict[LLMStrategy, type[LLMProvider]] = {
+    LLMStrategy.BEDROCK: BedrockLLMProvider,
     LLMStrategy.OPENAI: OpenAILLMProvider,
 }
 
@@ -25,8 +27,6 @@ def get_llm_provider(
     return cls(**kwargs)
 
 
-def register_llm_provider(
-    strategy: LLMStrategy, cls: type[LLMProvider]
-) -> None:
+def register_llm_provider(strategy: LLMStrategy, cls: type[LLMProvider]) -> None:
     """Register a new LLM provider implementation."""
     _REGISTRY[strategy] = cls
