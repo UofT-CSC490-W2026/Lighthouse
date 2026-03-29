@@ -1,13 +1,12 @@
 import { Badge } from "@/components/ui/badge";
+import type { BranchStatus } from "@/lib/api";
 
-export function StatusBadge({ status }: { status: string | null }) {
-  const s = status || "NOT_FOUND";
-
-  if (s === "READY") {
-    return <Badge variant="default">Ready</Badge>;
+export function StatusBadge({ status }: { status: BranchStatus | null }) {
+  if (status === "INDEXED") {
+    return <Badge variant="default">Indexed</Badge>;
   }
 
-  if (s === "PENDING" || s === "IN_PROGRESS") {
+  if (status === "INDEXING" || status === "PENDING") {
     return (
       <Badge variant="secondary">
         <span className="mr-1 animate-pulse">&#9679;</span>
@@ -16,16 +15,8 @@ export function StatusBadge({ status }: { status: string | null }) {
     );
   }
 
-  if (s === "FAILED") {
+  if (status === "FAILED") {
     return <Badge variant="destructive">Failed</Badge>;
-  }
-
-  if (s === "STALE") {
-    return (
-      <Badge variant="outline" className="text-orange-600 border-orange-300">
-        Stale
-      </Badge>
-    );
   }
 
   return <Badge variant="outline">Not Indexed</Badge>;

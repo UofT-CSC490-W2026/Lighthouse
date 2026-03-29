@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, Literal, cast
 from urllib.parse import urlparse
 
 import httpx
@@ -10,7 +10,7 @@ from fastapi import Body
 from pydantic import BaseModel
 from shared.schemas.ingestion import IndexAcceptedResponse, IndexRequest, RepoIndexRequest
 
-from db import Repository, UserHiddenRepository
+from db import IndexedBranch, Repository, UserHiddenRepository
 from ..utilities import (
     AuthenticatedUser,
     GitHubRepository,
@@ -77,7 +77,7 @@ class UserEngine:
             auth.id,
             visible_private_repo_ids,
         )
-        return [self._to_user_repo_response(repo) for repo in repos]
+        return [self._to_user_repo_response(repo, branches) for repo, branches in repos]
 
     @httproute(
         "POST",
@@ -106,7 +106,7 @@ class UserEngine:
 
         await self._trigger_ingestion(github_repo, auth.id)
 
-        return self._to_user_repo_response(repo)
+        return self._to_user_repo_response(repo, [])
 
     @httproute(
         "DELETE",
@@ -240,8 +240,8 @@ class UserEngine:
         self,
         user_id: str,
         visible_private_repo_ids: set[int],
-    ) -> list[Repository]:
-        """Load visible repositories in newest-first order."""
+    ) -> list[tuple[Repository, list[IndexedBranch]]]:
+        """Load visible repositories in newest-first order, with their indexed branches."""
         with self.engine.app.database.connection_context():
             visibility_clause = ~Repository.is_private
             if visible_private_repo_ids:
@@ -262,7 +262,15 @@ class UserEngine:
                 )
                 .order_by(Repository.added_at.desc())
             )
-            return list(query)
+            result = []
+            for repo in query:
+                branches = list(
+                    IndexedBranch.select()
+                    .where(IndexedBranch.repository == repo)
+                    .order_by(IndexedBranch.branch_name)
+                )
+                result.append((repo, branches))
+            return result
 
     def _hide_user_repo_sync(self, user_id: str, full_name: str) -> bool:
         """Hide an existing repository for a single user without deleting it globally."""
@@ -314,8 +322,12 @@ class UserEngine:
 
         return f"{owner.lower()}/{repo_name.lower()}"
 
-    def _to_user_repo_response(self, repo: Repository) -> "UserRepoResponse":
+    def _to_user_repo_response(self, repo: Repository, branches: list[IndexedBranch]) -> "UserRepoResponse":
         """Convert a repository model into the API response shape."""
+        branch_infos = [
+            BranchInfo(branch_name=b.branch_name, status=cast("BranchStatus", b.status.upper()))
+            for b in branches
+        ]
         return UserRepoResponse(
             id=repo.id,
             github_repo_id=repo.github_repo_id,
@@ -323,8 +335,19 @@ class UserEngine:
             repo_url=repo.repo_url,
             display_name=repo.display_name,
             added_at=repo.added_at,
-            index_status=None,
+            index_status=self._compute_index_status(branch_infos),
+            branches=branch_infos,
         )
+
+    def _compute_index_status(self, branches: list["BranchInfo"]) -> "BranchStatus | None":
+        """Derive a single repo-level status from its branch statuses."""
+        if not branches:
+            return None
+        statuses = {b.status for b in branches}
+        for priority in ("INDEXING", "PENDING", "FAILED", "INDEXED"):
+            if priority in statuses:
+                return cast("BranchStatus", priority)
+        return branches[0].status
 
 
 class UserResponse(BaseModel):
@@ -338,6 +361,16 @@ class UserResponse(BaseModel):
     email: str | None
 
 
+BranchStatus = Literal["PENDING", "INDEXING", "INDEXED", "FAILED"]
+
+
+class BranchInfo(BaseModel):
+    """Serialize a single indexed branch and its status."""
+
+    branch_name: str
+    status: BranchStatus
+
+
 class UserRepoResponse(BaseModel):
     """Serialize an indexed repository visible to the authenticated user."""
 
@@ -347,7 +380,8 @@ class UserRepoResponse(BaseModel):
     repo_url: str
     display_name: str
     added_at: datetime
-    index_status: str | None = None
+    index_status: BranchStatus | None = None
+    branches: list[BranchInfo] = []
 
 
 class HideUserRepoResponse(BaseModel):

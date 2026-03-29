@@ -10,6 +10,8 @@ export function RepoList() {
     refreshInterval: 5000,
   });
 
+  console.log(data);
+
   async function handleRemove(repoId: string) {
     await apiFetch(`/v1/user/repos/${encodeURIComponent(repoId)}`, {
       method: "DELETE",
@@ -39,9 +41,7 @@ export function RepoList() {
     return (
       <div className="border border-border bg-muted px-8 py-10 text-center">
         <p className="text-sm text-muted-foreground">No repositories added yet.</p>
-        <p className="mt-1 text-xs text-muted-foreground/70">
-          Add a GitHub repository to start indexing.
-        </p>
+        <p className="mt-1 text-xs text-muted-foreground/70">Add a GitHub repository to start indexing.</p>
       </div>
     );
   }
@@ -55,6 +55,7 @@ export function RepoList() {
           repoUrl={repo.repo_url}
           indexStatus={repo.index_status}
           addedAt={repo.added_at}
+          branches={repo.branches}
           onRemove={handleRemove}
         />
       ))}

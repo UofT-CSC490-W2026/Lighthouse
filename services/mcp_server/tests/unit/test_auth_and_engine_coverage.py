@@ -10,7 +10,7 @@ import pytest
 from cryptography.fernet import Fernet
 from fastapi import Request
 
-from db import Repository, Session, User
+from db import IndexedBranch, Repository, Session, User
 from mcp_server.engine.auth import AuthEngine
 from mcp_server.engine.search import SearchEngine
 from mcp_server.engine.user import UserEngine
@@ -546,12 +546,57 @@ def test_search_and_user_engine_sync_db_paths(db_manager):
     user_engine._upsert_user_repo_sync(github_repo, "user-1")
     visible = user_engine._list_user_repos_sync("user-1", {55})
     assert len(visible) == 1
-    assert user_engine._to_user_repo_response(visible[0]).index_status is None
+    repo_obj, branches = visible[0]
+    assert user_engine._to_user_repo_response(repo_obj, branches).index_status is None
+
+    # Add indexed branches and verify they are returned and status is computed correctly
+    with db_manager.connection_context():
+        IndexedBranch.create(repository=repo_obj, branch_name="main", status="indexed")
+        IndexedBranch.create(repository=repo_obj, branch_name="dev", status="indexing")
+
+    visible = user_engine._list_user_repos_sync("user-1", {55})
+    repo_obj, branches = visible[0]
+    assert len(branches) == 2
+    branch_names = [b.branch_name for b in branches]
+    assert "main" in branch_names and "dev" in branch_names
+
+    response = user_engine._to_user_repo_response(repo_obj, branches)
+    assert response.index_status == "INDEXING"
+    assert len(response.branches) == 2
+    assert all(b.status == b.status.upper() for b in response.branches)
+
     assert search_engine._resolve_github_repo_id("owner/repo") == 55
     with pytest.raises(RequestError, match="owner/repo form"):
         user_engine._normalize_full_name("owner/   ")
     with pytest.raises(RequestError, match="owner/repo form"):
         user_engine._normalize_full_name("owner/.git")
+
+
+@pytest.mark.unit
+def test_compute_index_status():
+    from mcp_server.engine.user import BranchInfo
+
+    engine = UserEngine(MagicMock())
+
+    assert engine._compute_index_status([]) is None
+
+    def make(status):
+        return BranchInfo(branch_name="b", status=status)
+
+    assert engine._compute_index_status([make("INDEXED")]) == "INDEXED"
+    assert engine._compute_index_status([make("INDEXING")]) == "INDEXING"
+    assert engine._compute_index_status([make("PENDING")]) == "PENDING"
+    assert engine._compute_index_status([make("FAILED")]) == "FAILED"
+
+    # Priority: INDEXING > PENDING > FAILED > INDEXED
+    assert engine._compute_index_status([make("INDEXED"), make("INDEXING")]) == "INDEXING"
+    assert engine._compute_index_status([make("INDEXED"), make("PENDING")]) == "PENDING"
+    assert engine._compute_index_status([make("INDEXED"), make("FAILED")]) == "FAILED"
+    assert engine._compute_index_status([make("FAILED"), make("INDEXING")]) == "INDEXING"
+
+    # Fallback: bypass Pydantic to hit the unreachable default branch
+    unknown = BranchInfo.model_construct(branch_name="b", status="UNKNOWN")
+    assert engine._compute_index_status([unknown]) == "UNKNOWN"
 
 
 @pytest.mark.unit

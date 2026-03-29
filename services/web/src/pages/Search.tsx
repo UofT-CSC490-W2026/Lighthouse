@@ -50,9 +50,6 @@ export default function Search() {
       .then((userRepos) => {
         setRepos(userRepos);
         setRepositoryName((current) => current || userRepos[0]?.full_name || "");
-        if (!branch.trim()) {
-          setBranch("main");
-        }
       })
       .catch((err) => {
         if (err instanceof Error) {
@@ -64,7 +61,14 @@ export default function Search() {
       });
   }, [user]);
 
-async function handleSubmit(event: React.FormEvent) {
+  useEffect(() => {
+    if (!repositoryName || repos.length === 0) return;
+    const repo = repos.find((r) => r.full_name === repositoryName);
+    const firstBranch = repo?.branches[0]?.branch_name ?? "main";
+    setBranch(firstBranch);
+  }, [repositoryName, repos]);
+
+  async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     setSubmitting(true);
     setError(null);
@@ -108,6 +112,10 @@ async function handleSubmit(event: React.FormEvent) {
   if (userLoading && !user) return null;
 
   const canSubmit = !!repositoryName.trim() && !!taskDescription.trim() && !reposLoading && !submitting;
+  const selectedRepo = repos.find((r) => r.full_name === repositoryName) ?? null;
+  const availableBranches = (selectedRepo?.branches ?? []).filter(
+    (b) => b.status === "INDEXED"
+  );
 
   return (
     <>
@@ -136,35 +144,50 @@ async function handleSubmit(event: React.FormEvent) {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="repository-name">Repository</Label>
-                <Select
-                  value={repositoryName}
-                  onValueChange={setRepositoryName}
-                  disabled={reposLoading || repos.length === 0}
-                >
-                  <SelectTrigger id="repository-name" className="rounded-none">
-                    <SelectValue
-                      placeholder={
-                        reposLoading
-                          ? "Loading repositories..."
-                          : repos.length === 0
-                            ? "No repositories available"
-                            : "Select a repository"
-                      }
-                    />
-                  </SelectTrigger>
-                  <SelectContent className="rounded-none">
-                    {repos.map((repo) => (
-                      <SelectItem key={repo.id} value={repo.full_name} className="rounded-none">
-                        {repo.full_name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {reposLoading ? (
+                  <Skeleton className="h-9 w-full" />
+                ) : (
+                  <Select
+                    value={repositoryName}
+                    onValueChange={setRepositoryName}
+                    disabled={repos.length === 0}
+                  >
+                    <SelectTrigger id="repository-name" className="rounded-none">
+                      <SelectValue
+                        placeholder={repos.length === 0 ? "No repositories available" : "Select a repository"}
+                      />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-none">
+                      {repos.map((repo) => (
+                        <SelectItem key={repo.id} value={repo.full_name} className="rounded-none">
+                          {repo.full_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
 
               <div className="space-y-1.5">
                 <Label htmlFor="branch">Branch</Label>
-                <Input id="branch" value={branch} onChange={(e) => setBranch(e.target.value)} placeholder="main" />
+                {reposLoading ? (
+                  <Skeleton className="h-9 w-full" />
+                ) : availableBranches.length > 0 ? (
+                  <Select value={branch} onValueChange={setBranch} disabled={!repositoryName}>
+                    <SelectTrigger id="branch" className="w-full rounded-none">
+                      <SelectValue placeholder="Select a branch" />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-none">
+                      {availableBranches.map((b) => (
+                        <SelectItem key={b.branch_name} value={b.branch_name} className="rounded-none">
+                          {b.branch_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input id="branch" value={branch} onChange={(e) => setBranch(e.target.value)} placeholder="main" />
+                )}
               </div>
             </div>
 

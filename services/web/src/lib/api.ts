@@ -73,6 +73,13 @@ export interface User {
   email: string | null;
 }
 
+export type BranchStatus = "PENDING" | "INDEXING" | "INDEXED" | "FAILED";
+
+export interface BranchInfo {
+  branch_name: string;
+  status: BranchStatus;
+}
+
 export interface UserRepo {
   id: string;
   github_repo_id: number;
@@ -81,6 +88,7 @@ export interface UserRepo {
   display_name: string;
   added_at: string;
   index_status: string | null;
+  branches: BranchInfo[];
 }
 
 export interface MCPTokenState {
