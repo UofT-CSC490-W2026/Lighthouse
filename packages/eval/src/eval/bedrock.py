@@ -3,6 +3,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import cast
 
+from shared.aws import prefer_explicit_aws_credentials
+
 
 DEFAULT_BASELINE_MODEL = "bedrock/us.amazon.nova-lite-v1:0"
 DEFAULT_BASELINE_REGION = "us-east-1"
@@ -33,6 +35,7 @@ class BedrockPatchGenerator:
 
         import boto3
 
+        prefer_explicit_aws_credentials()
         client_kwargs: dict[str, str] = {}
         if region_name:
             client_kwargs["region_name"] = region_name

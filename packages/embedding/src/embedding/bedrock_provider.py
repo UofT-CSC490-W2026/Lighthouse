@@ -6,6 +6,7 @@ from typing import Any
 
 import boto3
 from botocore.exceptions import ClientError
+from shared.aws import prefer_explicit_aws_credentials
 from shared.config import BEDROCK_EMBEDDING_DIMENSION, BEDROCK_EMBEDDING_MODEL
 
 from .base_provider import EmbeddingProvider
@@ -36,6 +37,7 @@ class BedrockEmbeddingProvider(EmbeddingProvider):
         self.normalize = normalize
 
         if client is None:
+            prefer_explicit_aws_credentials()
             client_kwargs: dict[str, Any] = {}
             if region_name:
                 client_kwargs["region_name"] = region_name

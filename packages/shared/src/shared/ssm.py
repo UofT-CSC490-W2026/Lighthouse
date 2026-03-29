@@ -20,6 +20,8 @@ from pydantic import AliasChoices
 from pydantic.fields import FieldInfo
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
 
+from .aws import prefer_explicit_aws_credentials
+
 
 def _dedupe(values: list[str]) -> list[str]:
     """Return *values* without empty entries or duplicates, preserving order."""
@@ -57,6 +59,8 @@ def get_ssm_client(region_name: str | None = None) -> Any:
         raise RuntimeError(
             "boto3 must be installed to load settings from AWS SSM Parameter Store."
         ) from exc
+
+    prefer_explicit_aws_credentials()
 
     kwargs: dict[str, Any] = {}
     if region_name:
