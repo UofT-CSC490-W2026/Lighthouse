@@ -14,6 +14,7 @@ from shared.schemas.ingestion import (
     IndexStatusResponse,
 )
 from temporalio.client import Client
+from temporalio.exceptions import WorkflowAlreadyStartedError
 
 from .utilities import IngestionSettings
 from .temporal import IncrementalIndexWorkflow, IndexRepositoryWorkflow
@@ -47,21 +48,25 @@ async def index_repos(request: IndexRequest):
 
     for repo in request.repositories:
         workflow_id = f"index-{repo.github_repo_id}"
-        await temporal.start_workflow(
-            IndexRepositoryWorkflow.run,
-            IndexRepoInput(
-                github_repo_id=repo.github_repo_id,
-                repo_url=repo.repo_url,
-                full_name=repo.full_name.strip().lower(),
-                branches=repo.branches,
-                github_token=repo.github_token,
-                embedding_strategy=settings.embedding_strategy,
-            ),
-            id=workflow_id,
-            task_queue=settings.temporal_task_queue,
-        )
+        try:
+            await temporal.start_workflow(
+                IndexRepositoryWorkflow.run,
+                IndexRepoInput(
+                    github_repo_id=repo.github_repo_id,
+                    repo_url=repo.repo_url,
+                    full_name=repo.full_name.strip().lower(),
+                    branches=repo.branches,
+                    github_token=repo.github_token,
+                    embedding_strategy=settings.embedding_strategy,
+                ),
+                id=workflow_id,
+                task_queue=settings.temporal_task_queue,
+            )
+            logger.info("Started indexing workflow %s", workflow_id)
+        except WorkflowAlreadyStartedError:
+            logger.info("Indexing workflow %s is already running", workflow_id)
+
         workflow_ids.append(workflow_id)
-        logger.info("Started indexing workflow %s", workflow_id)
 
     return IndexAcceptedResponse(workflow_ids=workflow_ids)
 

@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 from httpx import ASGITransport
+from temporalio.exceptions import WorkflowAlreadyStartedError
 
 from ingestion.main import app
 from ingestion.utilities.config import IngestionSettings
@@ -65,6 +66,32 @@ class TestIngestionEndpoints:
         data = resp.json()
         assert data["status"] == "accepted"
         assert len(data["workflow_ids"]) == 1
+
+    @pytest.mark.asyncio
+    async def test_index_repos_when_workflow_already_running(self, client):
+        app.state.temporal_client.start_workflow.side_effect = WorkflowAlreadyStartedError(
+            "index-12345",
+            "IndexRepositoryWorkflow",
+        )
+
+        resp = await client.post(
+            "/index",
+            json={
+                "repositories": [
+                    {
+                        "github_repo_id": 12345,
+                        "repo_url": "https://github.com/owner/repo",
+                        "full_name": "owner/repo",
+                        "branches": ["main"],
+                    }
+                ]
+            },
+        )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "accepted"
+        assert data["workflow_ids"] == ["index-12345"]
 
     @pytest.mark.asyncio
     async def test_status_not_found(self, client):
