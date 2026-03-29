@@ -121,15 +121,6 @@ class CleanupStagingInput:
 
 
 @dataclass
-class IndexRepoInput:
-    github_repo_id: int
-    repo_url: str
-    full_name: str
-    branches: list[str]
-    github_token: str | None = None
-
-
-@dataclass
 class IndexBranchInput:
     repository_id: str
     github_repo_id: int
