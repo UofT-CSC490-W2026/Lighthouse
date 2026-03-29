@@ -13,13 +13,6 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
-function toOptionalNumber(value: string): number | undefined {
-  const trimmed = value.trim();
-  if (!trimmed) return undefined;
-  const parsed = Number(trimmed);
-  return Number.isFinite(parsed) ? parsed : undefined;
-}
-
 const textareaClass =
   "w-full resize-none border border-input bg-transparent px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground rounded-none outline-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50";
 
@@ -34,14 +27,9 @@ export default function Search() {
   const [filtersOpen, setFiltersOpen] = useState(false);
 
   const [repositoryName, setRepositoryName] = useState("");
-  const [taskDescription, setTaskDescription] = useState("");
+  const [query, setQuery] = useState("");
   const [branch, setBranch] = useState("main");
-  const [latestCommit, setLatestCommit] = useState("");
   const [filePath, setFilePath] = useState("");
-  const [startLine, setStartLine] = useState("");
-  const [endLine, setEndLine] = useState("");
-  const [selectedText, setSelectedText] = useState("");
-  const [surroundingContext, setSurroundingContext] = useState("");
 
   useEffect(() => {
     if (!user) return;
@@ -76,25 +64,13 @@ export default function Search() {
 
     const payload: CodeContextRequest = {
       repository_name: repositoryName.trim(),
-      task_description: taskDescription.trim(),
+      query: query.trim(),
       branch: branch.trim() || "main",
     };
 
-    const normalizedLatestCommit = latestCommit.trim();
     const normalizedFilePath = filePath.trim();
-    const normalizedSelectedText = selectedText.trim();
-    const normalizedSurroundingContext = surroundingContext.trim();
-    const normalizedStartLine = toOptionalNumber(startLine);
-    const normalizedEndLine = toOptionalNumber(endLine);
 
-    if (normalizedLatestCommit) payload.latest_commit = normalizedLatestCommit;
     if (normalizedFilePath) payload.file_path = normalizedFilePath;
-    if (normalizedStartLine !== undefined) payload.start_line = normalizedStartLine;
-    if (normalizedEndLine !== undefined) payload.end_line = normalizedEndLine;
-    if (normalizedSelectedText) payload.selected_text = normalizedSelectedText;
-    if (normalizedSurroundingContext) {
-      payload.surrounding_context = normalizedSurroundingContext;
-    }
 
     try {
       const response = await apiFetch<CodeContextResponse>("/v1/search/code-context", {
@@ -111,7 +87,7 @@ export default function Search() {
 
   if (userLoading && !user) return null;
 
-  const canSubmit = !!repositoryName.trim() && !!taskDescription.trim() && !reposLoading && !submitting;
+  const canSubmit = !!repositoryName.trim() && !!query.trim() && !reposLoading && !submitting;
   const selectedRepo = repos.find((r) => r.full_name === repositoryName) ?? null;
   const availableBranches = (selectedRepo?.branches ?? []).filter(
     (b) => b.status === "INDEXED"
@@ -130,11 +106,11 @@ export default function Search() {
         {/* Search form */}
         <div className="mx-auto max-w-3xl px-4 pb-16">
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Task description */}
+            {/* Search query */}
             <textarea
-              id="task-description"
-              value={taskDescription}
-              onChange={(e) => setTaskDescription(e.target.value)}
+              id="search-query"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
               rows={4}
               placeholder="Describe what you're looking for..."
               className={textareaClass}
@@ -208,73 +184,13 @@ export default function Search() {
               </CollapsibleTrigger>
               <CollapsibleContent className="pt-3">
                 <div className="space-y-4 border border-border p-4">
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="file-path">File Path</Label>
-                      <Input
-                        id="file-path"
-                        value={filePath}
-                        onChange={(e) => setFilePath(e.target.value)}
-                        placeholder="src/auth.ts"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="latest-commit">Latest Commit</Label>
-                      <Input
-                        id="latest-commit"
-                        value={latestCommit}
-                        onChange={(e) => setLatestCommit(e.target.value)}
-                        placeholder="Optional SHA"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="start-line">Start Line</Label>
-                      <Input
-                        id="start-line"
-                        type="number"
-                        min="1"
-                        value={startLine}
-                        onChange={(e) => setStartLine(e.target.value)}
-                        placeholder="Optional"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="end-line">End Line</Label>
-                      <Input
-                        id="end-line"
-                        type="number"
-                        min="1"
-                        value={endLine}
-                        onChange={(e) => setEndLine(e.target.value)}
-                        placeholder="Optional"
-                      />
-                    </div>
-                  </div>
-
                   <div className="space-y-1.5">
-                    <Label htmlFor="selected-text">Selected Text</Label>
-                    <textarea
-                      id="selected-text"
-                      value={selectedText}
-                      onChange={(e) => setSelectedText(e.target.value)}
-                      rows={3}
-                      placeholder="Optional highlighted text from the editor."
-                      className={textareaClass}
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label htmlFor="surrounding-context">Surrounding Context</Label>
-                    <textarea
-                      id="surrounding-context"
-                      value={surroundingContext}
-                      onChange={(e) => setSurroundingContext(e.target.value)}
-                      rows={4}
-                      placeholder="Optional nearby code or notes from the editor."
-                      className={textareaClass}
+                    <Label htmlFor="file-path">File Path</Label>
+                    <Input
+                      id="file-path"
+                      value={filePath}
+                      onChange={(e) => setFilePath(e.target.value)}
+                      placeholder="src/auth.ts"
                     />
                   </div>
                 </div>

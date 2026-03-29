@@ -328,16 +328,8 @@ async def test_search_and_user_engines_cover_error_paths(monkeypatch):
         await search_engine.get_code_context(auth, " owner/repo ", "fix bug")
 
     monkeypatch.setattr(search_engine, "_resolve_github_repo_id", MagicMock(return_value=11))
-    with pytest.raises(RequestError, match="task_description is required"):
+    with pytest.raises(RequestError, match="query is required"):
         await search_engine.get_code_context(auth, "owner/repo", "   ")
-    with pytest.raises(RequestError, match="start_line must be greater than 0"):
-        await search_engine.get_code_context(auth, "owner/repo", "fix bug", start_line=0)
-    with pytest.raises(RequestError, match="end_line must be greater than 0"):
-        await search_engine.get_code_context(auth, "owner/repo", "fix bug", start_line=1, end_line=0)
-    with pytest.raises(RequestError, match="start_line is required"):
-        await search_engine.get_code_context(auth, "owner/repo", "fix bug", end_line=2)
-    with pytest.raises(RequestError, match="end_line must be greater than or equal to start_line"):
-        await search_engine.get_code_context(auth, "owner/repo", "fix bug", start_line=3, end_line=2)
     validation_error = Exception()
     monkeypatch.setattr(
         "mcp_server.engine.search.SearchRequest",
@@ -355,14 +347,14 @@ async def test_search_and_user_engines_cover_error_paths(monkeypatch):
         response=httpx.Response(500, text="oops"),
     )
     monkeypatch.setattr("mcp_server.engine.search.httpx.AsyncClient", lambda *args, **kwargs: _AsyncClient(post_error=http_status))
-    result = await search_engine.get_code_context(auth, "owner/repo", "fix bug", selected_text=" x ")
+    result = await search_engine.get_code_context(auth, "owner/repo", "fix bug")
     assert result.status == "error"
 
     monkeypatch.setattr(
         "mcp_server.engine.search.httpx.AsyncClient",
         lambda *args, **kwargs: _AsyncClient(post_error=httpx.RequestError("down", request=httpx.Request("POST", "http://search"))),
     )
-    result = await search_engine.get_code_context(auth, "owner/repo", "fix bug", start_line=1, end_line=2)
+    result = await search_engine.get_code_context(auth, "owner/repo", "fix bug")
     assert result.message == "Search service unavailable."
 
     monkeypatch.setattr(
@@ -381,24 +373,57 @@ async def test_search_and_user_engines_cover_error_paths(monkeypatch):
                             "reason": "relevant",
                         }
                     ],
-                    "query": "fix bug selected context",
+                    "query": "fix bug",
                     "total_results": 1,
                 }
             )
         ),
     )
+    captured_request: dict[str, object] = {}
+
+    class _CapturingAsyncClient(_AsyncClient):
+        async def post(self, *args, **kwargs):
+            captured_request.update(kwargs["json"])
+            return await super().post(*args, **kwargs)
+
+    monkeypatch.setattr(
+        "mcp_server.engine.search.httpx.AsyncClient",
+        lambda *args, **kwargs: _CapturingAsyncClient(
+            post_response=_Response(
+                json_data={
+                    "snippets": [
+                        {
+                            "file_path": "a.py",
+                            "start_line": 1,
+                            "end_line": 2,
+                            "content": "print('hi')",
+                            "language": "python",
+                            "score": 0.9,
+                            "reason": "relevant",
+                        }
+                    ],
+                    "query": "fix bug",
+                    "total_results": 1,
+                }
+            )
+        ),
+    )
+
     result = await search_engine.get_code_context(
         auth,
         " owner/repo ",
         "fix bug",
-        latest_commit=" abc ",
         file_path=" a.py ",
-        selected_text=" selected ",
-        surrounding_context=" context ",
     )
+    assert captured_request == {
+        "query": "fix bug",
+        "github_repo_id": 11,
+        "branch": "main",
+        "file_path": "a.py",
+        "top_k": 10,
+    }
     assert result.status == "ok"
-    assert result.latest_commit == "abc"
-    assert result.highlight.file_path == "a.py"
+    assert result.query == "fix bug"
     assert result.snippets[0].reason == "relevant"
 
     monkeypatch.setattr(user_engine, "_list_user_repos_sync", MagicMock(return_value=[]))

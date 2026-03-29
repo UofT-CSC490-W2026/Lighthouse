@@ -4,13 +4,13 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { StatusBadge } from "./StatusBadge";
-import type { BranchInfo } from "@/lib/api";
+import type { BranchInfo, BranchStatus } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 interface RepoCardProps {
   repoId: string;
   repoUrl: string;
-  indexStatus: string | null;
+  indexStatus: BranchStatus | null;
   addedAt: string;
   branches: BranchInfo[];
   onRemove: (repoId: string) => void;
