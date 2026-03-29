@@ -22,6 +22,20 @@ class SearchRequest(BaseModel):
     top_k: int = Field(default=10, ge=1, le=100)
     method: SearchMethod | None = None
     context_source: SearchContextSource = SearchContextSource.code
+    context_sources: tuple[SearchContextSource, ...] | None = Field(
+        default=None,
+        min_length=1,
+    )
+
+    def requested_context_sources(self) -> tuple[SearchContextSource, ...]:
+        if not self.context_sources:
+            return (self.context_source,)
+
+        ordered: list[SearchContextSource] = []
+        for source in self.context_sources:
+            if source not in ordered:
+                ordered.append(source)
+        return tuple(ordered)
 
 
 class HybridRequest(SearchRequest):
@@ -68,5 +82,28 @@ class WikiSearchResult(BaseModel):
     """Response payload from wiki search."""
 
     snippets: list[WikiSnippet] = Field(default_factory=list)
+    query: str
+    total_results: int = 0
+
+
+class CombinedSnippet(BaseModel):
+    """A normalized snippet from one or more Lighthouse retrieval corpora."""
+
+    context_source: SearchContextSource
+    content: str
+    score: float = 0.0
+    file_path: str | None = None
+    start_line: int | None = None
+    end_line: int | None = None
+    reason: str | None = None
+    page_title: str | None = None
+    slug: str | None = None
+    section_path: str | None = None
+
+
+class CombinedSearchResult(BaseModel):
+    """Response payload when multiple retrieval corpora are fused together."""
+
+    snippets: list[CombinedSnippet] = Field(default_factory=list)
     query: str
     total_results: int = 0

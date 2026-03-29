@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -19,6 +20,8 @@ from shared.config import (
     default_embedding_model,
 )
 from shared.schemas.search import (
+    CombinedSearchResult,
+    CombinedSnippet,
     SearchContextSource,
     SearchRequest,
     SearchResult,
@@ -109,23 +112,137 @@ def create_app(
 app = create_app(settings=SearchSettings())
 
 
-async def _search_impl(request: SearchRequest) -> SearchResult | WikiSearchResult:
-    if request.context_source is SearchContextSource.wiki:
+async def _search_impl(
+    request: SearchRequest,
+) -> SearchResult | WikiSearchResult | CombinedSearchResult:
+    requested_sources = request.requested_context_sources()
+    if len(requested_sources) == 1 and requested_sources[0] is SearchContextSource.wiki:
         strategy: SearchStrategy[WikiSearchRequest, WikiSearchResult] = app.state.wiki_strategy
         wiki_request = WikiSearchRequest.model_validate(request.model_dump(mode="json"))
         return await strategy.search(wiki_request)
 
-    strategy: SearchStrategy[SearchRequest, SearchResult] = app.state.strategy
-    return await strategy.search(request)
+    if len(requested_sources) == 1 and requested_sources[0] is SearchContextSource.code:
+        strategy: SearchStrategy[SearchRequest, SearchResult] = app.state.strategy
+        return await strategy.search(request)
+
+    return await _search_combined(request, requested_sources)
+
+
+async def _search_combined(
+    request: SearchRequest,
+    requested_sources: tuple[SearchContextSource, ...],
+) -> CombinedSearchResult:
+    tasks: list[asyncio.Future[SearchResult | WikiSearchResult] | asyncio.Task[SearchResult | WikiSearchResult]] = []
+    for source in requested_sources:
+        if source is SearchContextSource.code:
+            code_request = SearchRequest.model_validate(
+                request.model_copy(
+                    update={
+                        "context_source": SearchContextSource.code,
+                        "context_sources": None,
+                    }
+                ).model_dump(mode="json")
+            )
+            tasks.append(asyncio.create_task(app.state.strategy.search(code_request)))
+        elif source is SearchContextSource.wiki:
+            wiki_request = WikiSearchRequest.model_validate(
+                request.model_copy(
+                    update={
+                        "context_source": SearchContextSource.wiki,
+                        "context_sources": None,
+                        "top_k": min(request.top_k, 50),
+                    }
+                ).model_dump(mode="json")
+            )
+            tasks.append(asyncio.create_task(app.state.wiki_strategy.search(wiki_request)))
+
+    results = await asyncio.gather(*tasks)
+    ranked_lists: list[list[CombinedSnippet]] = []
+    for source, result in zip(requested_sources, results, strict=True):
+        if source is SearchContextSource.code:
+            ranked_lists.append(_normalize_code_result(result))
+        else:
+            ranked_lists.append(_normalize_wiki_result(result))
+
+    fused = _rrf_fuse_combined(ranked_lists)
+    return CombinedSearchResult(
+        snippets=fused[: request.top_k],
+        query=request.query,
+        total_results=len(fused),
+    )
+
+
+def _normalize_code_result(result: SearchResult | WikiSearchResult) -> list[CombinedSnippet]:
+    validated = SearchResult.model_validate(result.model_dump(mode="json"))
+    return [
+        CombinedSnippet(
+            context_source=SearchContextSource.code,
+            content=snippet.content,
+            score=snippet.score,
+            file_path=snippet.file_path,
+            start_line=snippet.start_line,
+            end_line=snippet.end_line,
+            reason=snippet.reason,
+        )
+        for snippet in validated.snippets
+    ]
+
+
+def _normalize_wiki_result(result: SearchResult | WikiSearchResult) -> list[CombinedSnippet]:
+    validated = WikiSearchResult.model_validate(result.model_dump(mode="json"))
+    return [
+        CombinedSnippet(
+            context_source=SearchContextSource.wiki,
+            content=snippet.content_snippet,
+            score=snippet.score,
+            page_title=snippet.page_title,
+            slug=snippet.slug,
+            section_path=snippet.section_path,
+        )
+        for snippet in validated.snippets
+    ]
+
+
+def _rrf_fuse_combined(
+    ranked_lists: list[list[CombinedSnippet]],
+    *,
+    k: int = 60,
+) -> list[CombinedSnippet]:
+    scores: dict[str, float] = {}
+    snippet_map: dict[str, CombinedSnippet] = {}
+
+    for ranked in ranked_lists:
+        for rank, snippet in enumerate(ranked):
+            key = _combined_snippet_key(snippet)
+            scores[key] = scores.get(key, 0.0) + 1.0 / (k + rank + 1)
+            snippet_map.setdefault(key, snippet)
+
+    return [
+        snippet_map[key].model_copy(update={"score": scores[key]})
+        for key in sorted(scores, key=lambda item: scores[item], reverse=True)
+    ]
+
+
+def _combined_snippet_key(snippet: CombinedSnippet) -> str:
+    if snippet.context_source is SearchContextSource.code:
+        return (
+            f"code:{snippet.file_path or ''}:"
+            f"{snippet.start_line or 0}:{snippet.end_line or 0}"
+        )
+    return (
+        f"wiki:{snippet.slug or ''}:"
+        f"{snippet.section_path or ''}:{snippet.page_title or ''}"
+    )
 
 
 @app.post(
     "/search",
-    response_model=SearchResult | WikiSearchResult,
+    response_model=SearchResult | WikiSearchResult | CombinedSearchResult,
     dependencies=[Depends(verify_internal_token)],
 )
-async def search(request: SearchRequest) -> SearchResult | WikiSearchResult:
+async def search(request: SearchRequest) -> SearchResult | WikiSearchResult | CombinedSearchResult:
     return await _search_impl(request)
+
 
 
 @app.post("/search/wiki", response_model=WikiSearchResult, dependencies=[Depends(verify_internal_token)])
