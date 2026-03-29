@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from shared.schemas.search import CodeSnippet, WikiSnippet
+from shared.schemas.search import CodeSnippet, CombinedSnippet, SearchContextSource, WikiSnippet
 
 from .workspace import PreparedSyntheticTask, SyntheticTask
 
@@ -104,6 +104,59 @@ def build_synthetic_wiki_lighthouse_user_message(
                     f"- Section path: {snippet.section_path}",
                     "",
                     snippet.content_snippet.rstrip(),
+                    "",
+                ]
+            )
+
+    parts.extend(_output_requirements())
+    return "\n".join(parts)
+
+
+def build_synthetic_combined_lighthouse_user_message(
+    prepared_task: PreparedSyntheticTask,
+    snippets: list[CombinedSnippet],
+) -> str:
+    task = prepared_task.task
+    parts = _base_prompt_parts(task)
+    parts.extend(_consumer_context_parts(prepared_task))
+    parts.extend(
+        [
+            "Retrieved fused provider-library context from Lighthouse (code + wiki):",
+        ]
+    )
+
+    if not snippets:
+        parts.extend(
+            [
+                "- No provider-library snippets were retrieved for this task.",
+                "",
+            ]
+        )
+    else:
+        for index, snippet in enumerate(snippets, start=1):
+            if snippet.context_source is SearchContextSource.code:
+                parts.extend(
+                    [
+                        f"Combined snippet {index} [code]:",
+                        f"- File: {snippet.file_path or 'unknown'}",
+                        f"- Lines: {snippet.start_line or 0}-{snippet.end_line or 0}",
+                    ]
+                )
+                if snippet.reason:
+                    parts.append(f"- Reason: {snippet.reason}")
+            else:
+                parts.extend(
+                    [
+                        f"Combined snippet {index} [wiki]:",
+                        f"- Page: {snippet.page_title or 'unknown'}",
+                        f"- Slug: {snippet.slug or 'unknown'}",
+                        f"- Section path: {snippet.section_path or 'unknown'}",
+                    ]
+                )
+            parts.extend(
+                [
+                    "",
+                    snippet.content.rstrip(),
                     "",
                 ]
             )

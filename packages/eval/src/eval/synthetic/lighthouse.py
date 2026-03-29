@@ -4,9 +4,12 @@ import os
 from pathlib import Path
 
 import httpx
+from pydantic import ValidationError
 from shared.schemas.ingestion import IndexAcceptedResponse
 from shared.schemas.search import (
+    CombinedSearchResult,
     SearchRequest,
+    SearchContextSource,
     SearchResult,
     WikiSearchRequest,
     WikiSearchResult,
@@ -38,6 +41,7 @@ from eval.wiki import (
     wait_for_wiki_generation,
 )
 from .prompts import (
+    build_synthetic_combined_lighthouse_user_message,
     build_synthetic_code_lighthouse_user_message,
     build_synthetic_search_query,
     build_synthetic_wiki_lighthouse_user_message,
@@ -233,8 +237,8 @@ def build_synthetic_lighthouse_messages(
 ) -> dict[str, str]:
     if top_k < 1:
         raise ValueError("top_k must be at least 1.")
-    if context_source not in {"code", "wiki"}:
-        raise ValueError("context_source must be either 'code' or 'wiki'.")
+    if context_source not in {"code", "wiki", "code+wiki"}:
+        raise ValueError("context_source must be 'code', 'wiki', or 'code+wiki'.")
     if not search_service_url.strip():
         raise ValueError("search_service_url must not be empty.")
 
@@ -262,7 +266,7 @@ def build_synthetic_lighthouse_messages(
                 messages[task.task_id] = build_synthetic_code_lighthouse_user_message(
                     prepared, result.snippets
                 )
-            else:
+            elif context_source == "wiki":
                 result = search_synthetic_wiki(
                     client=client,
                     search_service_url=normalized_search_url,
@@ -272,6 +276,18 @@ def build_synthetic_lighthouse_messages(
                 )
                 print(f"    retrieved {len(result.snippets)} wiki snippet(s)")
                 messages[task.task_id] = build_synthetic_wiki_lighthouse_user_message(
+                    prepared, result.snippets
+                )
+            else:
+                result = search_synthetic_code_and_wiki(
+                    client=client,
+                    search_service_url=normalized_search_url,
+                    workspace=workspace,
+                    task=task,
+                    top_k=top_k,
+                )
+                print(f"    retrieved {len(result.snippets)} fused snippet(s)")
+                messages[task.task_id] = build_synthetic_combined_lighthouse_user_message(
                     prepared, result.snippets
                 )
             print(
@@ -327,6 +343,47 @@ def search_synthetic_wiki(
     )
     _raise_for_search_response(response, context_label="synthetic wiki")
     return WikiSearchResult.model_validate(response.json())
+
+
+def search_synthetic_code_and_wiki(
+    *,
+    client: httpx.Client,
+    search_service_url: str,
+    workspace: PreparedSyntheticWorkspace,
+    task: SyntheticTask,
+    top_k: int,
+) -> CombinedSearchResult:
+    repo_entry = shared_repo_entry(workspace)
+    request = SearchRequest(
+        query=build_synthetic_search_query(task),
+        github_repo_id=repo_entry.github_repo_id,
+        branch=repo_entry.branch,
+        top_k=top_k,
+        context_sources=(
+            SearchContextSource.code,
+            SearchContextSource.wiki,
+        ),
+    )
+    response = client.post(
+        f"{search_service_url}/search",
+        json=request.model_dump(mode="json", exclude_none=True),
+    )
+    _raise_for_search_response(response, context_label="synthetic code+wiki")
+    try:
+        return CombinedSearchResult.model_validate(response.json())
+    except ValidationError as exc:
+        payload = response.json()
+        snippets = payload.get("snippets") if isinstance(payload, dict) else None
+        if isinstance(snippets, list) and snippets:
+            first = snippets[0]
+            if isinstance(first, dict) and "context_source" not in first:
+                raise RuntimeError(
+                    "Search service returned a single-source snippet payload during "
+                    "synthetic code+wiki retrieval. The running search service is "
+                    "likely still on the old build and needs to be rebuilt/restarted "
+                    "so /search can return fused code+wiki results."
+                ) from exc
+        raise
 
 
 def _build_internal_service_headers() -> dict[str, str]:

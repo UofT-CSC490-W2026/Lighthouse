@@ -843,7 +843,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     generate_synthetic_lighthouse.add_argument(
         "--context-source",
-        choices=["code", "wiki"],
+        choices=["code", "wiki", "code+wiki"],
         default="code",
         help="Which Lighthouse retrieval source to use for prompt context",
     )
@@ -990,9 +990,12 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     run_synthetic_experiment.add_argument(
         "--context-source",
-        choices=["code", "wiki", "all"],
+        choices=["code", "wiki", "code+wiki", "all"],
         default="code",
-        help="Which Lighthouse retrieval source to use: code, wiki, or all (baseline + code + wiki)",
+        help=(
+            "Which Lighthouse retrieval source to use: code, wiki, code+wiki, "
+            "or all (baseline + code + wiki + code+wiki)"
+        ),
     )
     run_synthetic_experiment.add_argument(
         "--top-k",
@@ -1808,7 +1811,7 @@ def _print_synthetic_experiment_suite_result(
     print(f"Score table: {result.score_text_path.resolve()}")
     print(f"Score JSON: {result.score_json_path.resolve()}")
     print(f"Baseline predictions: {result.baseline_predictions_path.resolve()}")
-    for label in ("code", "wiki"):
+    for label in ("code", "wiki", "code+wiki"):
         predictions_path = result.lighthouse_predictions_paths.get(label)
         if predictions_path is not None:
             print(f"{label.capitalize()} predictions: {predictions_path.resolve()}")

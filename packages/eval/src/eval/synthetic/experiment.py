@@ -117,8 +117,8 @@ def run_synthetic_experiment(
 ) -> SyntheticExperimentResult:
     if not run_prefix.strip():
         raise ValueError("run_prefix must not be empty.")
-    if context_source not in {"code", "wiki"}:
-        raise ValueError("context_source must be either 'code' or 'wiki'.")
+    if context_source not in {"code", "wiki", "code+wiki"}:
+        raise ValueError("context_source must be 'code', 'wiki', or 'code+wiki'.")
 
     workspace = prepare_synthetic_workspace(
         family_name=family_name,
@@ -416,7 +416,7 @@ def run_synthetic_experiment_suite(
     lighthouse_summaries: dict[str, SyntheticRunSummary] = {}
     comparisons: dict[str, SyntheticRunComparison] = {}
 
-    for context_source in ("code", "wiki"):
+    for context_source in ("code", "wiki", "code+wiki"):
         lighthouse_predictions_path = (
             predictions_root / f"{run_prefix}-{context_source}.jsonl"
         )

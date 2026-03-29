@@ -243,9 +243,16 @@ def test_run_synthetic_experiment_suite_writes_score_table_and_reports(
     assert result.baseline_summary.resolved_instances == 1
     assert result.lighthouse_summaries["code"].resolved_instances == 1
     assert result.lighthouse_summaries["wiki"].resolved_instances == 1
-    assert [row.label for row in result.score_rows] == ["baseline", "code", "wiki"]
+    assert result.lighthouse_summaries["code+wiki"].resolved_instances == 1
+    assert [row.label for row in result.score_rows] == [
+        "baseline",
+        "code",
+        "wiki",
+        "code+wiki",
+    ]
     assert result.score_text_path.is_file()
     assert result.score_json_path.is_file()
     assert result.comparison_text_paths["code"].is_file()
     assert result.comparison_text_paths["wiki"].is_file()
+    assert result.comparison_text_paths["code+wiki"].is_file()
     assert result.report_path.is_file()

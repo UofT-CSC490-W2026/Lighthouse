@@ -229,7 +229,7 @@ def test_list_synthetic_run_ids_discovers_summary_directories(tmp_path) -> None:
 
 
 @pytest.mark.unit
-def test_render_synthetic_score_table_includes_baseline_code_and_wiki_rows(
+def test_render_synthetic_score_table_includes_baseline_code_wiki_and_combined_rows(
     tmp_path,
 ) -> None:
     runs_root = tmp_path / "runs"
@@ -281,6 +281,22 @@ def test_render_synthetic_score_table_includes_baseline_code_and_wiki_rows(
             "results": [],
         },
     )
+    _write_summary(
+        runs_root / "code-wiki" / "summary.json",
+        {
+            "family_name": "synthetic-ab-contracts",
+            "family_version": "1",
+            "run_id": "code-wiki",
+            "run_dir": str((runs_root / "code-wiki").resolve()),
+            "predictions_path": "code-wiki.jsonl",
+            "total_tasks": 10,
+            "resolved_tasks": 9,
+            "unresolved_tasks": 1,
+            "patch_apply_failures": 0,
+            "error_tasks": 1,
+            "results": [],
+        },
+    )
 
     baseline = compare_synthetic_runs(
         baseline_run_id="baseline",
@@ -297,10 +313,15 @@ def test_render_synthetic_score_table_includes_baseline_code_and_wiki_rows(
         lighthouse_run_id="wiki",
         runs_root=runs_root,
     ).lighthouse
+    code_and_wiki = compare_synthetic_runs(
+        baseline_run_id="baseline",
+        lighthouse_run_id="code-wiki",
+        runs_root=runs_root,
+    ).lighthouse
 
     rows = build_synthetic_score_rows(
         baseline=baseline,
-        retrieval_runs={"code": code, "wiki": wiki},
+        retrieval_runs={"code": code, "wiki": wiki, "code+wiki": code_and_wiki},
     )
     text = render_synthetic_score_table(rows)
 
@@ -308,9 +329,11 @@ def test_render_synthetic_score_table_includes_baseline_code_and_wiki_rows(
     assert "baseline" in text
     assert "code" in text
     assert "wiki" in text
+    assert "code+wiki" in text
     assert "20.0%" in text
     assert "80.0%" in text
     assert "70.0%" in text
+    assert "90.0%" in text
 
 
 def _write_summary(path: Path, payload: Mapping[str, object]) -> None:
