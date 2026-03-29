@@ -14,6 +14,7 @@ with workflow.unsafe.imports_passed_through():
         CleanupInactiveChunksInput,
         CleanupStagingInput,
         EmbedBatchInput,
+        FilePublishCleanup,
         GitCloneFetchInput,
         GitCloneFetchOutput,
         IndexBranchInput,
