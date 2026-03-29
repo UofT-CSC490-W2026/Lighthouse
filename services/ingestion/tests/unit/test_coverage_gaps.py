@@ -19,6 +19,7 @@ from ingestion.embedding.registry import (
     get_embedding_provider,
     register_embedding_provider,
 )
+from ingestion.main import _ensure_repository_record
 from ingestion.main import github_webhook
 from ingestion.main import lifespan as ingestion_lifespan
 from ingestion.temporal.activities.chunking import chunk_files
@@ -350,3 +351,26 @@ async def test_ingestion_lifespan_and_activity_helpers(monkeypatch):
     monkeypatch.setattr("ingestion.temporal.activities.helpers.MilvusClient", MagicMock(return_value=milvus))
     assert make_milvus(settings) is milvus
     milvus.ensure_collection.assert_called_once()
+
+
+@pytest.mark.unit
+def test_ensure_repository_record_connects_and_closes(monkeypatch):
+    settings = SimpleNamespace(postgres_dsn="postgres://db")
+    db = MagicMock()
+    repo_service = MagicMock()
+    repo_service.ensure.return_value = "repo-id-123"
+
+    monkeypatch.setattr("ingestion.main.DatabaseManager", MagicMock(return_value=db))
+    monkeypatch.setattr("ingestion.main.RepositoryService", MagicMock(return_value=repo_service))
+
+    result = _ensure_repository_record(
+        settings=settings,
+        github_repo_id=123,
+        repo_url="https://github.com/o/r",
+        full_name="o/r",
+    )
+
+    assert result == "repo-id-123"
+    db.connect.assert_called_once_with()
+    repo_service.ensure.assert_called_once_with(123, "https://github.com/o/r", "o/r")
+    db.close.assert_called_once_with()
