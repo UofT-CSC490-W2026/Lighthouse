@@ -89,3 +89,25 @@ def test_embed_batch_raises_on_missing_embedding(mock_boto_client):
 
     with pytest.raises(RuntimeError, match="embedding vector"):
         provider.embed_batch(["hello"])
+
+
+@pytest.mark.unit
+@patch("embedding.bedrock_provider.boto3.client")
+def test_embed_batch_retries_with_shorter_text_on_token_limit(mock_boto_client):
+    mock_client = MagicMock()
+    mock_boto_client.return_value = mock_client
+    mock_client.invoke_model.side_effect = [
+        RuntimeError("Too many input tokens. Max input tokens: 8192"),
+        _make_invoke_response([0.7, 0.8]),
+    ]
+
+    provider = BedrockEmbeddingProvider()
+    text = "x" * 1000
+    result = provider.embed_batch([text])
+
+    assert result == [[0.7, 0.8]]
+    assert mock_client.invoke_model.call_count == 2
+
+    first_payload = json.loads(mock_client.invoke_model.call_args_list[0].kwargs["body"])
+    second_payload = json.loads(mock_client.invoke_model.call_args_list[1].kwargs["body"])
+    assert len(second_payload["inputText"]) < len(first_payload["inputText"])
