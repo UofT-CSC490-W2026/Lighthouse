@@ -177,6 +177,113 @@ class TestChunkServiceFinal:
             assert indexed_file.active_publish_id == batch_id
             assert chunk.publish_id == batch_id
 
+    def test_publish_full_batch_updates_all_indexed_files(self, db_manager, milvus_client):
+        """publish_full_batch sets active_publish_id for new files and None for deleted ones."""
+        repo = create_repository(db_manager)
+        svc = ChunkService(db_manager, milvus_client)
+
+        # Pre-existing indexed file that won't be re-chunked (simulates deleted file)
+        with db_manager.connection_context():
+            from db import Chunk, IndexedFile
+            Chunk.create(
+                repository=repo,
+                branch="main",
+                file_path="deleted.py",
+                start_line=1,
+                end_line=5,
+                content="old content",
+                chunk_hash="old-hash",
+                publish_id="old-batch",
+            )
+            IndexedFile.create(
+                repository=repo,
+                branch_name="main",
+                file_path="deleted.py",
+                active_publish_id="old-batch",
+            )
+
+        batch_id = str(uuid.uuid4())
+        embedder = MockEmbeddingProvider(dimension=8)
+        content = f"new content {uuid.uuid4().hex}"
+        svc.write_staging(
+            batch_id,
+            [
+                {
+                    "chunk_id": str(uuid.uuid4()),
+                    "repository_id": repo.id,
+                    "branch": "main",
+                    "file_path": "new_file.py",
+                    "start_line": 1,
+                    "end_line": 10,
+                    "content": content,
+                    "language": "python",
+                    "chunk_hash": f"hash-{uuid.uuid4().hex}",
+                }
+            ],
+        )
+        svc.write_staging_embeddings(batch_id, 0, embedder.embed_batch([content]))
+
+        cleanup_targets = svc.publish_full_batch(
+            batch_id=batch_id,
+            repository_id=repo.id,
+            branch="main",
+        )
+
+        # deleted.py had a previous publish_id → should be a cleanup target
+        assert any(t.file_path == "deleted.py" for t in cleanup_targets)
+
+        with db_manager.connection_context():
+            new_indexed = IndexedFile.get(
+                IndexedFile.repository == repo,
+                IndexedFile.branch_name == "main",
+                IndexedFile.file_path == "new_file.py",
+            )
+            deleted_indexed = IndexedFile.get(
+                IndexedFile.repository == repo,
+                IndexedFile.branch_name == "main",
+                IndexedFile.file_path == "deleted.py",
+            )
+            assert new_indexed.active_publish_id == batch_id
+            assert deleted_indexed.active_publish_id is None
+            # Staging should be cleaned up
+            assert StagingChunk.select().where(StagingChunk.batch_id == batch_id).count() == 0
+
+    def test_publish_full_batch_skips_missing_embeddings(self, db_manager, milvus_client):
+        repo = create_repository(db_manager)
+        svc = ChunkService(db_manager, milvus_client)
+        batch_id = str(uuid.uuid4())
+        svc.write_staging(
+            batch_id,
+            [
+                {
+                    "chunk_id": str(uuid.uuid4()),
+                    "repository_id": repo.id,
+                    "branch": "main",
+                    "file_path": "file0.py",
+                    "start_line": 1,
+                    "end_line": 10,
+                    "content": "no embedding",
+                    "language": "python",
+                    "chunk_hash": f"hash-{uuid.uuid4().hex}",
+                }
+            ],
+        )
+
+        cleanup_targets = svc.publish_full_batch(
+            batch_id=batch_id,
+            repository_id=repo.id,
+            branch="main",
+        )
+
+        assert cleanup_targets == []
+        with db_manager.connection_context():
+            indexed_file = IndexedFile.get(
+                IndexedFile.repository == repo,
+                IndexedFile.branch_name == "main",
+                IndexedFile.file_path == "file0.py",
+            )
+            assert indexed_file.active_publish_id == batch_id
+
     def test_delete_by_publish_targets_skips_none_publish_ids(self, db_manager, milvus_client):
         repo = create_repository(db_manager)
         svc, batch_id = self._stage_with_embeddings(db_manager, milvus_client, repo.id, count=1)

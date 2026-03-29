@@ -11,20 +11,21 @@ with workflow.unsafe.imports_passed_through():
         EMBED_BATCH_SIZE,
         ChunkFilesInput,
         ChunkFilesOutput,
+        CleanupInactiveChunksInput,
         CleanupStagingInput,
-        DeleteChunksInput,
         EmbedBatchInput,
         GitCloneFetchInput,
         GitCloneFetchOutput,
         IndexBranchInput,
-        StoreChunksInput,
+        PublishFullBranchInput,
+        PublishStagedChunksOutput,
         UpdateBranchStatusInput,
         chunk_files,
+        cleanup_inactive_chunks,
         cleanup_staging,
-        delete_existing_chunks,
         embed_chunk_batch,
         git_clone_or_fetch,
-        store_chunks,
+        publish_full_branch,
         update_branch_status,
     )
 
@@ -112,18 +113,7 @@ class IndexBranchWorkflow:
                 )
                 return f"No chunks for {input.full_name}/{input.branch}"
 
-            # 4. Delete existing chunks
-            await workflow.execute_activity(
-                delete_existing_chunks,
-                DeleteChunksInput(
-                    repository_id=input.repository_id,
-                    branch=input.branch,
-                ),
-                start_to_close_timeout=timedelta(minutes=2),
-                retry_policy=_DB_RETRY,
-            )
-
-            # 5. Embed chunks in batches
+            # 4. Embed chunks in batches
             embed_futures = []
             for offset in range(0, chunk_result.chunk_count, EMBED_BATCH_SIZE):
                 embed_futures.append(
@@ -141,15 +131,19 @@ class IndexBranchWorkflow:
                 )
             await asyncio.gather(*embed_futures)
 
-            # 6. Move from staging to final tables + Milvus
-            await workflow.execute_activity(
-                store_chunks,
-                StoreChunksInput(batch_id=batch_id),
+            # 5. Publish staged chunks and switch active file versions
+            publish_result: PublishStagedChunksOutput = await workflow.execute_activity(
+                publish_full_branch,
+                PublishFullBranchInput(
+                    batch_id=batch_id,
+                    repository_id=input.repository_id,
+                    branch=input.branch,
+                ),
                 start_to_close_timeout=timedelta(minutes=5),
                 retry_policy=_DB_RETRY,
             )
 
-            # 7. Mark branch as indexed
+            # 6. Mark branch as indexed
             await workflow.execute_activity(
                 update_branch_status,
                 UpdateBranchStatusInput(
@@ -161,6 +155,26 @@ class IndexBranchWorkflow:
                 start_to_close_timeout=timedelta(seconds=30),
                 retry_policy=_DB_RETRY,
             )
+
+            # 7. Best-effort cleanup of superseded publish versions
+            if publish_result.cleanup_targets:
+                try:
+                    await workflow.execute_activity(
+                        cleanup_inactive_chunks,
+                        CleanupInactiveChunksInput(
+                            repository_id=input.repository_id,
+                            branch=input.branch,
+                            cleanup_targets=publish_result.cleanup_targets,
+                        ),
+                        start_to_close_timeout=timedelta(minutes=5),
+                        retry_policy=_DB_RETRY,
+                    )
+                except Exception:
+                    workflow.logger.warning(
+                        "Inactive chunk cleanup failed for %s/%s after publish",
+                        input.full_name,
+                        input.branch,
+                    )
 
             return f"Indexed {input.full_name}/{input.branch} at {git_result.latest_commit}"
 

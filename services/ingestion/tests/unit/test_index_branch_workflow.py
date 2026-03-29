@@ -26,13 +26,15 @@ from ingestion.temporal.activities.inputs import (
     EMBED_BATCH_SIZE,
     ChunkFilesInput,
     ChunkFilesOutput,
+    CleanupInactiveChunksInput,
     CleanupStagingInput,
-    DeleteChunksInput,
     EmbedBatchInput,
+    FilePublishCleanup,
     GitCloneFetchInput,
     GitCloneFetchOutput,
     IndexBranchInput,
-    StoreChunksInput,
+    PublishFullBranchInput,
+    PublishStagedChunksOutput,
     UpdateBranchStatusInput,
 )
 from ingestion.temporal.workflows.index_branch import IndexBranchWorkflow
@@ -84,13 +86,6 @@ def make_mock_activities(tracker: ActivityTracker):
             batch_id="batch-001", chunk_count=tracker.chunk_count
         )
 
-    @activity.defn(name="delete_existing_chunks")
-    async def mock_delete(inp: DeleteChunksInput) -> int:
-        tracker.calls.append(("delete_existing_chunks", inp))
-        if tracker.fail_on == "delete_existing_chunks":
-            raise RuntimeError("mock delete failure")
-        return 5
-
     @activity.defn(name="embed_chunk_batch")
     async def mock_embed(inp: EmbedBatchInput) -> str:
         tracker.calls.append(("embed_chunk_batch", inp))
@@ -98,12 +93,23 @@ def make_mock_activities(tracker: ActivityTracker):
             raise RuntimeError("mock embed failure")
         return f"embedded_{inp.limit}"
 
-    @activity.defn(name="store_chunks")
-    async def mock_store(inp: StoreChunksInput) -> int:
-        tracker.calls.append(("store_chunks", inp))
-        if tracker.fail_on == "store_chunks":
-            raise RuntimeError("mock store failure")
-        return tracker.chunk_count
+    @activity.defn(name="publish_full_branch")
+    async def mock_publish_full(inp: PublishFullBranchInput) -> PublishStagedChunksOutput:
+        tracker.calls.append(("publish_full_branch", inp))
+        if tracker.fail_on == "publish_full_branch":
+            raise RuntimeError("mock publish_full_branch failure")
+        return PublishStagedChunksOutput(
+            cleanup_targets=[
+                FilePublishCleanup(file_path="a.py", previous_publish_id="legacy"),
+            ]
+        )
+
+    @activity.defn(name="cleanup_inactive_chunks")
+    async def mock_cleanup_inactive(inp: CleanupInactiveChunksInput) -> int:
+        tracker.calls.append(("cleanup_inactive_chunks", inp))
+        if tracker.fail_on == "cleanup_inactive_chunks":
+            raise RuntimeError("mock cleanup_inactive failure")
+        return len(inp.cleanup_targets)
 
     @activity.defn(name="cleanup_staging")
     async def mock_cleanup(inp: CleanupStagingInput) -> str:
@@ -114,9 +120,9 @@ def make_mock_activities(tracker: ActivityTracker):
         mock_update_branch,
         mock_git_clone,
         mock_chunk,
-        mock_delete,
         mock_embed,
-        mock_store,
+        mock_publish_full,
+        mock_cleanup_inactive,
         mock_cleanup,
     ]
 
@@ -252,15 +258,15 @@ class TestIndexBranchWorkflow:
 
     # ---- Failure modes (negative tests) ----
 
-    async def test_delete_failure_triggers_cleanup(self, workflow_environment):
-        """Failure: delete_existing_chunks raises after batch_id is set.
+    async def test_publish_failure_triggers_cleanup(self, workflow_environment):
+        """Failure: publish_full_branch raises after batch_id is set.
 
         Why: The workflow sets ``batch_id`` during chunk_files (step 3),
-        then calls delete_existing_chunks (step 5).  If delete fails the
+        then calls publish_full_branch (step 5).  If publish fails the
         exception handler must call cleanup_staging because staging rows
-        already exist.  This failure point is NOT tested in the e2e suite.
+        already exist.
         """
-        tracker = ActivityTracker(chunk_count=10, fail_on="delete_existing_chunks")
+        tracker = ActivityTracker(chunk_count=10, fail_on="publish_full_branch")
         await _run_workflow_expect_failure(workflow_environment, tracker)
 
         names = _names(tracker)
@@ -268,20 +274,23 @@ class TestIndexBranchWorkflow:
         assert any(s.status == "failed" for s in status_calls)
         assert "cleanup_staging" in names
 
-    async def test_store_failure_triggers_cleanup(self, workflow_environment):
-        """Failure: store_chunks raises after embedding succeeds.
+    async def test_cleanup_inactive_failure_does_not_fail_workflow(
+        self, workflow_environment
+    ):
+        """Failure: cleanup_inactive_chunks raises but workflow succeeds.
 
-        Why: store_chunks is the last data-mutation step.  If it fails,
-        the embedded staging rows must be cleaned up to avoid dangling
-        data.  Verifies both status=failed and cleanup_staging are called.
+        Why: The stale-chunk cleanup runs after the branch is already marked
+        indexed.  It is best-effort — a failure here must not roll back the
+        successful index or surface as a workflow error.
         """
-        tracker = ActivityTracker(chunk_count=10, fail_on="store_chunks")
-        await _run_workflow_expect_failure(workflow_environment, tracker)
+        tracker = ActivityTracker(chunk_count=10, fail_on="cleanup_inactive_chunks")
+        result = await _run_workflow(workflow_environment, tracker)
 
+        assert "Indexed" in result
         names = _names(tracker)
+        assert "cleanup_inactive_chunks" in names
         status_calls = [i for n, i in tracker.calls if n == "update_branch_status"]
-        assert any(s.status == "failed" for s in status_calls)
-        assert "cleanup_staging" in names
+        assert status_calls[-1].status == "indexed"
 
     async def test_chunk_files_failure_no_cleanup(self, workflow_environment):
         """Failure: chunk_files raises before batch_id is assigned.

@@ -28,6 +28,7 @@ from ingestion.temporal.activities.inputs import (
     FilePublishCleanup,
     GetChangedFilesInput,
     GitCloneFetchInput,
+    PublishFullBranchInput,
     PublishStagedChunksInput,
     StoreChunksInput,
     UpdateBranchStatusInput,
@@ -38,6 +39,7 @@ from ingestion.temporal.activities.storage import (
     cleanup_staging,
     delete_chunks_for_files,
     delete_existing_chunks,
+    publish_full_branch,
     publish_staged_chunks,
     store_chunks,
 )
@@ -553,6 +555,88 @@ class TestPublishStagedChunks:
             "file0.py",
             "deleted.py",
         }
+
+
+# ---------------------------------------------------------------------------
+# publish_full_branch
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+class TestPublishFullBranch:
+    async def test_publishes_all_staged_chunks_and_handles_deleted_files(
+        self, activity_environment, db_manager, milvus_client, inject_settings
+    ):
+        repo = create_repository(db_manager)
+        old_publish_id = "old-batch"
+
+        # Pre-existing indexed file that simulates a file deleted from the repo
+        with db_manager.connection_context():
+            Chunk.create(
+                repository=repo,
+                branch="main",
+                file_path="deleted.py",
+                start_line=1,
+                end_line=5,
+                content="old chunk",
+                chunk_hash="old-hash",
+                publish_id=old_publish_id,
+            )
+            IndexedFile.create(
+                repository=repo,
+                branch_name="main",
+                file_path="deleted.py",
+                active_publish_id=old_publish_id,
+            )
+
+        # Stage a new chunk for a different file (full re-index result)
+        batch_id = str(uuid.uuid4())
+        _seed_staging_with_embeddings(db_manager, repo, batch_id, count=1)
+        # _seed_staging_with_embeddings creates file0.py
+        with patch(
+            "ingestion.temporal.activities.helpers.EMBEDDING_DIMENSION",
+            TEST_DIM,
+        ), patch(
+            "ingestion.temporal.activities.helpers.MILVUS_COLLECTION_NAME",
+            "test_embeddings",
+        ):
+            result = await activity_environment.run(
+                publish_full_branch,
+                PublishFullBranchInput(
+                    batch_id=batch_id,
+                    repository_id=repo.id,
+                    branch="main",
+                ),
+            )
+
+        _reconnect(db_manager)
+        with db_manager.connection_context():
+            # New file should be active
+            new_indexed = IndexedFile.get(
+                IndexedFile.repository == repo,
+                IndexedFile.branch_name == "main",
+                IndexedFile.file_path == "file0.py",
+            )
+            assert new_indexed.active_publish_id == batch_id
+
+            # Deleted file should have active_publish_id cleared
+            deleted_indexed = IndexedFile.get(
+                IndexedFile.repository == repo,
+                IndexedFile.branch_name == "main",
+                IndexedFile.file_path == "deleted.py",
+            )
+            assert deleted_indexed.active_publish_id is None
+
+            # Staging cleaned up
+            assert (
+                StagingChunk.select()
+                .where(StagingChunk.batch_id == batch_id)
+                .count()
+                == 0
+            )
+
+        # deleted.py had old_publish_id → should appear in cleanup_targets
+        assert any(t.file_path == "deleted.py" for t in result.cleanup_targets)
 
 
 # ---------------------------------------------------------------------------
