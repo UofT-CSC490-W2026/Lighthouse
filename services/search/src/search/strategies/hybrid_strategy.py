@@ -13,8 +13,10 @@ from .search_strategy import SearchStrategy
 
 logger = logging.getLogger(__name__)
 
+
 class BranchNotIndexedError(RuntimeError):
     """Raised when a requested branch is not indexed for a repository."""
+
 
 class HybridSearchStrategy(SearchStrategy[SearchRequest, SearchResult]):
     """Hybrid search combining vector similarity and PostgreSQL full-text search."""
@@ -80,24 +82,36 @@ class HybridSearchStrategy(SearchStrategy[SearchRequest, SearchResult]):
             # Build raw SQL for full-text search (Peewee's ORM doesn't
             # handle tsvector/tsquery parameterization cleanly)
             conditions = [
-                "to_tsvector('english', content) @@ plainto_tsquery('english', %s)"
+                "to_tsvector('english', chunks.content) @@ plainto_tsquery('english', %s)"
             ]
             params: list[str] = [query, query]  # one for WHERE, one for ts_rank
 
             if repo_id:
-                conditions.append("repository_id = %s")
+                conditions.append("chunks.repository_id = %s")
                 params.append(repo_id)
             if branch:
-                conditions.append("branch = %s")
+                conditions.append("chunks.branch = %s")
                 params.append(branch)
 
             where_clause = " AND ".join(conditions)
             sql = f"""
-                SELECT id, file_path,
-                       ts_rank(to_tsvector('english', content),
+                SELECT chunks.id, chunks.file_path,
+                       ts_rank(to_tsvector('english', chunks.content),
                                plainto_tsquery('english', %s)) as rank
                 FROM chunks
+                LEFT JOIN indexed_files
+                  ON indexed_files.repository_id = chunks.repository_id
+                 AND indexed_files.branch_name = chunks.branch
+                 AND indexed_files.file_path = chunks.file_path
                 WHERE {where_clause}
+                  AND (
+                    (indexed_files.active_publish_id IS NOT NULL
+                     AND chunks.publish_id = indexed_files.active_publish_id)
+                    OR
+                    (indexed_files.active_publish_id IS NULL
+                     AND indexed_files.id IS NULL
+                     AND chunks.publish_id = 'legacy')
+                  )
                 ORDER BY rank DESC
                 LIMIT %s
             """
@@ -196,12 +210,18 @@ class HybridSearchStrategy(SearchStrategy[SearchRequest, SearchResult]):
         except Exception:
             logger.exception("Vector search failed, falling back to keyword-only")
 
-        keyword_results, keyword_mode = self._keyword_search(
+        keyword_search_result = self._keyword_search(
             query=request.query,
             top_k=request.top_k,
             repo_id=repo_id,
             branch=branch,
         )
+        if isinstance(keyword_search_result, tuple):
+            keyword_results, keyword_mode = keyword_search_result
+        else:
+            # Backward-compatible path for older tests/mocks returning only results.
+            keyword_results = keyword_search_result
+            keyword_mode = "fts" if keyword_results else "none"
         fused = self._rrf_fusion(vector_results, keyword_results, k=60)
         top_chunk_ids = [r["chunk_id"] for r in fused[: request.top_k]]
         snippets = self._load_snippets(top_chunk_ids, fused)
@@ -224,10 +244,7 @@ class HybridSearchStrategy(SearchStrategy[SearchRequest, SearchResult]):
             chunk_map = {c.id: c for c in chunks}
 
         # Build ordered snippets matching fusion order
-        score_map = {
-            row["chunk_id"]: row["score"]
-            for row in fused[: request.top_k]
-        }
+        score_map = {row["chunk_id"]: row["score"] for row in fused}
         snippets: list[CodeSnippet] = []
         for chunk_id in chunk_ids:
             chunk = chunk_map.get(chunk_id)
@@ -250,53 +267,35 @@ class HybridSearchStrategy(SearchStrategy[SearchRequest, SearchResult]):
         if not requested_branch:
             return False
         with self.db_manager.connection_context():
-            # Build raw SQL for full-text search (Peewee's ORM doesn't
-            # handle tsvector/tsquery parameterization cleanly)
-            conditions = [
-                "to_tsvector('english', chunks.content) @@ plainto_tsquery('english', %s)"
-            ]
-            params: list[str] = [request.query, request.query]  # one for WHERE, one for ts_rank
+            repo_has_any_indexed_data = (
+                Chunk.select()
+                .where(Chunk.repository == repo_id)
+                .limit(1)
+                .exists()
+                or IndexedFile.select()
+                .where(IndexedFile.repository == repo_id)
+                .limit(1)
+                .exists()
+            )
+            if not repo_has_any_indexed_data:
+                return True
 
-            if repo_id:
-                conditions.append("chunks.repository_id = %s")
-                params.append(repo_id)
-            if request.branch:
-                conditions.append("chunks.branch = %s")
-                params.append(request.branch)
-
-            where_clause = " AND ".join(conditions)
-            sql = f"""
-                SELECT chunks.id, chunks.file_path,
-                       ts_rank(to_tsvector('english', chunks.content),
-                               plainto_tsquery('english', %s)) as rank
-                FROM chunks
-                LEFT JOIN indexed_files
-                  ON indexed_files.repository_id = chunks.repository_id
-                 AND indexed_files.branch_name = chunks.branch
-                 AND indexed_files.file_path = chunks.file_path
-                WHERE {where_clause}
-                  AND (
-                    (indexed_files.active_publish_id IS NOT NULL
-                     AND chunks.publish_id = indexed_files.active_publish_id)
-                    OR
-                    (indexed_files.active_publish_id IS NULL
-                     AND indexed_files.id IS NULL
-                     AND chunks.publish_id = 'legacy')
-                  )
-                ORDER BY rank DESC
-                LIMIT %s
-            """
-            params.append(str(request.top_k * 2))
-
-            results = []
-            for row in Chunk.raw(sql, *params):
-                results.append(
-                    {
-                        "chunk_id": row.id,
-                        "score": float(row.rank),
-                    }
+            return (
+                Chunk.select()
+                .where(
+                    (Chunk.repository == repo_id)
+                    & (Chunk.branch == requested_branch)
                 )
-            return results
+                .limit(1)
+                .exists()
+                or IndexedFile.select()
+                .where(
+                    (IndexedFile.repository == repo_id)
+                    & (IndexedFile.branch_name == requested_branch)
+                )
+                .limit(1)
+                .exists()
+            )
 
     def _filter_vector_results(self, vector_results: list[dict]) -> list[dict]:
         if not vector_results:

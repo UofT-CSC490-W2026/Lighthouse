@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 
 from astchunk import ASTChunkBuilder
 
-from ..language.detector import EXTENSION_TO_LANGUAGE
+from ..language import ExtensionLanguageDetector
 from .base_chunker import ChunkResult, Chunker
 from .utils import compute_chunk_hash
 
@@ -29,6 +28,7 @@ class ASTCodeChunker(Chunker):
         self.max_chunk_size = max_chunk_size
         self.metadata_template = metadata_template
         self.ast_builders: dict[str, ASTChunkBuilder] = {}
+        self.lang_detector = ExtensionLanguageDetector()
 
         if language is not None:
             self.ast_builders[language] = self._make_builder(language)
@@ -41,13 +41,7 @@ class ASTCodeChunker(Chunker):
         )
 
     def _detect_language_from_path(self, file_path: str) -> str | None:
-        path = Path(file_path)
-        name = path.name.lower()
-        if name == "dockerfile":
-            return "dockerfile"
-        if name == "makefile":
-            return "makefile"
-        return EXTENSION_TO_LANGUAGE.get(path.suffix.lower())
+        return self.lang_detector.detect(file_path)
 
     def chunk_file(
         self, content: str, file_path: str, language: str | None = None
@@ -88,7 +82,6 @@ class ASTCodeChunker(Chunker):
                     content=chunk_content,
                     start_line=start_line + 1,  # 1-indexed
                     end_line=end_line,
-                    language=resolved_language,
                     chunk_hash=compute_chunk_hash(chunk_content),
                 )
             )
