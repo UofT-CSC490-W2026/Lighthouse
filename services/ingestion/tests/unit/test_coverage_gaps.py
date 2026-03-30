@@ -424,17 +424,24 @@ async def test_webhook_ignores_non_branch_push(monkeypatch):
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_temporal_worker_main(monkeypatch):
-    settings = SimpleNamespace(temporal_address="temporal:7233", temporal_task_queue="queue")
+    settings = SimpleNamespace(
+        temporal_address="temporal:7233",
+        temporal_task_queue="queue",
+        temporal_connect_kwargs=lambda: {"namespace": "default"},
+        resolved_temporal_namespace=lambda: "default",
+    )
     client = object()
     worker = SimpleNamespace(run=AsyncMock())
     worker_cls = MagicMock(return_value=worker)
+    connect = AsyncMock(return_value=client)
 
     monkeypatch.setattr("ingestion.temporal.worker.IngestionSettings", MagicMock(return_value=settings))
-    monkeypatch.setattr("ingestion.temporal.worker.Client.connect", AsyncMock(return_value=client))
+    monkeypatch.setattr("ingestion.temporal.worker.Client.connect", connect)
     monkeypatch.setattr("ingestion.temporal.worker.Worker", worker_cls)
 
     await worker_main()
 
+    connect.assert_awaited_once_with("temporal:7233", namespace="default")
     worker_cls.assert_called_once()
     worker.run.assert_awaited_once()
 
@@ -444,6 +451,8 @@ async def test_temporal_worker_main(monkeypatch):
 async def test_ingestion_lifespan_and_activity_helpers(monkeypatch):
     settings = SimpleNamespace(
         temporal_address="temporal:7233",
+        temporal_connect_kwargs=lambda: {"namespace": "default"},
+        resolved_temporal_namespace=lambda: "default",
         postgres_dsn="postgres://db",
         milvus_uri="http://milvus",
         embedding_strategy="openai",
@@ -456,11 +465,13 @@ async def test_ingestion_lifespan_and_activity_helpers(monkeypatch):
     milvus = MagicMock()
 
     monkeypatch.setattr("ingestion.main.IngestionSettings", MagicMock(return_value=settings))
-    monkeypatch.setattr("ingestion.main.Client.connect", AsyncMock(return_value=client))
+    connect = AsyncMock(return_value=client)
+    monkeypatch.setattr("ingestion.main.Client.connect", connect)
 
     async with ingestion_lifespan(app):
         assert app.state.settings is settings
         assert app.state.temporal_client is client
+    connect.assert_awaited_once_with("temporal:7233", namespace="default")
 
     set_settings_factory(lambda: settings)
     assert activity_get_settings() is settings

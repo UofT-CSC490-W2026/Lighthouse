@@ -48,8 +48,15 @@ async def lifespan(app: FastAPI):
     settings = IngestionSettings()
     app.state.settings = settings
     logger.info(f"Currently using {settings.chunker_strategy} chunking strategy.")
-    app.state.temporal_client = await Client.connect(settings.temporal_address)
-    logger.info("Connected to Temporal at %s", settings.temporal_address)
+    app.state.temporal_client = await Client.connect(
+        settings.temporal_address,
+        **settings.temporal_connect_kwargs(),
+    )
+    logger.info(
+        "Connected to Temporal at %s in namespace %s",
+        settings.temporal_address,
+        settings.resolved_temporal_namespace(),
+    )
     yield
 
 

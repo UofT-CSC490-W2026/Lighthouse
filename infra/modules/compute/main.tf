@@ -235,7 +235,7 @@ resource "aws_lb_listener_rule" "mcp" {
 
   condition {
     path_pattern {
-      values = ["/v1/*", "/mcp", "/mcp/*"]
+      values = ["/health", "/v1/*", "/mcp", "/mcp/*"]
     }
   }
 }

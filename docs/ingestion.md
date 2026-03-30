@@ -95,7 +95,9 @@ At startup it:
 
 1. loads typed settings
 2. stores them on `app.state.settings`
-3. connects `temporalio.client.Client`
+3. connects `temporalio.client.Client` using `temporal_address` plus
+   `temporal_namespace`, and enables TLS automatically for Temporal Cloud targets
+   or when `temporal_api_key` is set
 4. stores the client on `app.state.temporal_client`
 
 The HTTP service itself does not execute indexing work directly. It starts Temporal
@@ -385,6 +387,8 @@ object from AWS Systems Manager Parameter Store and use it as a settings source.
 - `github_webhook_secret`
 - `clone_base_dir`
 - `temporal_address`
+- `temporal_namespace`
+- `temporal_api_key`
 - `temporal_task_queue`
 - `chunker_strategy`
 

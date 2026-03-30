@@ -52,6 +52,45 @@ def test_ingestion_settings_openai_reasoning_defaults_to_shared_value() -> None:
 
 
 @pytest.mark.unit
+def test_ingestion_settings_temporal_defaults_are_local_friendly() -> None:
+    settings = IngestionSettings()
+
+    assert settings.resolved_temporal_namespace() == "default"
+    assert settings.temporal_uses_tls() is False
+    assert settings.temporal_connect_kwargs() == {"namespace": "default"}
+
+
+@pytest.mark.unit
+def test_ingestion_settings_temporal_cloud_enables_namespace_api_key_and_tls() -> None:
+    settings = IngestionSettings(
+        temporal_address="my-namespace.tmprl.cloud:7233",
+        temporal_namespace="my-namespace.a1b2c",
+        temporal_api_key="secret-key",
+    )
+
+    assert settings.temporal_uses_tls() is True
+    assert settings.temporal_connect_kwargs() == {
+        "namespace": "my-namespace.a1b2c",
+        "api_key": "secret-key",
+        "tls": True,
+    }
+
+
+@pytest.mark.unit
+def test_ingestion_settings_temporal_cloud_enables_tls_without_api_key() -> None:
+    settings = IngestionSettings(
+        temporal_address="my-namespace.tmprl.cloud:7233",
+        temporal_namespace="my-namespace.a1b2c",
+        temporal_api_key="",
+    )
+
+    assert settings.temporal_connect_kwargs() == {
+        "namespace": "my-namespace.a1b2c",
+        "tls": True,
+    }
+
+
+@pytest.mark.unit
 def test_ingestion_settings_reasoning_effort_prefers_explicit_override() -> None:
     settings = IngestionSettings(llm_strategy="openai", llm_reasoning_effort="medium")
 
