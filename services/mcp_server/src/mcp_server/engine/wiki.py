@@ -5,7 +5,7 @@ import logging
 from typing import TYPE_CHECKING, Annotated
 
 import httpx
-from fastapi import Body
+from fastapi import Body, Path, Query
 from pydantic import BaseModel, Field, ValidationError
 from shared.schemas.search import WikiSearchRequest, WikiSearchResult
 from shared.schemas.wiki import GenerateWikiRequest
@@ -101,8 +101,8 @@ class WikiEngine:
     async def get_wiki(
         self,
         auth: AuthenticatedUser,
-        repository_name: Annotated[str, Body(...)],
-        branch: Annotated[str, Body()] = "main",
+        repository_name: Annotated[str, Path(...)],
+        branch: Annotated[str, Query()] = "main",
     ) -> "GetWikiResponse":
         """Fetch wiki pages from the database."""
         normalized_repo_name = repository_name.strip().lower()

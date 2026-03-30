@@ -198,7 +198,7 @@ class TestIndexBranchWorkflow:
     async def test_single_chunk_produces_one_embed_batch(self, workflow_environment):
         """Edge case: chunk_count=1.
 
-        Why: The embed loop uses ``range(0, chunk_count, 512)``.  With
+        Why: The embed loop uses ``range(0, chunk_count, EMBED_BATCH_SIZE)``. With
         chunk_count=1 this must produce exactly one iteration at offset 0.
         A fencepost error here would either skip embedding entirely or
         produce an off-by-one offset.
@@ -211,11 +211,12 @@ class TestIndexBranchWorkflow:
         assert embed_calls[0][1].offset == 0
         assert embed_calls[0][1].limit == EMBED_BATCH_SIZE
 
-    async def test_exactly_512_chunks_one_batch(self, workflow_environment):
-        """Boundary: chunk_count == EMBED_BATCH_SIZE (512).
+    async def test_exactly_embed_batch_size_chunks_one_batch(self, workflow_environment):
+        """Boundary: chunk_count == EMBED_BATCH_SIZE.
 
-        Why: ``range(0, 512, 512)`` yields ``[0]`` — exactly one batch.
-        This is the upper boundary for a single batch; 513 would need two.
+        Why: ``range(0, EMBED_BATCH_SIZE, EMBED_BATCH_SIZE)`` yields ``[0]`` — exactly one batch.
+        This is the upper boundary for a single batch; ``EMBED_BATCH_SIZE + 1``
+        would need two.
         Off-by-one bugs commonly appear at exact-boundary values.
         """
         tracker = ActivityTracker(chunk_count=EMBED_BATCH_SIZE)
@@ -225,12 +226,12 @@ class TestIndexBranchWorkflow:
         assert len(embed_calls) == 1
         assert embed_calls[0][1].offset == 0
 
-    async def test_513_chunks_two_batches(self, workflow_environment):
-        """Boundary: chunk_count == EMBED_BATCH_SIZE + 1 (513).
+    async def test_embed_batch_size_plus_one_chunks_two_batches(self, workflow_environment):
+        """Boundary: chunk_count == EMBED_BATCH_SIZE + 1.
 
         Why: This is the smallest count that requires two embed batches.
         Verifies the loop correctly creates a second batch starting at
-        offset 512.
+        offset EMBED_BATCH_SIZE.
         """
         tracker = ActivityTracker(chunk_count=EMBED_BATCH_SIZE + 1)
         await _run_workflow(workflow_environment, tracker)
@@ -241,10 +242,10 @@ class TestIndexBranchWorkflow:
         assert offsets == [0, EMBED_BATCH_SIZE]
 
     async def test_large_chunk_count_batch_offsets(self, workflow_environment):
-        """Boundary: chunk_count=2049 produces 5 batches.
+        """Boundary: chunk_count=2049 produces ceil(2049 / EMBED_BATCH_SIZE) batches.
 
         Why: Validates batch arithmetic at scale.  The offsets must be
-        [0, 512, 1024, 1536, 2048] — the last batch covers only 1 chunk
+        ``list(range(0, 2049, EMBED_BATCH_SIZE))`` — the last batch covers only 1 chunk
         but still gets the full EMBED_BATCH_SIZE as its limit (the
         activity itself handles the short final batch).
         """
@@ -252,9 +253,10 @@ class TestIndexBranchWorkflow:
         await _run_workflow(workflow_environment, tracker)
 
         embed_calls = [(n, i) for n, i in tracker.calls if n == "embed_chunk_batch"]
-        assert len(embed_calls) == 5
+        expected_offsets = list(range(0, 2049, EMBED_BATCH_SIZE))
+        assert len(embed_calls) == len(expected_offsets)
         offsets = sorted(i.offset for _, i in embed_calls)
-        assert offsets == [0, 512, 1024, 1536, 2048]
+        assert offsets == expected_offsets
 
     # ---- Failure modes (negative tests) ----
 

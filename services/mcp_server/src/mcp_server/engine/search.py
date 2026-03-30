@@ -89,7 +89,10 @@ class SearchEngine:
             async with httpx.AsyncClient(timeout=30.0, headers=headers) as client:
                 resp = await client.post(
                     f"{search_url}/search",
-                    json=[search_request.model_dump()],
+                    json=search_request.model_dump(
+                        exclude_none=True,
+                        exclude={"method", "context_source", "context_sources"},
+                    ),
                 )
                 resp.raise_for_status()
                 result = SearchResult.model_validate(resp.json())
