@@ -212,10 +212,11 @@ async def github_webhook(request: Request):
     repo_data = payload.get("repository", {})
     github_repo_id = repo_data.get("id")
     full_name = repo_data.get("full_name", "").lower()
+    repo_url = repo_data.get("clone_url", "")
     before_commit = payload.get("before", "")
     after_commit = payload.get("after", "")
 
-    if not github_repo_id or not full_name or not before_commit or not after_commit:
+    if not github_repo_id or not full_name or not repo_url or not before_commit or not after_commit:
         raise HTTPException(status_code=400, detail="Missing required webhook fields")
 
     # Start incremental indexing workflow
@@ -227,6 +228,7 @@ async def github_webhook(request: Request):
         branch=branch,
         before_commit=before_commit,
         after_commit=after_commit,
+        repo_url=repo_url,
         chunker_strategy=settings.chunker_strategy,
         embedding_strategy=settings.embedding_strategy,
         llm_strategy=settings.resolved_llm_strategy(),
@@ -237,6 +239,7 @@ async def github_webhook(request: Request):
         branch=branch,
         before_commit=before_commit,
         after_commit=after_commit,
+        repo_url=repo_url,
         chunker_strategy=settings.chunker_strategy,
         embedding_strategy=settings.embedding_strategy,
         llm_strategy=settings.resolved_llm_strategy(),
