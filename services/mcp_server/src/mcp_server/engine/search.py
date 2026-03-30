@@ -106,6 +106,11 @@ def _extract_snippets(data: dict) -> list["CodeContextSnippet"]:
 class SearchEngine:
     """Expose coding-context retrieval entrypoints for agents."""
 
+    SEARCH_CODE_DESCRIPTION = (
+        "Retrieve indexed code/wiki context for a coding task."
+        " Use a focused query; start with top_k=5 and keep top_k<=15."
+    )
+
     log: logging.Logger
 
     def __init__(self, engine: Engine) -> None:
@@ -117,19 +122,55 @@ class SearchEngine:
         "POST",
         "/v1/search/search-code",
         name="search_code",
-        description="Request relevant code context for a coding task.",
+        description=SEARCH_CODE_DESCRIPTION,
     )
     @toolcall(
         "search_code",
-        description="Request relevant code context for a coding task.",
+        description=SEARCH_CODE_DESCRIPTION,
     )
     async def search_code(
         self,
         auth: AuthenticatedUser,
-        repository_name: Annotated[str, Body(...)],
-        query: Annotated[str, Body(...)],
-        branch: Annotated[str, Body()] = "main",
-        file_path: Annotated[str | None, Body()] = None,
+        repository_name: Annotated[
+            str,
+            Body(
+                ...,
+                description="Target repository full name, for example 'owner/repo'.",
+            ),
+        ],
+        query: Annotated[
+            str,
+            Body(
+                ...,
+                description=(
+                    "Task-focused query. Include symbols, API names, errors, or subsystem terms."
+                ),
+            ),
+        ],
+        branch: Annotated[
+            str,
+            Body(
+                description="Repository branch to query. Defaults to 'main'.",
+            ),
+        ] = "main",
+        file_path: Annotated[
+            str | None,
+            Body(
+                description=(
+                    "Optional file path scope to narrow retrieval when a specific file is suspected."
+                ),
+            ),
+        ] = None,
+        top_k: Annotated[
+            int,
+            Body(
+                ge=1,
+                le=15,
+                description=(
+                    "Maximum snippets to return. Use 5 for typical searches; increase only when scope is broad."
+                ),
+            ),
+        ] = 5,
     ) -> "CodeContextResponse":
         """Retrieve code context by calling the search service."""
         normalized_query = query.strip()
@@ -165,7 +206,7 @@ class SearchEngine:
                 github_repo_id=github_repo_id,
                 branch=branch.strip() or "main",
                 file_path=normalized_file_path,
-                top_k=10,
+                top_k=top_k,
                 context_sources=(SearchContextSource.llm_combined,),
             )
         except ValidationError as exc:

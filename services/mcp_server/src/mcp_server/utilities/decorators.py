@@ -175,7 +175,7 @@ def params_to_model(
     sig = inspect.signature(method)
     fn = getattr(method, "__func__", method)
     try:
-        resolved_hints = typing.get_type_hints(fn)
+        resolved_hints = typing.get_type_hints(fn, include_extras=True)
     except Exception:
         resolved_hints = {}
 
