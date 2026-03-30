@@ -47,7 +47,7 @@ def test_ingestion_settings_default_wiki_llm_strategy_is_bedrock() -> None:
 def test_ingestion_settings_openai_reasoning_defaults_to_shared_value() -> None:
     settings = IngestionSettings(llm_strategy="openai")
 
-    assert settings.resolved_llm_model() == "gpt-5.4-mini"
+    assert settings.resolved_llm_model() == "gpt-5.4-nano"
     assert settings.resolved_llm_reasoning_effort() == "low"
 
 

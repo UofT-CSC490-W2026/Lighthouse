@@ -49,7 +49,11 @@ class GitOperations:
             repo = Repo(repo_path)
             # Update remote URL in case token changed
             repo.remotes.origin.set_url(auth_url)
-            repo.remotes.origin.fetch()
+            # Unshallow if needed so before_commit is available for diffs
+            if repo.git.rev_parse("--is-shallow-repository").strip() == "true":
+                repo.remotes.origin.fetch("--unshallow")
+            else:
+                repo.remotes.origin.fetch()
             repo.git.checkout(branch)
             repo.git.pull("origin", branch)
         else:
@@ -58,7 +62,6 @@ class GitOperations:
                 auth_url,
                 repo_path,
                 branch=branch,
-                depth=1,
             )
 
         return repo_path
