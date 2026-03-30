@@ -171,6 +171,13 @@ resource "aws_security_group" "app_tasks" {
     security_groups = [aws_security_group.alb.id]
   }
 
+  ingress {
+    from_port = 8000
+    to_port   = 8002
+    protocol  = "tcp"
+    self      = true
+  }
+
   egress {
     from_port   = 0
     to_port     = 0

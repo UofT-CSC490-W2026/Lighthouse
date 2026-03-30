@@ -47,7 +47,16 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     settings = IngestionSettings()
     app.state.settings = settings
-    logger.info(f"Currently using {settings.chunker_strategy} chunking strategy.")
+    logger.info(
+        "Ingestion startup: temporal=%s namespace=%s task_queue=%s postgres_configured=%s milvus_uri=%s",
+        settings.temporal_address,
+        settings.resolved_temporal_namespace(),
+        settings.temporal_task_queue,
+        bool(settings.postgres_dsn.strip()),
+        settings.milvus_uri,
+    )
+    logger.info("Currently using %s chunking strategy.", settings.chunker_strategy)
+    logger.info("Ingestion startup: connecting to Temporal")
     app.state.temporal_client = await Client.connect(
         settings.temporal_address,
         **settings.temporal_connect_kwargs(),

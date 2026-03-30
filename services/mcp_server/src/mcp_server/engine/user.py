@@ -251,6 +251,12 @@ class UserEngine:
 
         token = self.engine.app.settings.internal_service_token
         headers = {"Authorization": f"Bearer {token}"} if token else {}
+        self.log.info(
+            "Triggering ingestion for %s via %s on branches=%s",
+            github_repo.full_name,
+            ingestion_url,
+            branches,
+        )
         try:
             async with httpx.AsyncClient(timeout=30.0, headers=headers) as client:
                 resp = await client.post(
@@ -276,6 +282,12 @@ class UserEngine:
                 upstream_detail=exc.response.text,
             ) from exc
         except httpx.RequestError as exc:
+            self.log.warning(
+                "Ingestion request failed for %s via %s: %s",
+                github_repo.full_name,
+                ingestion_url,
+                exc,
+            )
             raise AppError(
                 message="Ingestion service unavailable.",
                 status_code=502,
