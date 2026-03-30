@@ -41,7 +41,7 @@
         "code"
       ],
       "visible_api_names": [],
-      "test_context": "test_parse_port_with_whitespace fails because int() cannot parse strings with leading/trailing whitespace, raising ValueError."
+      "test_context": "test_parse_port_with_whitespace fails because parse_port now rejects non-trimmed input explicitly before parsing."
     },
     {
       "task_id": "type-coerce-002",
