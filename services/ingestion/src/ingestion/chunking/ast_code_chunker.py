@@ -30,9 +30,6 @@ class ASTCodeChunker(Chunker):
         self.ast_builders: dict[str, ASTChunkBuilder] = {}
         self.lang_detector = ExtensionLanguageDetector()
 
-        if language is not None:
-            self.ast_builders[language] = self._make_builder(language)
-
     def _make_builder(self, language: str) -> ASTChunkBuilder:
         return ASTChunkBuilder(
             language=language,

@@ -60,6 +60,16 @@ async def chunk_files(input: ChunkFilesInput) -> ChunkFilesOutput:
             if chunker is None:
                 if strategy is ChunkerStrategy.AST_CODE and language is None:
                     chunker = get_chunker(ChunkerStrategy.SLIDING_WINDOW)
+                elif strategy is ChunkerStrategy.AST_CODE:
+                    try:
+                        chunker = get_chunker(strategy, language=language)
+                    except Exception:
+                        logger.exception(
+                            "Could not create AST chunker for language=%s; "
+                            "using sliding_window",
+                            language,
+                        )
+                        chunker = get_chunker(ChunkerStrategy.SLIDING_WINDOW)
                 else:
                     chunker = get_chunker(strategy, language=language)
                 chunkers_by_language[language] = chunker
