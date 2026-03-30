@@ -101,18 +101,7 @@ Local development is orchestrated with the root [`docker-compose.yml`](../docker
 
 This local stack mirrors the production service split, but it keeps all stateful infrastructure nearby for iteration and testing.
 
-```text
-Browser -> web -> mcp_server -> search / ingestion
-                            -> postgres
-
-ingestion -> temporal (local dev server)
-ingestion-worker -> temporal
-
-search -> postgres + milvus
-ingestion-worker -> postgres + milvus + GitHub + model providers
-
-milvus -> etcd + minio
-```
+![Local development topology](local-dev-architecture-diagram.png)
 
 ### AWS Topology
 
@@ -151,29 +140,7 @@ AWS compute is split across ECS/Fargate and EC2:
 - Milvus runs on private EC2 and is reachable only from within the VPC
 - Temporal is external to the Terraform-managed AWS stack today; the deployment integrates with Temporal Cloud rather than self-hosting Temporal in-cluster
 
-```text
-Internet
-  -> ALB
-     -> web (ECS/Fargate)
-     -> mcp_server (ECS/Fargate)
-     -> ingestion /webhook (ECS/Fargate)
-
-mcp_server
-  -> search.<private-namespace>:8002
-  -> ingestion.<private-namespace>:8001
-  -> PostgreSQL
-
-search
-  -> PostgreSQL
-  -> Milvus on private EC2
-
-ingestion + ingestion-worker
-  -> Temporal Cloud
-  -> PostgreSQL
-  -> Milvus on private EC2
-  -> GitHub
-  -> OpenAI / Bedrock
-```
+![AWS production topology](aws-prod-architecture-diagram.png)
 
 ## Key Flows
 
