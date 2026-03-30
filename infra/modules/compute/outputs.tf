@@ -26,10 +26,6 @@ output "db_migrate_task_definition_arn" {
   value = aws_ecs_task_definition.db_migrate.arn
 }
 
-output "temporal_private_ip" {
-  value = aws_instance.temporal.private_ip
-}
-
 output "milvus_private_ip" {
   value = aws_instance.milvus.private_ip
 }

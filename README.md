@@ -47,6 +47,7 @@ monorepo/
 
 ### Documentation
 
+- [AWS Deployment Flow](docs/deployment.md)
 - [Search Service](docs/search.md)
 - [Ingestion Service](docs/ingestion.md)
 - [Evaluation Framework](docs/evaluation.md)

@@ -2,8 +2,6 @@ data "aws_region" "current" {}
 
 locals {
   private_dns_namespace = var.private_dns_namespace_name != "" ? var.private_dns_namespace_name : "${var.project_name}-${var.environment}.local"
-
-  temporal_address      = "${aws_instance.temporal.private_ip}:7233"
   milvus_uri            = "http://${aws_instance.milvus.private_ip}:19530"
   search_service_url    = "http://search.${local.private_dns_namespace}:8002"
   ingestion_service_url = "http://ingestion.${local.private_dns_namespace}:8001"
@@ -602,7 +600,7 @@ data "aws_ami" "al2023" {
 
 resource "aws_security_group" "stateful_ec2" {
   name        = "${var.project_name}-${var.environment}-stateful-sg"
-  description = "Temporal and Milvus ingress from inside the VPC and optional SSH"
+  description = "Milvus ingress from inside the VPC and optional SSH"
   vpc_id      = var.vpc_id
 
   dynamic "ingress" {
@@ -614,13 +612,6 @@ resource "aws_security_group" "stateful_ec2" {
       protocol    = "tcp"
       cidr_blocks = [var.admin_ssh_cidr]
     }
-  }
-
-  ingress {
-    from_port   = 7233
-    to_port     = 7233
-    protocol    = "tcp"
-    cidr_blocks = [var.vpc_cidr]
   }
 
   ingress {
@@ -639,35 +630,6 @@ resource "aws_security_group" "stateful_ec2" {
 }
 
 locals {
-  temporal_user_data = <<-EOF
-    #!/bin/bash
-    set -euxo pipefail
-
-    dnf update -y
-    dnf install -y docker docker-compose-plugin
-    systemctl enable docker
-    systemctl start docker
-
-    mkdir -p /opt/temporal
-    cat >/opt/temporal/docker-compose.yml <<'YML'
-    services:
-      temporal:
-        image: temporalio/temporal:latest
-        ports:
-          - "7233:7233"
-          - "8233:8233"
-        volumes:
-          - temporal_data:/home/temporal
-        command: ["server", "start-dev", "--ip", "0.0.0.0", "--db-filename", "/home/temporal/temporal.db"]
-        restart: unless-stopped
-
-    volumes:
-      temporal_data:
-    YML
-
-    docker compose -f /opt/temporal/docker-compose.yml up -d
-  EOF
-
   milvus_user_data = <<-EOF
     #!/bin/bash
     set -euxo pipefail
@@ -731,19 +693,6 @@ locals {
 
     docker compose -f /opt/milvus/docker-compose.yml up -d
   EOF
-}
-
-resource "aws_instance" "temporal" {
-  ami                    = data.aws_ami.al2023.id
-  instance_type          = var.temporal_instance_type
-  subnet_id              = var.private_subnet_ids[0]
-  vpc_security_group_ids = [aws_security_group.stateful_ec2.id]
-  key_name               = var.ec2_key_name != "" ? var.ec2_key_name : null
-  user_data              = local.temporal_user_data
-
-  tags = {
-    Name = "${var.project_name}-${var.environment}-temporal"
-  }
 }
 
 resource "aws_instance" "milvus" {

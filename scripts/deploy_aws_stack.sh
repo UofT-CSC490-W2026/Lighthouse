@@ -17,28 +17,24 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 INFRA_DIR="${REPO_ROOT}/infra"
 BASE_TFVARS="${TFVARS_PATH:-${INFRA_DIR}/terraform.tfvars}"
+HELPER="${SCRIPT_DIR}/deploy_aws_stack_helper.py"
+ENV_FILE="${ENV_FILE:-${REPO_ROOT}/.env.deploy}"
 
 if [[ ! -f "$BASE_TFVARS" ]]; then
   echo "Terraform var file not found: $BASE_TFVARS" >&2
   exit 1
 fi
 
+if [[ -f "$ENV_FILE" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$ENV_FILE"
+  set +a
+fi
+
 read_tfvar_string() {
   local key="$1"
-  python3 - "$BASE_TFVARS" "$key" <<'PY'
-import pathlib
-import re
-import sys
-
-path = pathlib.Path(sys.argv[1])
-key = sys.argv[2]
-text = path.read_text()
-pattern = re.compile(rf"^{re.escape(key)}\s*=\s*\"([^\"]*)\"", re.MULTILINE)
-match = pattern.search(text)
-if not match:
-    raise SystemExit(1)
-print(match.group(1))
-PY
+  python3 "$HELPER" read-tfvar --path "$BASE_TFVARS" --key "$key"
 }
 
 PROJECT_NAME="${PROJECT_NAME:-$(read_tfvar_string project_name)}"
@@ -69,31 +65,33 @@ MCP_SSM_ARN="arn:aws:ssm:${REGION}:${ACCOUNT_ID}:parameter${MCP_SSM_NAME}"
 SEARCH_SSM_ARN="arn:aws:ssm:${REGION}:${ACCOUNT_ID}:parameter${SEARCH_SSM_NAME}"
 INGESTION_SSM_ARN="arn:aws:ssm:${REGION}:${ACCOUNT_ID}:parameter${INGESTION_SSM_NAME}"
 
-SESSION_ENCRYPTION_KEY="${SESSION_ENCRYPTION_KEY:-$(python3 - <<'PY'
-import base64
-import os
-print(base64.urlsafe_b64encode(os.urandom(32)).decode())
-PY
-)}"
-INTERNAL_SERVICE_TOKEN="${INTERNAL_SERVICE_TOKEN:-$(python3 - <<'PY'
-import secrets
-print(secrets.token_hex(32))
-PY
-)}"
-GITHUB_WEBHOOK_SECRET="${GITHUB_WEBHOOK_SECRET:-$(python3 - <<'PY'
-import secrets
-print(secrets.token_hex(32))
-PY
-)}"
+SESSION_ENCRYPTION_KEY="${SESSION_ENCRYPTION_KEY:-$(python3 "$HELPER" generate-fernet-key)}"
+INTERNAL_SERVICE_TOKEN="${INTERNAL_SERVICE_TOKEN:-$(python3 "$HELPER" generate-token --num-bytes 32)}"
+GITHUB_WEBHOOK_SECRET="${GITHUB_WEBHOOK_SECRET:-$(python3 "$HELPER" generate-token --num-bytes 32)}"
 
 EMBEDDING_STRATEGY="${EMBEDDING_STRATEGY:-openai}"
 LLM_STRATEGY="${LLM_STRATEGY:-openai}"
+SEARCH_EMBEDDING_STRATEGY="${SEARCH_EMBEDDING_STRATEGY:-$EMBEDDING_STRATEGY}"
+INGESTION_EMBEDDING_STRATEGY="${INGESTION_EMBEDDING_STRATEGY:-$EMBEDDING_STRATEGY}"
+INGESTION_LLM_STRATEGY="${INGESTION_LLM_STRATEGY:-$LLM_STRATEGY}"
+SEARCH_EMBEDDING_MODEL="${SEARCH_EMBEDDING_MODEL:-}"
+SEARCH_RERANK_MODEL="${SEARCH_RERANK_MODEL:-rerank-v4.0-pro}"
+SEARCH_LLM_MODEL="${SEARCH_LLM_MODEL:-gpt-5.4-nano}"
+SEARCH_LLM_REASONING_EFFORT="${SEARCH_LLM_REASONING_EFFORT:-none}"
+INGESTION_CLONE_BASE_DIR="${INGESTION_CLONE_BASE_DIR:-/tmp/lighthouse_repos}"
+INGESTION_EMBEDDING_MODEL="${INGESTION_EMBEDDING_MODEL:-}"
+INGESTION_EMBEDDING_DIMENSION="${INGESTION_EMBEDDING_DIMENSION:-0}"
+INGESTION_LLM_MODEL="${INGESTION_LLM_MODEL:-}"
+INGESTION_LLM_REASONING_EFFORT="${INGESTION_LLM_REASONING_EFFORT:-}"
 COHERE_API_KEY="${COHERE_API_KEY:-}"
 OPENAI_API_KEY="${OPENAI_API_KEY:-}"
 MCP_DEBUG="${MCP_DEBUG:-false}"
 SESSION_TTL_HOURS="${SESSION_TTL_HOURS:-168}"
 TEMPORAL_TASK_QUEUE="${TEMPORAL_TASK_QUEUE:-ingestion}"
-CHUNKER_STRATEGY="${CHUNKER_STRATEGY:-sliding_window}"
+CHUNKER_STRATEGY="${CHUNKER_STRATEGY:-ast_code}"
+TEMPORAL_ADDRESS="${TEMPORAL_ADDRESS:-}"
+TEMPORAL_NAMESPACE="${TEMPORAL_NAMESPACE:-}"
+TEMPORAL_API_KEY="${TEMPORAL_API_KEY:-}"
 
 DB_PASSWORD="${DB_PASSWORD:-}"
 GITHUB_OAUTH_CLIENT_ID="${GITHUB_OAUTH_CLIENT_ID:-}"
@@ -110,9 +108,14 @@ if [[ -z "$GITHUB_OAUTH_CLIENT_ID" || -z "$GITHUB_OAUTH_CLIENT_SECRET" ]]; then
   exit 1
 fi
 
-if [[ "$EMBEDDING_STRATEGY" == "openai" || "$LLM_STRATEGY" == "openai" ]]; then
+if [[ -z "$TEMPORAL_ADDRESS" || -z "$TEMPORAL_NAMESPACE" || -z "$TEMPORAL_API_KEY" ]]; then
+  echo "TEMPORAL_ADDRESS, TEMPORAL_NAMESPACE, and TEMPORAL_API_KEY must be set for Temporal Cloud" >&2
+  exit 1
+fi
+
+if [[ "$SEARCH_EMBEDDING_STRATEGY" == "openai" || "$INGESTION_EMBEDDING_STRATEGY" == "openai" || "$INGESTION_LLM_STRATEGY" == "openai" || -n "$SEARCH_LLM_MODEL" ]]; then
   if [[ -z "$OPENAI_API_KEY" ]]; then
-    echo "OPENAI_API_KEY must be set when EMBEDDING_STRATEGY or LLM_STRATEGY uses openai" >&2
+    echo "OPENAI_API_KEY must be set for the current search/ingestion model configuration" >&2
     exit 1
   fi
 fi
@@ -125,32 +128,19 @@ MCP_SSM_JSON="${TMP_DIR}/mcp-settings.json"
 SEARCH_SSM_JSON="${TMP_DIR}/search-settings.json"
 INGESTION_SSM_JSON="${TMP_DIR}/ingestion-settings.json"
 
-export GENERATED_TFVARS WEB_IMAGE MCP_IMAGE SEARCH_IMAGE INGESTION_IMAGE
-export MCP_SSM_NAME MCP_SSM_ARN SEARCH_SSM_NAME SEARCH_SSM_ARN
-export INGESTION_SSM_NAME INGESTION_SSM_ARN DB_PASSWORD
-
-python3 - <<'PY'
-import json
-import os
-
-payload = {
-    "web_image": os.environ["WEB_IMAGE"],
-    "mcp_image": os.environ["MCP_IMAGE"],
-    "search_image": os.environ["SEARCH_IMAGE"],
-    "ingestion_image": os.environ["INGESTION_IMAGE"],
-    "mcp_server_settings_ssm_parameter_name": os.environ["MCP_SSM_NAME"],
-    "mcp_server_settings_ssm_parameter_arn": os.environ["MCP_SSM_ARN"],
-    "search_settings_ssm_parameter_name": os.environ["SEARCH_SSM_NAME"],
-    "search_settings_ssm_parameter_arn": os.environ["SEARCH_SSM_ARN"],
-    "ingestion_settings_ssm_parameter_name": os.environ["INGESTION_SSM_NAME"],
-    "ingestion_settings_ssm_parameter_arn": os.environ["INGESTION_SSM_ARN"],
-    "db_password": os.environ["DB_PASSWORD"],
-}
-
-with open(os.environ["GENERATED_TFVARS"], "w", encoding="utf-8") as fh:
-    json.dump(payload, fh, indent=2)
-    fh.write("\n")
-PY
+python3 "$HELPER" write-generated-tfvars \
+  --out "$GENERATED_TFVARS" \
+  --web-image "$WEB_IMAGE" \
+  --mcp-image "$MCP_IMAGE" \
+  --search-image "$SEARCH_IMAGE" \
+  --ingestion-image "$INGESTION_IMAGE" \
+  --mcp-ssm-name "$MCP_SSM_NAME" \
+  --mcp-ssm-arn "$MCP_SSM_ARN" \
+  --search-ssm-name "$SEARCH_SSM_NAME" \
+  --search-ssm-arn "$SEARCH_SSM_ARN" \
+  --ingestion-ssm-name "$INGESTION_SSM_NAME" \
+  --ingestion-ssm-arn "$INGESTION_SSM_ARN" \
+  --db-password "$DB_PASSWORD"
 
 terraform_apply() {
   local auto_approve_flag=()
@@ -189,81 +179,57 @@ write_ssm_payloads() {
   local db_endpoint="$1"
   local web_url="$2"
   local mcp_base_url="$3"
-  local temporal_private_ip="$4"
-  local milvus_private_ip="$5"
+  local milvus_private_ip="$4"
 
   local postgres_dsn="postgresql://${DB_USERNAME}:${DB_PASSWORD}@${db_endpoint}/${DB_NAME}"
   local search_service_url="http://search.${PRIVATE_DNS_NAMESPACE_NAME}:8002"
   local ingestion_service_url="http://ingestion.${PRIVATE_DNS_NAMESPACE_NAME}:8001"
-  local temporal_address="${temporal_private_ip}:7233"
   local milvus_uri="http://${milvus_private_ip}:19530"
   local github_callback_url="${mcp_base_url}/v1/auth/github/callback"
+  local helper_args=(
+    "$HELPER" write-ssm-payloads
+    --mcp-out "$MCP_SSM_JSON"
+    --search-out "$SEARCH_SSM_JSON"
+    --ingestion-out "$INGESTION_SSM_JSON"
+    --web-url "$web_url"
+    --postgres-dsn "$postgres_dsn"
+    --github-oauth-client-id "$GITHUB_OAUTH_CLIENT_ID"
+    --github-oauth-client-secret "$GITHUB_OAUTH_CLIENT_SECRET"
+    --github-callback-url "$github_callback_url"
+    --session-encryption-key "$SESSION_ENCRYPTION_KEY"
+    --session-ttl-hours "$SESSION_TTL_HOURS"
+    --region "$REGION"
+    --search-service-url "$search_service_url"
+    --ingestion-service-url "$ingestion_service_url"
+    --internal-service-token "$INTERNAL_SERVICE_TOKEN"
+    --milvus-uri "$milvus_uri"
+    --search-embedding-strategy "$SEARCH_EMBEDDING_STRATEGY"
+    --search-embedding-model "$SEARCH_EMBEDDING_MODEL"
+    --search-rerank-model "$SEARCH_RERANK_MODEL"
+    --search-llm-model "$SEARCH_LLM_MODEL"
+    --search-llm-reasoning-effort "$SEARCH_LLM_REASONING_EFFORT"
+    --openai-api-key "$OPENAI_API_KEY"
+    --cohere-api-key "$COHERE_API_KEY"
+    --github-webhook-secret "$GITHUB_WEBHOOK_SECRET"
+    --ingestion-clone-base-dir "$INGESTION_CLONE_BASE_DIR"
+    --temporal-address "$TEMPORAL_ADDRESS"
+    --temporal-namespace "$TEMPORAL_NAMESPACE"
+    --temporal-api-key "$TEMPORAL_API_KEY"
+    --temporal-task-queue "$TEMPORAL_TASK_QUEUE"
+    --chunker-strategy "$CHUNKER_STRATEGY"
+    --ingestion-embedding-strategy "$INGESTION_EMBEDDING_STRATEGY"
+    --ingestion-embedding-model "$INGESTION_EMBEDDING_MODEL"
+    --ingestion-embedding-dimension "$INGESTION_EMBEDDING_DIMENSION"
+    --ingestion-llm-strategy "$INGESTION_LLM_STRATEGY"
+    --ingestion-llm-model "$INGESTION_LLM_MODEL"
+    --ingestion-llm-reasoning-effort "$INGESTION_LLM_REASONING_EFFORT"
+  )
 
-  export MCP_SSM_JSON SEARCH_SSM_JSON INGESTION_SSM_JSON
-  export MCP_DEBUG web_url postgres_dsn GITHUB_OAUTH_CLIENT_ID GITHUB_OAUTH_CLIENT_SECRET
-  export github_callback_url SESSION_ENCRYPTION_KEY SESSION_TTL_HOURS REGION
-  export search_service_url ingestion_service_url INTERNAL_SERVICE_TOKEN milvus_uri
-  export EMBEDDING_STRATEGY OPENAI_API_KEY COHERE_API_KEY GITHUB_WEBHOOK_SECRET
-  export temporal_address TEMPORAL_TASK_QUEUE CHUNKER_STRATEGY LLM_STRATEGY
+  if [[ "$MCP_DEBUG" == "true" ]]; then
+    helper_args+=(--mcp-debug)
+  fi
 
-  python3 - <<'PY'
-import json
-import os
-from pathlib import Path
-
-def write(path_env: str, payload: dict) -> None:
-    Path(os.environ[path_env]).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-
-mcp_payload = {
-    "DEBUG": os.environ["MCP_DEBUG"].lower() == "true",
-    "CORS_ALLOW_ORIGINS": [os.environ["web_url"]],
-    "POSTGRES_DSN": os.environ["postgres_dsn"],
-    "GITHUB_OAUTH_CLIENT_ID": os.environ["GITHUB_OAUTH_CLIENT_ID"],
-    "GITHUB_OAUTH_CLIENT_SECRET": os.environ["GITHUB_OAUTH_CLIENT_SECRET"],
-    "GITHUB_OAUTH_CALLBACK_URL": os.environ["github_callback_url"],
-    "SESSION_ENCRYPTION_KEY": os.environ["SESSION_ENCRYPTION_KEY"],
-    "WEB_CLIENT_URL": os.environ["web_url"],
-    "SESSION_TTL_HOURS": int(os.environ["SESSION_TTL_HOURS"]),
-    "AWS_REGION": os.environ["REGION"],
-    "SEARCH_SERVICE_URL": os.environ["search_service_url"],
-    "INGESTION_SERVICE_URL": os.environ["ingestion_service_url"],
-    "INTERNAL_SERVICE_TOKEN": os.environ["INTERNAL_SERVICE_TOKEN"],
-}
-
-search_payload = {
-    "POSTGRES_DSN": os.environ["postgres_dsn"],
-    "MILVUS_URI": os.environ["milvus_uri"],
-    "EMBEDDING_STRATEGY": os.environ["EMBEDDING_STRATEGY"],
-    "OPENAI_API_KEY": os.environ["OPENAI_API_KEY"],
-    "COHERE_API_KEY": os.environ["COHERE_API_KEY"],
-    "INTERNAL_SERVICE_TOKEN": os.environ["INTERNAL_SERVICE_TOKEN"],
-    "RERANK_MODEL": "rerank-v4.0-pro",
-    "LLM_MODEL": "gpt-5.4-nano",
-    "LLM_REASONING_EFFORT": "none",
-}
-
-ingestion_payload = {
-    "POSTGRES_DSN": os.environ["postgres_dsn"],
-    "MILVUS_URI": os.environ["milvus_uri"],
-    "OPENAI_API_KEY": os.environ["OPENAI_API_KEY"],
-    "GITHUB_WEBHOOK_SECRET": os.environ["GITHUB_WEBHOOK_SECRET"],
-    "INTERNAL_SERVICE_TOKEN": os.environ["INTERNAL_SERVICE_TOKEN"],
-    "CLONE_BASE_DIR": "/tmp/lighthouse_repos",
-    "TEMPORAL_ADDRESS": os.environ["temporal_address"],
-    "TEMPORAL_TASK_QUEUE": os.environ["TEMPORAL_TASK_QUEUE"],
-    "CHUNKER_STRATEGY": os.environ["CHUNKER_STRATEGY"],
-    "EMBEDDING_STRATEGY": os.environ["EMBEDDING_STRATEGY"],
-    "EMBEDDING_MODEL": "",
-    "EMBEDDING_DIMENSION": 0,
-    "LLM_STRATEGY": os.environ["LLM_STRATEGY"],
-    "LLM_MODEL": "",
-    "LLM_REASONING_EFFORT": "",
-}
-
-write("MCP_SSM_JSON", mcp_payload)
-write("SEARCH_SSM_JSON", search_payload)
-write("INGESTION_SSM_JSON", ingestion_payload)
-PY
+  python3 "${helper_args[@]}"
 }
 
 run_db_migration() {
@@ -273,12 +239,7 @@ run_db_migration() {
   local security_group_id="$4"
 
   local subnets_csv
-  subnets_csv="$(python3 - <<'PY' "$subnets_json"
-import json
-import sys
-print(",".join(json.loads(sys.argv[1])))
-PY
-)"
+  subnets_csv="$(python3 "$HELPER" json-array-csv --json "$subnets_json")"
 
   local task_arn
   task_arn="$(
@@ -371,14 +332,12 @@ terraform_apply \
   -target=module.compute.aws_security_group.app_tasks \
   -target=module.compute.aws_security_group.stateful_ec2 \
   -target=module.compute.aws_lb.public \
-  -target=module.compute.aws_instance.temporal \
   -target=module.compute.aws_instance.milvus \
   -target=module.compute.aws_ecs_task_definition.db_migrate
 
 DB_ENDPOINT="$(terraform -chdir="$INFRA_DIR" output -raw db_endpoint)"
 WEB_URL="$(terraform -chdir="$INFRA_DIR" output -raw web_url)"
 MCP_BASE_URL="$(terraform -chdir="$INFRA_DIR" output -raw mcp_base_url)"
-TEMPORAL_PRIVATE_IP="$(terraform -chdir="$INFRA_DIR" output -raw temporal_private_ip)"
 MILVUS_PRIVATE_IP="$(terraform -chdir="$INFRA_DIR" output -raw milvus_private_ip)"
 CLUSTER_NAME="$(terraform -chdir="$INFRA_DIR" output -raw cluster_name)"
 APP_TASKS_SG_ID="$(terraform -chdir="$INFRA_DIR" output -raw app_tasks_sg_id)"
@@ -386,7 +345,7 @@ DB_MIGRATE_TASK_DEFINITION_ARN="$(terraform -chdir="$INFRA_DIR" output -raw db_m
 PRIVATE_SUBNET_IDS_JSON="$(terraform -chdir="$INFRA_DIR" output -json private_subnet_ids)"
 
 echo "Writing SSM parameter payloads"
-write_ssm_payloads "$DB_ENDPOINT" "$WEB_URL" "$MCP_BASE_URL" "$TEMPORAL_PRIVATE_IP" "$MILVUS_PRIVATE_IP"
+write_ssm_payloads "$DB_ENDPOINT" "$WEB_URL" "$MCP_BASE_URL" "$MILVUS_PRIVATE_IP"
 put_ssm_parameter "$MCP_SSM_NAME" "$MCP_SSM_JSON"
 put_ssm_parameter "$SEARCH_SSM_NAME" "$SEARCH_SSM_JSON"
 put_ssm_parameter "$INGESTION_SSM_NAME" "$INGESTION_SSM_JSON"

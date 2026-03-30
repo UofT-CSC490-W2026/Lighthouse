@@ -42,10 +42,6 @@ output "db_migrate_task_definition_arn" {
   value = module.compute.db_migrate_task_definition_arn
 }
 
-output "temporal_private_ip" {
-  value = module.compute.temporal_private_ip
-}
-
 output "milvus_private_ip" {
   value = module.compute.milvus_private_ip
 }

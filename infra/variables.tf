@@ -116,6 +116,6 @@ variable "ec2_key_name" {
 
 variable "admin_ssh_cidr" {
   type        = string
-  description = "CIDR allowed to SSH into Temporal/Milvus instances when SSH access is enabled."
+  description = "CIDR allowed to SSH into the Milvus instance when SSH access is enabled."
   default     = "0.0.0.0/0"
 }
