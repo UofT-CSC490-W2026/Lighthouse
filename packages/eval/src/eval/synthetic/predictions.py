@@ -5,7 +5,7 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from eval.bedrock import BedrockPatchGenerator
+from eval.generator import PatchGenerator
 from eval.predictions import extract_model_patch
 from .prompts import (
     build_synthetic_baseline_user_message,
@@ -30,7 +30,7 @@ SyntheticPromptBuilder = Callable[[PreparedSyntheticTask], str]
 def generate_synthetic_baseline_predictions(
     *,
     tasks: tuple[PreparedSyntheticTask, ...],
-    generator: BedrockPatchGenerator,
+    generator: PatchGenerator,
     output_path: Path,
     overwrite: bool = False,
 ) -> list[SyntheticPredictionRecord]:
@@ -48,7 +48,7 @@ def generate_synthetic_baseline_predictions(
 def generate_synthetic_predictions(
     *,
     tasks: tuple[PreparedSyntheticTask, ...],
-    generator: BedrockPatchGenerator,
+    generator: PatchGenerator,
     output_path: Path,
     overwrite: bool = False,
     context_source: str,

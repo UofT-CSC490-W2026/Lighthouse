@@ -11,7 +11,9 @@ from eval.bedrock import (
     DEFAULT_TEMPERATURE,
     BedrockPatchGenerator,
 )
+from eval.generator import PatchGenerator
 from eval.lighthouse import DEFAULT_SEARCH_TOP_K
+from eval.openai import OpenAIPatchGenerator
 from .compare import (
     SyntheticRunComparison,
     SyntheticScoreRow,
@@ -114,6 +116,7 @@ def run_synthetic_experiment(
     indexing_embedding_model: str | None = None,
     query_embedding_strategy: str | None = None,
     query_embedding_model: str | None = None,
+    include_ast_index: bool | None = None,
 ) -> SyntheticExperimentResult:
     if not run_prefix.strip():
         raise ValueError("run_prefix must not be empty.")
@@ -121,6 +124,14 @@ def run_synthetic_experiment(
         raise ValueError(
             "context_source must be 'code', 'wiki', 'ast', 'combined', or 'code+wiki'."
         )
+
+    resolved_include_ast = (
+        context_source in {"ast", "combined"}
+        if include_ast_index is None
+        else include_ast_index
+    )
+    if context_source == "ast" and not resolved_include_ast:
+        raise ValueError("context_source='ast' requires include_ast_index=True.")
 
     workspace = prepare_synthetic_workspace(
         family_name=family_name,
@@ -146,7 +157,7 @@ def run_synthetic_experiment(
             poll_interval_seconds=index_poll_interval_seconds,
             progress_heartbeat_seconds=index_progress_heartbeat_seconds,
             timeout_seconds=index_timeout_seconds,
-            include_ast=context_source in {"ast", "combined"},
+            include_ast=resolved_include_ast,
             embedding_strategy=indexing_embedding_strategy,
             embedding_model=indexing_embedding_model,
         )
@@ -169,7 +180,7 @@ def run_synthetic_experiment(
     baseline_run_id = f"{run_prefix}-baseline"
     lighthouse_run_id = f"{run_prefix}-{context_source}"
 
-    baseline_generator = BedrockPatchGenerator(
+    baseline_generator = _build_patch_generator(
         model_name=model_name,
         region_name=region_name,
         temperature=temperature,
@@ -190,7 +201,7 @@ def run_synthetic_experiment(
         query_embedding_strategy=query_embedding_strategy,
         query_embedding_model=query_embedding_model,
     )
-    lighthouse_generator = BedrockPatchGenerator(
+    lighthouse_generator = _build_patch_generator(
         model_name=model_name,
         region_name=region_name,
         temperature=temperature,
@@ -346,9 +357,12 @@ def run_synthetic_experiment_suite(
     indexing_embedding_model: str | None = None,
     query_embedding_strategy: str | None = None,
     query_embedding_model: str | None = None,
+    include_ast_index: bool | None = None,
 ) -> SyntheticExperimentSuiteResult:
     if not run_prefix.strip():
         raise ValueError("run_prefix must not be empty.")
+
+    resolved_include_ast = True if include_ast_index is None else include_ast_index
 
     workspace = prepare_synthetic_workspace(
         family_name=family_name,
@@ -374,7 +388,7 @@ def run_synthetic_experiment_suite(
             poll_interval_seconds=index_poll_interval_seconds,
             progress_heartbeat_seconds=index_progress_heartbeat_seconds,
             timeout_seconds=index_timeout_seconds,
-            include_ast=True,
+            include_ast=resolved_include_ast,
             embedding_strategy=indexing_embedding_strategy,
             embedding_model=indexing_embedding_model,
         )
@@ -393,7 +407,7 @@ def run_synthetic_experiment_suite(
     baseline_predictions_path = predictions_root / f"{run_prefix}-baseline.jsonl"
     baseline_run_id = f"{run_prefix}-baseline"
 
-    baseline_generator = BedrockPatchGenerator(
+    baseline_generator = _build_patch_generator(
         model_name=model_name,
         region_name=region_name,
         temperature=temperature,
@@ -444,7 +458,7 @@ def run_synthetic_experiment_suite(
             query_embedding_strategy=query_embedding_strategy,
             query_embedding_model=query_embedding_model,
         )
-        lighthouse_generator = BedrockPatchGenerator(
+        lighthouse_generator = _build_patch_generator(
             model_name=model_name,
             region_name=region_name,
             temperature=temperature,
@@ -666,3 +680,24 @@ def _summary_to_json(summary: SyntheticRunSummary) -> dict[str, object]:
         "empty_patch_instances": summary.empty_patch_instances,
         "error_instances": summary.error_instances,
     }
+
+
+def _build_patch_generator(
+    *,
+    model_name: str,
+    region_name: str,
+    temperature: float,
+    max_tokens: int,
+) -> PatchGenerator:
+    if model_name.lower().startswith("openai/"):
+        return OpenAIPatchGenerator(
+            model_name=model_name,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+    return BedrockPatchGenerator(
+        model_name=model_name,
+        region_name=region_name,
+        temperature=temperature,
+        max_tokens=max_tokens,
+    )

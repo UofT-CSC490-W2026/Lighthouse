@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from eval.bedrock import BedrockPatchGenerator
+from eval.generator import PatchGenerator
 from eval.prompts import build_baseline_system_message, build_baseline_user_message
 from eval.slice import SWEBenchTask
 
@@ -32,7 +32,7 @@ TaskPromptBuilder = Callable[[SWEBenchTask], str]
 def generate_baseline_predictions(
     *,
     tasks: list[SWEBenchTask],
-    generator: BedrockPatchGenerator,
+    generator: PatchGenerator,
     output_path: Path,
     overwrite: bool = False,
 ) -> list[PredictionRecord]:
@@ -49,7 +49,7 @@ def generate_baseline_predictions(
 def generate_predictions(
     *,
     tasks: list[SWEBenchTask],
-    generator: BedrockPatchGenerator,
+    generator: PatchGenerator,
     output_path: Path,
     overwrite: bool = False,
     build_user_message: TaskPromptBuilder,
