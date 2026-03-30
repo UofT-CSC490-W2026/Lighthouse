@@ -21,6 +21,8 @@ class IngestionSettings(BaseSettings):
     internal_service_token: str = ""
     clone_base_dir: str = "/tmp/lighthouse_repos"
     temporal_address: str = "localhost:7233"
+    temporal_api_key: str = ""
+    temporal_namespace: str = "default"
     temporal_task_queue: str = "ingestion"
     chunker_strategy: str = "sliding_window"
     embedding_strategy: str = "openai"
@@ -78,3 +80,24 @@ class IngestionSettings(BaseSettings):
         if self.resolved_llm_strategy() == "openai":
             return OPENAI_REASONING_EFFORT
         return ""
+
+    def resolved_temporal_namespace(self) -> str:
+        configured = self.temporal_namespace.strip()
+        if configured:
+            return configured
+        return "default"
+
+    def temporal_uses_tls(self) -> bool:
+        address = self.temporal_address.strip().lower()
+        return bool(self.temporal_api_key.strip()) or ".tmprl.cloud" in address
+
+    def temporal_connect_kwargs(self) -> dict[str, str | bool]:
+        kwargs: dict[str, str | bool] = {
+            "namespace": self.resolved_temporal_namespace(),
+        }
+        api_key = self.temporal_api_key.strip()
+        if api_key:
+            kwargs["api_key"] = api_key
+        if self.temporal_uses_tls():
+            kwargs["tls"] = True
+        return kwargs

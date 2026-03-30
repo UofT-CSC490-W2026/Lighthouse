@@ -216,6 +216,9 @@ services:
     build:
       context: .
       dockerfile: services/web/Dockerfile
+      args:
+        ENABLE_LOCAL_PROXY: "true"
+        MCP_PROXY_UPSTREAM: mcp_server:8000
     ports:
       - "3000:80"
     depends_on:

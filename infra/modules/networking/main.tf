@@ -169,6 +169,28 @@ resource "aws_vpc_endpoint" "ssm" {
   tags                = { Name = "${var.project_name}-${var.environment}-vpce-ssm" }
 }
 
+resource "aws_vpc_endpoint" "ssmmessages" {
+  count               = var.enable_vpc_endpoints ? 1 : 0
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.${data.aws_region.current.name}.ssmmessages"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = aws_subnet.private[*].id
+  security_group_ids  = [aws_security_group.vpce[0].id]
+  private_dns_enabled = true
+  tags                = { Name = "${var.project_name}-${var.environment}-vpce-ssmmessages" }
+}
+
+resource "aws_vpc_endpoint" "ec2messages" {
+  count               = var.enable_vpc_endpoints ? 1 : 0
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.${data.aws_region.current.name}.ec2messages"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = aws_subnet.private[*].id
+  security_group_ids  = [aws_security_group.vpce[0].id]
+  private_dns_enabled = true
+  tags                = { Name = "${var.project_name}-${var.environment}-vpce-ec2messages" }
+}
+
 resource "aws_vpc_endpoint" "secretsmanager" {
   count               = var.enable_vpc_endpoints ? 1 : 0
   vpc_id              = aws_vpc.main.id

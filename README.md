@@ -1,8 +1,10 @@
 # Lighthouse
 
 <!-- coverage:start -->
+
 [![Tests](https://github.com/UofT-CSC490-W2026/Lighthouse/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/UofT-CSC490-W2026/Lighthouse/actions/workflows/tests.yml)
 ![Test Coverage](https://img.shields.io/badge/test%20coverage-97.27%25-brightgreen)
+
 <!-- coverage:end -->
 
 Better context for coding agents.
@@ -60,7 +62,7 @@ lighthouse/
 
 1. Run `uv sync --all-packages --dev` to install dependencies for the entire monorepo.
 2. Run `cd services/web && bun install` to install dependencies for the web service.
-3. Run `scripts/setup-local-env-files.sh` to setup local `.env` files for all services.
+3. Run `scripts/setup-local-env-files.sh` to copy local `.env` files for all services, then fill in the required secrets manually.
 
 **You will still need to get the following secrets from the team**:
 
@@ -101,6 +103,7 @@ You can find documentation in the `docs/` directory. For the most part, it mirro
 - [Web Service](docs/services/web.md)
 - [Evaluation Framework](docs/evaluation.md)
 - [Testing Guide](docs/testing.md)
+- [AWS Deployment Flow](docs/deployment.md)
 
 ## Running Tests
 
