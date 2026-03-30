@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     settings = IngestionSettings()
     app.state.settings = settings
+    logger.info(f"Currently using {settings.chunker_strategy} chunking strategy.")
     app.state.temporal_client = await Client.connect(settings.temporal_address)
     logger.info("Connected to Temporal at %s", settings.temporal_address)
     yield
@@ -160,6 +161,7 @@ async def github_webhook(request: Request):
             branch=branch,
             before_commit=before_commit,
             after_commit=after_commit,
+            chunker_strategy=settings.chunker_strategy,
         ),
         id=workflow_id,
         task_queue=settings.temporal_task_queue,

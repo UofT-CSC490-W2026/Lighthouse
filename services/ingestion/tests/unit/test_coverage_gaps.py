@@ -30,7 +30,7 @@ from ingestion.utilities.services.chunk import ChunkService
 
 
 class DummyChunker(Chunker):
-    def chunk_file(self, content: str, file_path: str):
+    def chunk_file(self, content: str, file_path: str, language: str | None = None):
         return []
 
 
@@ -209,7 +209,12 @@ async def test_temporal_worker_main(monkeypatch):
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_ingestion_lifespan_and_activity_helpers(monkeypatch):
-    settings = SimpleNamespace(temporal_address="temporal:7233", postgres_dsn="postgres://db", milvus_uri="http://milvus")
+    settings = SimpleNamespace(
+        temporal_address="temporal:7233",
+        postgres_dsn="postgres://db",
+        milvus_uri="http://milvus",
+        chunker_strategy="sliding_window",
+    )
     app = SimpleNamespace(state=SimpleNamespace())
     client = object()
     db = MagicMock()

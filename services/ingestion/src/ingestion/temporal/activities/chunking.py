@@ -6,7 +6,13 @@ from pathlib import Path
 
 from temporalio import activity
 
-from ...chunking import ChunkerStrategy, get_chunker
+from ...chunking import (
+    ASTCodeChunker,
+    Chunker,
+    ChunkerStrategy,
+    SlidingWindowChunker,
+    get_chunker,
+)
 from ...language import ExtensionLanguageDetector
 from ...utilities.git_ops import GitOperations
 from ...utilities.services import ChunkService
@@ -22,7 +28,8 @@ async def chunk_files(input: ChunkFilesInput) -> ChunkFilesOutput:
     settings = get_settings()
     db = make_db(settings)
 
-    chunker = get_chunker(ChunkerStrategy(input.chunker_strategy))
+    strategy = ChunkerStrategy(input.chunker_strategy)
+    chunkers_by_language: dict[str | None, Chunker] = {}
     lang_detector = ExtensionLanguageDetector()
     repo_path = Path(input.repo_path)
     batch_id = str(uuid.uuid4())
@@ -48,7 +55,40 @@ async def chunk_files(input: ChunkFilesInput) -> ChunkFilesOutput:
 
             relative_path = str(file_path.relative_to(repo_path))
             language = lang_detector.detect(relative_path)
-            chunk_results = chunker.chunk_file(content, relative_path)
+
+            chunker = chunkers_by_language.get(language)
+            if chunker is None:
+                if strategy is ChunkerStrategy.AST_CODE and language is None:
+                    chunker = get_chunker(ChunkerStrategy.SLIDING_WINDOW)
+                else:
+                    chunker = get_chunker(strategy, language=language)
+                chunkers_by_language[language] = chunker
+
+            try:
+                if isinstance(chunker, ASTCodeChunker):
+                    logger.info(
+                        "Using AST chunker for %s (language=%s)",
+                        relative_path,
+                        language,
+                    )
+                elif (
+                    strategy is ChunkerStrategy.AST_CODE
+                    and isinstance(chunker, SlidingWindowChunker)
+                ):
+                    logger.info(
+                        "Using fallback sliding_window chunker for %s "
+                        "(AST requested but language detection unavailable)",
+                        relative_path,
+                    )
+                chunk_results = chunker.chunk_file(content, relative_path, language=language)
+            except Exception:
+                logger.exception(
+                    "Chunking failed for %s with strategy=%s; falling back to sliding_window",
+                    relative_path,
+                    strategy,
+                )
+                fallback = get_chunker(ChunkerStrategy.SLIDING_WINDOW)
+                chunk_results = fallback.chunk_file(content, relative_path, language=language)
 
             for chunk in chunk_results:
                 all_chunks.append(

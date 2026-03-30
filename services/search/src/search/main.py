@@ -4,7 +4,7 @@ import logging
 from contextlib import asynccontextmanager
 
 from db import DatabaseManager
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, HTTPException
 from shared.auth import verify_internal_token
 from shared.config import MILVUS_COLLECTION_NAME
 from shared.schemas.search import SearchRequest, SearchResult
@@ -13,7 +13,7 @@ from vectordb import MilvusClient
 
 from search.config import SearchSettings
 from embedding import EmbeddingProvider, OpenAIEmbeddingProvider
-from search.strategies.hybrid_strategy import HybridSearchStrategy
+from search.strategies.hybrid_strategy import BranchNotIndexedError, HybridSearchStrategy
 from search.strategies.search_strategy import SearchStrategy
 
 logging.basicConfig(level=logging.INFO)
@@ -67,7 +67,10 @@ app = create_app(
 @app.post("/search", response_model=SearchResult, dependencies=[Depends(verify_internal_token)])
 async def search(request: SearchRequest) -> SearchResult:
     strategy: SearchStrategy[SearchRequest, SearchResult] = app.state.strategy
-    return await strategy.search(request)
+    try:
+        return await strategy.search(request)
+    except BranchNotIndexedError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @app.get("/health")
