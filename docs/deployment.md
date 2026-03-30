@@ -120,9 +120,9 @@ deployment itself, and others are converted into SSM runtime settings for MCP, S
 | `TEMPORAL_API_KEY` | Yes | None | Temporal Cloud API key | API key used for Temporal Cloud authentication. |
 | `OPENAI_API_KEY` | Conditionally | None | OpenAI API key | Required whenever the chosen deployment uses OpenAI-backed embedding or LLM settings. |
 | `COHERE_API_KEY` | Conditionally | Empty | Cohere API key | Needed in practice for Search reranking and LLM-combined search flows that use the Cohere reranker. |
-| `GITHUB_WEBHOOK_SECRET` | No | Random generated value | Any shared secret string | Secret written into ingestion settings for GitHub webhook verification. |
-| `SESSION_ENCRYPTION_KEY` | No | Random generated Fernet key | Fernet-compatible base64 key | Key used by MCP to encrypt session tokens and persisted credentials. |
-| `INTERNAL_SERVICE_TOKEN` | No | Random generated value | Any shared bearer token | Internal auth token shared across MCP, Search, and Ingestion. |
+| `GITHUB_WEBHOOK_SECRET` | Yes | None | Any shared secret string | Secret written into ingestion settings for GitHub webhook verification. It must match the webhook or GitHub App configuration that sends events to this deployment. |
+| `SESSION_ENCRYPTION_KEY` | Yes | None | Fernet-compatible base64 key | Key used by MCP to encrypt session tokens and persisted credentials. Keep it stable for the lifetime of an environment; rotating it invalidates previously encrypted values. |
+| `INTERNAL_SERVICE_TOKEN` | Yes | None | Any shared bearer token | Internal auth token shared across MCP, Search, and Ingestion. Keep it stable for the environment so all services continue to trust each other across redeploys. |
 | `KMS_KEY_ID` | No | AWS managed SSM key | KMS key ID or ARN | Optional KMS key used when writing SecureString SSM parameters. |
 
 ### Deployment And Naming Controls
@@ -245,6 +245,20 @@ The runtime settings schemas come from:
 Use `.env.deploy` for these deployment-time runtime choices. The deploy script writes them into the per-service
 SSM payloads. They should not be stored in tracked Terraform files.
 
+The deploy script does not auto-generate persistent secrets anymore. Set these explicitly in `.env.deploy` before the
+first deployment and keep them stable for the life of the environment:
+
+- `SESSION_ENCRYPTION_KEY`
+- `INTERNAL_SERVICE_TOKEN`
+- `GITHUB_WEBHOOK_SECRET`
+
+Example one-time generation commands:
+
+```bash
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"  # SESSION_ENCRYPTION_KEY
+python -c "import secrets; print(secrets.token_hex(32))"  # INTERNAL_SERVICE_TOKEN or GITHUB_WEBHOOK_SECRET
+```
+
 Important runtime values populated by the script:
 
 - `POSTGRES_DSN`
@@ -320,3 +334,24 @@ Then verify end-to-end behavior:
 - Local development still uses `docker-compose.yml`.
 - The script writes runtime config to SSM, not to tracked Terraform files.
 - [`infra/terraform.tfvars`](../infra/terraform.tfvars) is gitignored and should not hold real secrets in source control.
+
+## Auth State Recovery
+
+If `SESSION_ENCRYPTION_KEY` was accidentally changed and MCP starts failing with `cryptography.fernet.InvalidToken`,
+do not try to fix that through Terraform. Restore a stable `SESSION_ENCRYPTION_KEY`, then reset only the auth state
+with:
+
+```bash
+POSTGRES_DSN='postgresql://...' ./scripts/reset_auth_state.sh
+```
+
+Use `--dry-run` first if you want to see how many rows will be affected.
+
+If RDS is private and your laptop cannot reach it, run the same reset inside AWS with:
+
+```bash
+./scripts/reset_auth_state_aws.sh --dry-run
+./scripts/reset_auth_state_aws.sh
+```
+
+That helper reuses the existing `db-migrate` ECS task definition so the reset runs from inside the VPC.

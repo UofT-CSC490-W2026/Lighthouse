@@ -62,7 +62,7 @@ lighthouse/
 
 1. Run `uv sync --all-packages --dev` to install dependencies for the entire monorepo.
 2. Run `cd services/web && bun install` to install dependencies for the web service.
-3. Run `scripts/setup-local-env-files.sh` to setup local `.env` files for all services.
+3. Run `scripts/setup-local-env-files.sh` to copy local `.env` files for all services, then fill in the required secrets manually.
 
 **You will still need to get the following secrets from the team**:
 

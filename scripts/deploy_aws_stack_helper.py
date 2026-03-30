@@ -9,6 +9,78 @@ import pathlib
 import re
 import secrets
 import sys
+import textwrap
+
+
+RESET_AUTH_STATE_INLINE_PYTHON = textwrap.dedent(
+    """
+    import asyncio
+    import os
+
+    import asyncpg
+
+
+    READ_SQL = '''
+    SELECT
+      COUNT(*) FILTER (
+        WHERE api_token_hash IS NOT NULL
+           OR api_token_encrypted IS NOT NULL
+           OR api_token_issued_at IS NOT NULL
+           OR mcp_token_hash IS NOT NULL
+           OR mcp_token_encrypted IS NOT NULL
+           OR mcp_token_issued_at IS NOT NULL
+      ) AS affected_users,
+      (SELECT COUNT(*) FROM sessions) AS sessions_to_delete
+    FROM users;
+    '''
+
+    RESET_SQL = '''
+    UPDATE users
+    SET
+      api_token_hash = NULL,
+      api_token_encrypted = NULL,
+      api_token_issued_at = NULL,
+      mcp_token_hash = NULL,
+      mcp_token_encrypted = NULL,
+      mcp_token_issued_at = NULL
+    WHERE
+      api_token_hash IS NOT NULL
+      OR api_token_encrypted IS NOT NULL
+      OR api_token_issued_at IS NOT NULL
+      OR mcp_token_hash IS NOT NULL
+      OR mcp_token_encrypted IS NOT NULL
+      OR mcp_token_issued_at IS NOT NULL;
+
+    DELETE FROM sessions;
+    '''
+
+
+    async def main() -> None:
+        dsn = os.environ["POSTGRES_DSN"]
+        mode = os.environ.get("RESET_AUTH_STATE_MODE", "execute").strip().lower()
+        conn = await asyncpg.connect(dsn)
+        try:
+            row = await conn.fetchrow(READ_SQL)
+            affected_users = int(row["affected_users"])
+            sessions_to_delete = int(row["sessions_to_delete"])
+            print(f"affected_users={affected_users}")
+            print(f"sessions_to_delete={sessions_to_delete}")
+
+            if mode == "dry-run":
+                print("dry_run=true")
+                return
+
+            async with conn.transaction():
+                await conn.execute(RESET_SQL)
+
+            print("reset_applied=true")
+        finally:
+            await conn.close()
+
+
+    asyncio.run(main())
+    """
+).strip()
 
 
 def read_tfvar_string(path: str, key: str) -> None:
@@ -117,6 +189,22 @@ def json_array_csv(raw_json: str) -> None:
     print(",".join(values))
 
 
+def write_reset_auth_state_overrides(args: argparse.Namespace) -> None:
+    payload = {
+        "containerOverrides": [
+            {
+                "name": args.container_name,
+                "command": ["python", "-c", RESET_AUTH_STATE_INLINE_PYTHON],
+                "environment": [
+                    {"name": "POSTGRES_DSN", "value": args.postgres_dsn},
+                    {"name": "RESET_AUTH_STATE_MODE", "value": args.mode},
+                ],
+            }
+        ]
+    }
+    pathlib.Path(args.out).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Helpers for AWS stack deployment scripts")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -185,6 +273,12 @@ def build_parser() -> argparse.ArgumentParser:
     array_csv = subparsers.add_parser("json-array-csv")
     array_csv.add_argument("--json", required=True)
 
+    reset_overrides = subparsers.add_parser("write-reset-auth-state-overrides")
+    reset_overrides.add_argument("--out", required=True)
+    reset_overrides.add_argument("--container-name", required=True)
+    reset_overrides.add_argument("--postgres-dsn", required=True)
+    reset_overrides.add_argument("--mode", choices=["dry-run", "execute"], required=True)
+
     return parser
 
 
@@ -204,6 +298,8 @@ def main() -> None:
         write_ssm_payloads(args)
     elif args.command == "json-array-csv":
         json_array_csv(args.json)
+    elif args.command == "write-reset-auth-state-overrides":
+        write_reset_auth_state_overrides(args)
     else:
         raise SystemExit(f"Unhandled command: {args.command}")
 

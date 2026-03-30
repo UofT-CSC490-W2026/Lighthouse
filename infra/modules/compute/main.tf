@@ -1,4 +1,5 @@
 data "aws_region" "current" {}
+data "aws_partition" "current" {}
 
 locals {
   private_dns_namespace = var.private_dns_namespace_name != "" ? var.private_dns_namespace_name : "${var.project_name}-${var.environment}.local"
@@ -97,6 +98,20 @@ data "aws_iam_policy_document" "ecs_task_policy" {
   statement {
     actions   = ["kms:Decrypt"]
     resources = var.ssm_kms_key_arns
+  }
+
+  statement {
+    actions = [
+      "bedrock:InvokeModel",
+      "bedrock:InvokeModelWithResponseStream",
+      "bedrock:Converse",
+      "bedrock:ConverseStream",
+    ]
+    resources = [
+      "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.name}::foundation-model/*",
+      "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.name}:*:inference-profile/*",
+      "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.name}:*:application-inference-profile/*",
+    ]
   }
 }
 

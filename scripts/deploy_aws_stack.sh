@@ -13,6 +13,15 @@ require_cmd docker
 require_cmd terraform
 require_cmd python3
 
+require_env() {
+  local name="$1"
+  local message="$2"
+  if [[ -z "${!name:-}" ]]; then
+    echo "$name must be set. $message" >&2
+    exit 1
+  fi
+}
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 INFRA_DIR="${REPO_ROOT}/infra"
@@ -65,10 +74,6 @@ MCP_SSM_ARN="arn:aws:ssm:${REGION}:${ACCOUNT_ID}:parameter${MCP_SSM_NAME}"
 SEARCH_SSM_ARN="arn:aws:ssm:${REGION}:${ACCOUNT_ID}:parameter${SEARCH_SSM_NAME}"
 INGESTION_SSM_ARN="arn:aws:ssm:${REGION}:${ACCOUNT_ID}:parameter${INGESTION_SSM_NAME}"
 
-SESSION_ENCRYPTION_KEY="${SESSION_ENCRYPTION_KEY:-$(python3 "$HELPER" generate-fernet-key)}"
-INTERNAL_SERVICE_TOKEN="${INTERNAL_SERVICE_TOKEN:-$(python3 "$HELPER" generate-token --num-bytes 32)}"
-GITHUB_WEBHOOK_SECRET="${GITHUB_WEBHOOK_SECRET:-$(python3 "$HELPER" generate-token --num-bytes 32)}"
-
 EMBEDDING_STRATEGY="${EMBEDDING_STRATEGY:-openai}"
 LLM_STRATEGY="${LLM_STRATEGY:-openai}"
 SEARCH_EMBEDDING_STRATEGY="${SEARCH_EMBEDDING_STRATEGY:-$EMBEDDING_STRATEGY}"
@@ -97,21 +102,19 @@ DB_PASSWORD="${DB_PASSWORD:-}"
 GITHUB_OAUTH_CLIENT_ID="${GITHUB_OAUTH_CLIENT_ID:-}"
 GITHUB_OAUTH_CLIENT_SECRET="${GITHUB_OAUTH_CLIENT_SECRET:-}"
 KMS_KEY_ID="${KMS_KEY_ID:-}"
+SESSION_ENCRYPTION_KEY="${SESSION_ENCRYPTION_KEY:-}"
+INTERNAL_SERVICE_TOKEN="${INTERNAL_SERVICE_TOKEN:-}"
+GITHUB_WEBHOOK_SECRET="${GITHUB_WEBHOOK_SECRET:-}"
 
-if [[ -z "$DB_PASSWORD" ]]; then
-  echo "DB_PASSWORD must be set" >&2
-  exit 1
-fi
-
-if [[ -z "$GITHUB_OAUTH_CLIENT_ID" || -z "$GITHUB_OAUTH_CLIENT_SECRET" ]]; then
-  echo "GITHUB_OAUTH_CLIENT_ID and GITHUB_OAUTH_CLIENT_SECRET must be set" >&2
-  exit 1
-fi
-
-if [[ -z "$TEMPORAL_ADDRESS" || -z "$TEMPORAL_NAMESPACE" || -z "$TEMPORAL_API_KEY" ]]; then
-  echo "TEMPORAL_ADDRESS, TEMPORAL_NAMESPACE, and TEMPORAL_API_KEY must be set for Temporal Cloud" >&2
-  exit 1
-fi
+require_env DB_PASSWORD "Provide the actual RDS password for this environment."
+require_env GITHUB_OAUTH_CLIENT_ID "Provide the GitHub OAuth app client ID used by MCP."
+require_env GITHUB_OAUTH_CLIENT_SECRET "Provide the GitHub OAuth app client secret used by MCP."
+require_env SESSION_ENCRYPTION_KEY "Use a stable Fernet key. Rotating it invalidates stored encrypted sessions and tokens."
+require_env INTERNAL_SERVICE_TOKEN "Use a stable shared bearer token across MCP, Search, and Ingestion."
+require_env GITHUB_WEBHOOK_SECRET "Use the webhook secret configured in your GitHub App or webhook settings."
+require_env TEMPORAL_ADDRESS "Provide the Temporal Cloud frontend endpoint."
+require_env TEMPORAL_NAMESPACE "Provide the Temporal Cloud namespace."
+require_env TEMPORAL_API_KEY "Provide the Temporal Cloud API key."
 
 if [[ "$SEARCH_EMBEDDING_STRATEGY" == "openai" || "$INGESTION_EMBEDDING_STRATEGY" == "openai" || "$INGESTION_LLM_STRATEGY" == "openai" || -n "$SEARCH_LLM_MODEL" ]]; then
   if [[ -z "$OPENAI_API_KEY" ]]; then
