@@ -51,7 +51,7 @@ async def lifespan(app: FastAPI):
         "Ingestion startup: temporal=%s namespace=%s task_queue=%s postgres_configured=%s milvus_uri=%s",
         settings.temporal_address,
         settings.resolved_temporal_namespace(),
-        settings.temporal_task_queue,
+        getattr(settings, "temporal_task_queue", "<unknown>"),
         bool(settings.postgres_dsn.strip()),
         settings.milvus_uri,
     )
