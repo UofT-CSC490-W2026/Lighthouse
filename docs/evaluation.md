@@ -136,8 +136,16 @@ uv run eval run-synthetic-matrix \
   --ingestion-url http://localhost:8001 \
   --search-url http://localhost:8002 \
   --output-root .cache/eval/synthetic_experiments/synth/openai \
+  --max-parallel-cells 4 \
   --continue-on-error
 ```
+
+Parallel execution notes:
+
+- `--max-parallel-cells > 1` enables matrix-cell parallelism.
+- The runner preprocesses each `(family, chunking_strategy, embedding_model)` group once
+  (workspace prep, indexing, wiki), then executes cells in parallel with preprocessing
+  skipped.
 
 ### 4.4 Artifacts to report
 
@@ -147,8 +155,14 @@ Per matrix output root:
 - `matrix_rows.md` (combined score/pass@k and efficiency sections)
 - `matrix_efficiency.json`
 - `matrix_efficiency.txt`
-- `heatmaps/*.png` (score and pass@k)
+- `heatmaps/*.png` (score and pass@k, one file per embedding config)
 - `pass_at_k/*.pass_at_k.txt`
+
+Heatmap layout:
+
+- x-axis: codegen model
+- y-axis: `context_source`
+- separate panel/file per embedding model (and per family + chunking strategy group)
 
 ### 4.5 Efficiency metrics currently exposed
 
@@ -343,6 +357,7 @@ For each synthetic matrix figure/table, include:
 - model sweep lists
 - embedding sweep lists + strategy
 - retrieval contexts + chunking strategies
+- heatmap orientation (`x=codegen`, `y=context_source`) and panel split (`per-embedding`)
 - repeats and k-values
 - score metric and pass@k metric definitions
 - cost source (checked-in pricing catalogs)
