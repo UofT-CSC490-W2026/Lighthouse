@@ -59,7 +59,6 @@ filterwarnings = [
 
 [tool.coverage.run]
 source = [
-  "packages/eval/src",
   "packages/db/src",
   "packages/vectordb/src",
   "packages/embedding/src",
