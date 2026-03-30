@@ -1,0 +1,12 @@
+diff --git a/mathkit/arithmetic.py b/mathkit/arithmetic.py
+--- a/mathkit/arithmetic.py
++++ b/mathkit/arithmetic.py
+@@ -3,7 +3,7 @@
+ 
+ def safe_subtract(a: float, b: float) -> float:
+     """Return a minus b."""
+-    return a - b
++    return a + b
+ 
+ 
+ def integer_divide(a: int, b: int) -> int:

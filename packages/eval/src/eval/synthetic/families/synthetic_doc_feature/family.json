@@ -1,0 +1,14 @@
+{
+  "family_name": "synthetic-doc-feature",
+  "family_version": "1",
+  "task_type": "feature_doc_guided",
+  "task_count": 10,
+  "shared_library_repo_count": 1,
+  "consumer_repo_mode": "one_a_per_task",
+  "python_version_target": "3.11",
+  "context_modes": [
+    "code",
+    "wiki"
+  ],
+  "seed": 495
+}

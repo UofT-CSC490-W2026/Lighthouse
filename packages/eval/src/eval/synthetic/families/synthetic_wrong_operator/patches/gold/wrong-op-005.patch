@@ -1,0 +1,12 @@
+diff --git a/mathkit/ranges.py b/mathkit/ranges.py
+--- a/mathkit/ranges.py
++++ b/mathkit/ranges.py
+@@ -3,7 +3,7 @@
+ 
+ def overlaps(start1: int, end1: int, start2: int, end2: int) -> bool:
+     """Return True when closed intervals [start1,end1] and [start2,end2] share a point."""
+-    return start1 <= end2 or start2 <= end1
++    return start1 <= end2 and start2 <= end1
+ 
+ 
+ def span_length(start: int, end: int) -> int:

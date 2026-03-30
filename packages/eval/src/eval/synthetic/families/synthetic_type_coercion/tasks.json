@@ -1,0 +1,290 @@
+{
+  "family_name": "synthetic-type-coercion",
+  "family_version": "1",
+  "generation_config": {
+    "task_type": "data_type_coercion",
+    "task_count": 10,
+    "shared_library_repo_count": 0,
+    "consumer_repo_mode": "one_a_per_task",
+    "python_version_target": "3.11",
+    "context_modes": [
+      "code",
+      "wiki",
+      "ast",
+      "combined"
+    ],
+    "seed": 492
+  },
+  "tasks": [
+    {
+      "task_id": "type-coerce-001",
+      "task_type": "data_type_coercion",
+      "title": "parse_port fails on whitespace-padded input",
+      "problem_statement": "The parse_port function in transforms/parsers.py fails to handle whitespace-padded port strings. When given input like '  443  ', it raises a ValueError instead of correctly parsing the port number. The function should strip whitespace before converting to int.",
+      "repo_a_name": "synthetic/transforms",
+      "repo_b_name": "",
+      "repo_a_id": 930000001,
+      "repo_b_id": 0,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/type-coerce-001.patch",
+      "gold_patch_path": "patches/gold/type-coerce-001.patch",
+      "pytest_targets": [
+        "tests/test_parsers.py"
+      ],
+      "expected_relevant_files": [
+        "transforms/parsers.py"
+      ],
+      "expected_relevant_symbols": [
+        "parse_port"
+      ],
+      "context_modes_supported": [
+        "code"
+      ],
+      "visible_api_names": [],
+      "test_context": "test_parse_port_with_whitespace fails because int() cannot parse strings with leading/trailing whitespace, raising ValueError."
+    },
+    {
+      "task_id": "type-coerce-002",
+      "task_type": "data_type_coercion",
+      "title": "safe_float returns default for valid decimal strings",
+      "problem_statement": "The safe_float function in transforms/parsers.py incorrectly uses int() instead of float() to parse numeric strings. When given a valid decimal string like '3.14', int() raises ValueError, causing the function to return the default value instead of the parsed float.",
+      "repo_a_name": "synthetic/transforms",
+      "repo_b_name": "",
+      "repo_a_id": 930000002,
+      "repo_b_id": 0,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/type-coerce-002.patch",
+      "gold_patch_path": "patches/gold/type-coerce-002.patch",
+      "pytest_targets": [
+        "tests/test_parsers.py"
+      ],
+      "expected_relevant_files": [
+        "transforms/parsers.py"
+      ],
+      "expected_relevant_symbols": [
+        "safe_float"
+      ],
+      "context_modes_supported": [
+        "code"
+      ],
+      "visible_api_names": [],
+      "test_context": "test_safe_float_valid fails because int('3.14') raises ValueError, so safe_float returns 0.0 instead of 3.14."
+    },
+    {
+      "task_id": "type-coerce-003",
+      "task_type": "data_type_coercion",
+      "title": "format_percentage uses wrong multiplier",
+      "problem_statement": "The format_percentage function in transforms/formatters.py multiplies the ratio by 10 instead of 100, producing percentage strings that are 10x too small. For example, 0.5 formats as '5.0%' instead of '50.0%'.",
+      "repo_a_name": "synthetic/transforms",
+      "repo_b_name": "",
+      "repo_a_id": 930000003,
+      "repo_b_id": 0,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/type-coerce-003.patch",
+      "gold_patch_path": "patches/gold/type-coerce-003.patch",
+      "pytest_targets": [
+        "tests/test_formatters.py"
+      ],
+      "expected_relevant_files": [
+        "transforms/formatters.py"
+      ],
+      "expected_relevant_symbols": [
+        "format_percentage"
+      ],
+      "context_modes_supported": [
+        "code"
+      ],
+      "visible_api_names": [],
+      "test_context": "test_format_percentage_half and test_format_percentage_full fail because the multiplier is 10 instead of 100, producing '5.0%' and '10.0%' instead of '50.0%' and '100.0%'."
+    },
+    {
+      "task_id": "type-coerce-004",
+      "task_type": "data_type_coercion",
+      "title": "format_bytes uses integer division for kilobytes",
+      "problem_statement": "The format_bytes function in transforms/formatters.py uses integer division (//) instead of true division (/) when formatting kilobyte values. This truncates the decimal portion, so 1536 bytes formats as '1.0 KB' instead of '1.5 KB'.",
+      "repo_a_name": "synthetic/transforms",
+      "repo_b_name": "",
+      "repo_a_id": 930000004,
+      "repo_b_id": 0,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/type-coerce-004.patch",
+      "gold_patch_path": "patches/gold/type-coerce-004.patch",
+      "pytest_targets": [
+        "tests/test_formatters.py"
+      ],
+      "expected_relevant_files": [
+        "transforms/formatters.py"
+      ],
+      "expected_relevant_symbols": [
+        "format_bytes"
+      ],
+      "context_modes_supported": [
+        "code"
+      ],
+      "visible_api_names": [],
+      "test_context": "test_format_bytes_kilobytes fails because 1536 // 1024 == 1 (integer division), producing '1.0 KB' instead of '1.5 KB'."
+    },
+    {
+      "task_id": "type-coerce-005",
+      "task_type": "data_type_coercion",
+      "title": "celsius_to_fahrenheit subtracts instead of adding 32",
+      "problem_statement": "The celsius_to_fahrenheit function in transforms/converters.py subtracts 32 instead of adding it. The correct formula is C * 9/5 + 32, but the implementation uses C * 9/5 - 32, producing incorrect results for all inputs.",
+      "repo_a_name": "synthetic/transforms",
+      "repo_b_name": "",
+      "repo_a_id": 930000005,
+      "repo_b_id": 0,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/type-coerce-005.patch",
+      "gold_patch_path": "patches/gold/type-coerce-005.patch",
+      "pytest_targets": [
+        "tests/test_converters.py"
+      ],
+      "expected_relevant_files": [
+        "transforms/converters.py"
+      ],
+      "expected_relevant_symbols": [
+        "celsius_to_fahrenheit"
+      ],
+      "context_modes_supported": [
+        "code"
+      ],
+      "visible_api_names": [],
+      "test_context": "test_celsius_to_fahrenheit_freezing, test_celsius_to_fahrenheit_boiling, and test_celsius_to_fahrenheit_body all fail because subtracting 32 instead of adding it produces -32, 148, and 34.6 instead of 32, 212, and 98.6."
+    },
+    {
+      "task_id": "type-coerce-006",
+      "task_type": "data_type_coercion",
+      "title": "kg_to_pounds divides instead of multiplying",
+      "problem_statement": "The kg_to_pounds function in transforms/converters.py divides by 2.20462 instead of multiplying. Since 1 kg is approximately 2.20462 lbs, the conversion should multiply, but the implementation divides, returning values far too small.",
+      "repo_a_name": "synthetic/transforms",
+      "repo_b_name": "",
+      "repo_a_id": 930000006,
+      "repo_b_id": 0,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/type-coerce-006.patch",
+      "gold_patch_path": "patches/gold/type-coerce-006.patch",
+      "pytest_targets": [
+        "tests/test_converters.py"
+      ],
+      "expected_relevant_files": [
+        "transforms/converters.py"
+      ],
+      "expected_relevant_symbols": [
+        "kg_to_pounds"
+      ],
+      "context_modes_supported": [
+        "code"
+      ],
+      "visible_api_names": [],
+      "test_context": "test_kg_to_pounds_one_kg and test_kg_to_pounds_ten fail because dividing by 2.20462 yields approximately 0.4536 and 4.536 instead of 2.20462 and 22.0462."
+    },
+    {
+      "task_id": "type-coerce-007",
+      "task_type": "data_type_coercion",
+      "title": "validate_percentage truncates float to int",
+      "problem_statement": "The validate_percentage function in transforms/validators.py uses int() instead of float() to coerce the return value. This truncates decimal percentages like 33.3 to 33, losing precision.",
+      "repo_a_name": "synthetic/transforms",
+      "repo_b_name": "",
+      "repo_a_id": 930000007,
+      "repo_b_id": 0,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/type-coerce-007.patch",
+      "gold_patch_path": "patches/gold/type-coerce-007.patch",
+      "pytest_targets": [
+        "tests/test_validators.py"
+      ],
+      "expected_relevant_files": [
+        "transforms/validators.py"
+      ],
+      "expected_relevant_symbols": [
+        "validate_percentage"
+      ],
+      "context_modes_supported": [
+        "code"
+      ],
+      "visible_api_names": [],
+      "test_context": "test_validate_percentage_float fails because int(33.3) returns 33 instead of 33.3."
+    },
+    {
+      "task_id": "type-coerce-008",
+      "task_type": "data_type_coercion",
+      "title": "validate_non_empty skips whitespace stripping",
+      "problem_statement": "The validate_non_empty function in transforms/validators.py assigns text directly to stripped without calling .strip(). This means whitespace-only strings pass validation instead of raising ValueError.",
+      "repo_a_name": "synthetic/transforms",
+      "repo_b_name": "",
+      "repo_a_id": 930000008,
+      "repo_b_id": 0,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/type-coerce-008.patch",
+      "gold_patch_path": "patches/gold/type-coerce-008.patch",
+      "pytest_targets": [
+        "tests/test_validators.py"
+      ],
+      "expected_relevant_files": [
+        "transforms/validators.py"
+      ],
+      "expected_relevant_symbols": [
+        "validate_non_empty"
+      ],
+      "context_modes_supported": [
+        "code"
+      ],
+      "visible_api_names": [],
+      "test_context": "test_validate_non_empty_whitespace_only fails because '   ' is assigned directly without stripping, so it is truthy and no ValueError is raised."
+    },
+    {
+      "task_id": "type-coerce-009",
+      "task_type": "data_type_coercion",
+      "title": "normalize_whitespace fails on tabs and multiple spaces",
+      "problem_statement": "The normalize_whitespace function in transforms/sanitizers.py uses text.split(' ') instead of text.split(). The str.split() method without arguments splits on any whitespace and collapses consecutive whitespace, while split(' ') only splits on literal spaces and preserves empty strings between consecutive spaces.",
+      "repo_a_name": "synthetic/transforms",
+      "repo_b_name": "",
+      "repo_a_id": 930000009,
+      "repo_b_id": 0,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/type-coerce-009.patch",
+      "gold_patch_path": "patches/gold/type-coerce-009.patch",
+      "pytest_targets": [
+        "tests/test_sanitizers.py"
+      ],
+      "expected_relevant_files": [
+        "transforms/sanitizers.py"
+      ],
+      "expected_relevant_symbols": [
+        "normalize_whitespace"
+      ],
+      "context_modes_supported": [
+        "code"
+      ],
+      "visible_api_names": [],
+      "test_context": "test_normalize_whitespace_tabs fails because split(' ') does not split on tab characters. test_normalize_whitespace_multiple_spaces fails because split(' ') produces empty strings between consecutive spaces."
+    },
+    {
+      "task_id": "type-coerce-010",
+      "task_type": "data_type_coercion",
+      "title": "truncate_decimal rounds instead of truncating",
+      "problem_statement": "The truncate_decimal function in transforms/sanitizers.py uses round() instead of int() to remove excess decimal places. round() applies mathematical rounding, while the function's contract is to truncate (always round toward zero). For example, truncate_decimal(3.99, 1) should return 3.9 but returns 4.0.",
+      "repo_a_name": "synthetic/transforms",
+      "repo_b_name": "",
+      "repo_a_id": 930000010,
+      "repo_b_id": 0,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/type-coerce-010.patch",
+      "gold_patch_path": "patches/gold/type-coerce-010.patch",
+      "pytest_targets": [
+        "tests/test_sanitizers.py"
+      ],
+      "expected_relevant_files": [
+        "transforms/sanitizers.py"
+      ],
+      "expected_relevant_symbols": [
+        "truncate_decimal"
+      ],
+      "context_modes_supported": [
+        "code"
+      ],
+      "visible_api_names": [],
+      "test_context": "test_truncate_decimal_rounds_down fails because round(3.99 * 10) rounds to 40, producing 4.0 instead of 3.9."
+    }
+  ]
+}

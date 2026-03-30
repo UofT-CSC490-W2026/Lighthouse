@@ -1,0 +1,9 @@
+diff --git a/mathkit/comparison.py b/mathkit/comparison.py
+--- a/mathkit/comparison.py
++++ b/mathkit/comparison.py
+@@ -12,4 +12,4 @@
+ 
+ def is_in_range(value: float, low: float, high: float) -> bool:
+     """Return True when low <= value <= high."""
+-    return low <= value or value <= high
++    return low <= value and value <= high

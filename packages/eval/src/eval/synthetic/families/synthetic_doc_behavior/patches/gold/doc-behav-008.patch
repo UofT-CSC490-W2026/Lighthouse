@@ -1,0 +1,12 @@
+diff --git a/consumer_app/reporting.py b/consumer_app/reporting.py
+--- a/consumer_app/reporting.py
++++ b/consumer_app/reporting.py
+@@ -18,7 +18,7 @@
+ 
+ def days_until_deadline(today: date, deadline: date) -> int:
+     """Return the number of calendar days between today and deadline."""
+-    return (deadline - today).days
++    return days_between(today, deadline)
+ 
+ 
+ def next_review_date(start: date, business_days: int) -> date:

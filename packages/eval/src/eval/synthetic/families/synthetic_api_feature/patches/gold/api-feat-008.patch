@@ -1,0 +1,11 @@
+diff --git a/consumer_app/reports.py b/consumer_app/reports.py
+--- a/consumer_app/reports.py
++++ b/consumer_app/reports.py
+@@ -13,4 +13,6 @@
+ 
+ 
+ def tag_line(tags: list[str]) -> str:
+-    raise NotImplementedError
++    unique = unique_sorted(tags)
++    count = len(unique)
++    return f"{count} {pluralize('tag', count)}: {', '.join(unique)}"

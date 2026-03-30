@@ -1,0 +1,14 @@
+{
+  "family_name": "synthetic-api-feature",
+  "family_version": "1",
+  "task_type": "feature_api_integration",
+  "task_count": 10,
+  "shared_library_repo_count": 1,
+  "consumer_repo_mode": "one_a_per_task",
+  "python_version_target": "3.11",
+  "context_modes": [
+    "code",
+    "wiki"
+  ],
+  "seed": 494
+}

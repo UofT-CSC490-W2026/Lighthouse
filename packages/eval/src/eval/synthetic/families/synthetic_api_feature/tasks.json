@@ -1,0 +1,332 @@
+{
+  "family_name": "synthetic-api-feature",
+  "family_version": "1",
+  "generation_config": {
+    "task_type": "feature_api_integration",
+    "task_count": 10,
+    "shared_library_repo_count": 1,
+    "consumer_repo_mode": "one_a_per_task",
+    "python_version_target": "3.11",
+    "context_modes": [
+      "code",
+      "wiki"
+    ],
+    "seed": 494
+  },
+  "tasks": [
+    {
+      "task_id": "api-feat-001",
+      "task_type": "feature_api_integration",
+      "title": "Implement api_endpoint using build_url",
+      "problem_statement": "The consumer's api_endpoint function in pipelines.py is a stub that raises NotImplementedError. It should construct an HTTPS URL for the given host, API version, and resource by delegating to apikit.builders.build_url. The expected format is https://<host>/api/v<version>/<resource>.",
+      "repo_a_name": "synthetic/api-consumer-001",
+      "repo_b_name": "synthetic/apikit",
+      "repo_a_id": 950000001,
+      "repo_b_id": 950000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/api-feat-001.patch",
+      "gold_patch_path": "patches/gold/api-feat-001.patch",
+      "pytest_targets": [
+        "tests/test_pipelines.py"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/pipelines.py"
+      ],
+      "expected_relevant_symbols": [
+        "build_url"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "apikit.builders.build_url"
+      ],
+      "test_context": "TestApiEndpoint::test_basic, test_version_1, and test_nested_resource all fail with NotImplementedError because api_endpoint is not implemented."
+    },
+    {
+      "task_id": "api-feat-002",
+      "task_type": "feature_api_integration",
+      "title": "Implement export_row using flatten_dict and build_csv_row",
+      "problem_statement": "The consumer's export_row function in pipelines.py is a stub that raises NotImplementedError. It should flatten a nested dictionary using apikit.transforms.flatten_dict, then join the stringified values into a CSV row using apikit.builders.build_csv_row.",
+      "repo_a_name": "synthetic/api-consumer-002",
+      "repo_b_name": "synthetic/apikit",
+      "repo_a_id": 950000002,
+      "repo_b_id": 950000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/api-feat-002.patch",
+      "gold_patch_path": "patches/gold/api-feat-002.patch",
+      "pytest_targets": [
+        "tests/test_pipelines.py"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/pipelines.py"
+      ],
+      "expected_relevant_symbols": [
+        "flatten_dict",
+        "build_csv_row"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "apikit.transforms.flatten_dict",
+        "apikit.builders.build_csv_row"
+      ],
+      "test_context": "TestExportRow::test_flat_dict, test_nested_dict, test_mixed, and test_value_with_comma all fail with NotImplementedError because export_row is not implemented."
+    },
+    {
+      "task_id": "api-feat-003",
+      "task_type": "feature_api_integration",
+      "title": "Implement camel_keys using snake_to_camel",
+      "problem_statement": "The consumer's camel_keys function in pipelines.py is a stub that raises NotImplementedError. It should transform all dictionary keys from snake_case to camelCase using apikit.transforms.snake_to_camel while preserving the values.",
+      "repo_a_name": "synthetic/api-consumer-003",
+      "repo_b_name": "synthetic/apikit",
+      "repo_a_id": 950000003,
+      "repo_b_id": 950000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/api-feat-003.patch",
+      "gold_patch_path": "patches/gold/api-feat-003.patch",
+      "pytest_targets": [
+        "tests/test_pipelines.py"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/pipelines.py"
+      ],
+      "expected_relevant_symbols": [
+        "snake_to_camel"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "apikit.transforms.snake_to_camel"
+      ],
+      "test_context": "TestCamelKeys::test_single_word, test_snake_case, test_empty, and test_multi_segment all fail with NotImplementedError because camel_keys is not implemented."
+    },
+    {
+      "task_id": "api-feat-004",
+      "task_type": "feature_api_integration",
+      "title": "Implement check_server_config using validate_ip_v4 and validate_port",
+      "problem_statement": "The consumer's check_server_config function in handlers.py is a stub that raises NotImplementedError. It should validate the host as an IPv4 address using apikit.validators.validate_ip_v4 and the port using apikit.validators.validate_port, collecting error messages for any invalid values.",
+      "repo_a_name": "synthetic/api-consumer-004",
+      "repo_b_name": "synthetic/apikit",
+      "repo_a_id": 950000004,
+      "repo_b_id": 950000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/api-feat-004.patch",
+      "gold_patch_path": "patches/gold/api-feat-004.patch",
+      "pytest_targets": [
+        "tests/test_handlers.py"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/handlers.py"
+      ],
+      "expected_relevant_symbols": [
+        "validate_ip_v4",
+        "validate_port"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "apikit.validators.validate_ip_v4",
+        "apikit.validators.validate_port"
+      ],
+      "test_context": "TestCheckServerConfig::test_valid, test_invalid_host, test_invalid_port, test_both_invalid, test_boundary_port_zero, and test_boundary_port_max all fail with NotImplementedError because check_server_config is not implemented."
+    },
+    {
+      "task_id": "api-feat-005",
+      "task_type": "feature_api_integration",
+      "title": "Implement check_contact using validate_email",
+      "problem_statement": "The consumer's check_contact function in handlers.py is a stub that raises NotImplementedError. It should delegate email validation to apikit.validators.validate_email and return its boolean result.",
+      "repo_a_name": "synthetic/api-consumer-005",
+      "repo_b_name": "synthetic/apikit",
+      "repo_a_id": 950000005,
+      "repo_b_id": 950000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/api-feat-005.patch",
+      "gold_patch_path": "patches/gold/api-feat-005.patch",
+      "pytest_targets": [
+        "tests/test_handlers.py"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/handlers.py"
+      ],
+      "expected_relevant_symbols": [
+        "validate_email"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "apikit.validators.validate_email"
+      ],
+      "test_context": "TestCheckContact::test_valid_email, test_no_at, test_empty_local, test_empty_domain, and test_multiple_at all fail with NotImplementedError because check_contact is not implemented."
+    },
+    {
+      "task_id": "api-feat-006",
+      "task_type": "feature_api_integration",
+      "title": "Implement task_summary using format_duration",
+      "problem_statement": "The consumer's task_summary function in reports.py is a stub that raises NotImplementedError. It should format a task name and duration by delegating to apikit.formatters.format_duration, returning a string like 'task_name: Xh Ym Zs'.",
+      "repo_a_name": "synthetic/api-consumer-006",
+      "repo_b_name": "synthetic/apikit",
+      "repo_a_id": 950000006,
+      "repo_b_id": 950000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/api-feat-006.patch",
+      "gold_patch_path": "patches/gold/api-feat-006.patch",
+      "pytest_targets": [
+        "tests/test_reports.py"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/reports.py"
+      ],
+      "expected_relevant_symbols": [
+        "format_duration"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "apikit.formatters.format_duration"
+      ],
+      "test_context": "TestTaskSummary::test_hours_minutes_seconds, test_minutes_only, test_zero, test_seconds_only, and test_exact_hour all fail with NotImplementedError because task_summary is not implemented."
+    },
+    {
+      "task_id": "api-feat-007",
+      "task_type": "feature_api_integration",
+      "title": "Implement storage_report using format_file_size",
+      "problem_statement": "The consumer's storage_report function in reports.py is a stub that raises NotImplementedError. It should format each (filename, byte_count) pair into a human-readable string using apikit.formatters.format_file_size.",
+      "repo_a_name": "synthetic/api-consumer-007",
+      "repo_b_name": "synthetic/apikit",
+      "repo_a_id": 950000007,
+      "repo_b_id": 950000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/api-feat-007.patch",
+      "gold_patch_path": "patches/gold/api-feat-007.patch",
+      "pytest_targets": [
+        "tests/test_reports.py"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/reports.py"
+      ],
+      "expected_relevant_symbols": [
+        "format_file_size"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "apikit.formatters.format_file_size"
+      ],
+      "test_context": "TestStorageReport::test_bytes, test_kilobytes, test_megabytes, test_multiple_files, and test_gigabytes all fail with NotImplementedError because storage_report is not implemented."
+    },
+    {
+      "task_id": "api-feat-008",
+      "task_type": "feature_api_integration",
+      "title": "Implement tag_line using unique_sorted and pluralize",
+      "problem_statement": "The consumer's tag_line function in reports.py is a stub that raises NotImplementedError. It should deduplicate and sort the tags using apikit.transforms.unique_sorted, then format the count with apikit.formatters.pluralize and join the tags.",
+      "repo_a_name": "synthetic/api-consumer-008",
+      "repo_b_name": "synthetic/apikit",
+      "repo_a_id": 950000008,
+      "repo_b_id": 950000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/api-feat-008.patch",
+      "gold_patch_path": "patches/gold/api-feat-008.patch",
+      "pytest_targets": [
+        "tests/test_reports.py"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/reports.py"
+      ],
+      "expected_relevant_symbols": [
+        "unique_sorted",
+        "pluralize"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "apikit.transforms.unique_sorted",
+        "apikit.formatters.pluralize"
+      ],
+      "test_context": "TestTagLine::test_single_tag, test_multiple_sorted, test_duplicates_removed, test_empty, and test_already_sorted all fail with NotImplementedError because tag_line is not implemented."
+    },
+    {
+      "task_id": "api-feat-009",
+      "task_type": "feature_api_integration",
+      "title": "Implement api_endpoint and export_row in pipelines.py",
+      "problem_statement": "Both api_endpoint and export_row in pipelines.py are stubs that raise NotImplementedError. api_endpoint should construct HTTPS URLs via build_url, and export_row should flatten a dict and format it as a CSV row via flatten_dict and build_csv_row.",
+      "repo_a_name": "synthetic/api-consumer-009",
+      "repo_b_name": "synthetic/apikit",
+      "repo_a_id": 950000009,
+      "repo_b_id": 950000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/api-feat-009.patch",
+      "gold_patch_path": "patches/gold/api-feat-009.patch",
+      "pytest_targets": [
+        "tests/test_pipelines.py"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/pipelines.py"
+      ],
+      "expected_relevant_symbols": [
+        "build_url",
+        "flatten_dict",
+        "build_csv_row"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "apikit.builders.build_url",
+        "apikit.transforms.flatten_dict",
+        "apikit.builders.build_csv_row"
+      ],
+      "test_context": "TestApiEndpoint and TestExportRow both fail entirely with NotImplementedError because both api_endpoint and export_row are stubs."
+    },
+    {
+      "task_id": "api-feat-010",
+      "task_type": "feature_api_integration",
+      "title": "Implement check_server_config and check_contact in handlers.py",
+      "problem_statement": "Both check_server_config and check_contact in handlers.py are stubs that raise NotImplementedError. check_server_config should validate host/port via validate_ip_v4 and validate_port, collecting error messages. check_contact should delegate to validate_email.",
+      "repo_a_name": "synthetic/api-consumer-010",
+      "repo_b_name": "synthetic/apikit",
+      "repo_a_id": 950000010,
+      "repo_b_id": 950000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/api-feat-010.patch",
+      "gold_patch_path": "patches/gold/api-feat-010.patch",
+      "pytest_targets": [
+        "tests/test_handlers.py"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/handlers.py"
+      ],
+      "expected_relevant_symbols": [
+        "validate_ip_v4",
+        "validate_port",
+        "validate_email"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "apikit.validators.validate_ip_v4",
+        "apikit.validators.validate_port",
+        "apikit.validators.validate_email"
+      ],
+      "test_context": "TestCheckServerConfig and TestCheckContact both fail entirely with NotImplementedError because both check_server_config and check_contact are stubs."
+    }
+  ]
+}

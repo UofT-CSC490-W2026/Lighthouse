@@ -1,0 +1,14 @@
+diff --git a/consumer_app/reporting.py b/consumer_app/reporting.py
+--- a/consumer_app/reporting.py
++++ b/consumer_app/reporting.py
+@@ -8,7 +8,9 @@
+ 
+ def completion_summary(done: int, total: int) -> str:
+     """Return a completion percentage string."""
+-    return percentage_of(done, total)
++    if total == 0:
++        return "0.0%"
++    return f"{round(done / total * 100, 1)}%"
+ 
+ 
+ def deadline_label(d: date | None) -> str:

@@ -1,0 +1,13 @@
+diff --git a/consumer_app/reports.py b/consumer_app/reports.py
+--- a/consumer_app/reports.py
++++ b/consumer_app/reports.py
+@@ -10,8 +10,5 @@
+     return format_table(counts, title="Category Report")
+ 
+ 
+ def filtered_category_report(csv_data: str, filter_field: str, filter_value: str, category_field: str) -> str:
+-    records = load_records(csv_data)
+-    filtered = filter_records(records, filter_field, filter_value)
+-    counts = aggregate(filtered, category_field)
+-    return format_table(counts, title="Filtered Report")
++    raise NotImplementedError("filtered_category_report not yet implemented")

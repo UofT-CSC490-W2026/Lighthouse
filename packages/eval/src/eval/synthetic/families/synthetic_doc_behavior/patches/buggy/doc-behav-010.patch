@@ -1,0 +1,19 @@
+diff --git a/consumer_app/validation.py b/consumer_app/validation.py
+--- a/consumer_app/validation.py
++++ b/consumer_app/validation.py
+@@ -3,7 +3,7 @@
+ from doclib.numbers import clamp_to_range, safe_divide
+ 
+ 
+-def compute_score_ratio(score: float, max_score: float) -> float:
++def compute_score_ratio(score: float, max_score: float, default: float = 0.0) -> float:
+     """Return score / max_score, defaulting to 0.0 when max_score is zero."""
+-    return safe_divide(score, max_score)
++    return safe_divide(score, max_score, default=default)
+ 
+@@ -11,4 +11,4 @@
+ 
+ def bounded_progress(value: float) -> float:
+     """Clamp a progress value to 0-100."""
+-    return clamp_to_range(value, 0.0, 100.0)
++    return min(100.0, max(0.0, float(value)))

@@ -1,0 +1,12 @@
+diff --git a/mathkit/strings.py b/mathkit/strings.py
+--- a/mathkit/strings.py
++++ b/mathkit/strings.py
+@@ -5,7 +5,7 @@
+     """Return the number of whitespace-separated words."""
+     if not text.strip():
+         return 0
+-    return len(text.split())
++    return len(text.split(" "))
+ 
+ 
+ def truncate(text: str, max_length: int, suffix: str = "...") -> str:

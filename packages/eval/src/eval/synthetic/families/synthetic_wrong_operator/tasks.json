@@ -1,0 +1,290 @@
+{
+  "family_name": "synthetic-wrong-operator",
+  "family_version": "1",
+  "generation_config": {
+    "task_type": "logic_wrong_operator",
+    "task_count": 10,
+    "shared_library_repo_count": 0,
+    "consumer_repo_mode": "one_a_per_task",
+    "python_version_target": "3.11",
+    "context_modes": [
+      "code",
+      "wiki",
+      "ast",
+      "combined"
+    ],
+    "seed": 491
+  },
+  "tasks": [
+    {
+      "task_id": "wrong-op-001",
+      "task_type": "logic_wrong_operator",
+      "title": "safe_subtract uses addition instead of subtraction",
+      "problem_statement": "The `safe_subtract` function in `mathkit/arithmetic.py` is using the `+` operator instead of `-`. All subtraction results are wrong. Fix the operator so the function correctly returns `a - b`.",
+      "repo_a_name": "synthetic/mathkit",
+      "repo_b_name": "",
+      "repo_a_id": 920000001,
+      "repo_b_id": 0,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/wrong-op-001.patch",
+      "gold_patch_path": "patches/gold/wrong-op-001.patch",
+      "pytest_targets": [
+        "tests/test_arithmetic.py"
+      ],
+      "expected_relevant_files": [
+        "mathkit/arithmetic.py"
+      ],
+      "expected_relevant_symbols": [
+        "safe_subtract"
+      ],
+      "context_modes_supported": [
+        "code"
+      ],
+      "visible_api_names": [],
+      "test_context": "test_safe_subtract_positive, test_safe_subtract_negative, and test_safe_subtract_zero all fail because the function adds instead of subtracts (e.g. safe_subtract(10, 3) returns 13 instead of 7)."
+    },
+    {
+      "task_id": "wrong-op-002",
+      "task_type": "logic_wrong_operator",
+      "title": "integer_divide uses modulo instead of floor division",
+      "problem_statement": "The `integer_divide` function in `mathkit/arithmetic.py` is using the `%` (modulo) operator instead of `//` (floor division). It returns remainders instead of quotients. Fix the operator.",
+      "repo_a_name": "synthetic/mathkit",
+      "repo_b_name": "",
+      "repo_a_id": 920000002,
+      "repo_b_id": 0,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/wrong-op-002.patch",
+      "gold_patch_path": "patches/gold/wrong-op-002.patch",
+      "pytest_targets": [
+        "tests/test_arithmetic.py"
+      ],
+      "expected_relevant_files": [
+        "mathkit/arithmetic.py"
+      ],
+      "expected_relevant_symbols": [
+        "integer_divide"
+      ],
+      "context_modes_supported": [
+        "code"
+      ],
+      "visible_api_names": [],
+      "test_context": "test_integer_divide_exact and test_integer_divide_truncates fail because the function returns the remainder instead of the quotient (e.g. integer_divide(10, 2) returns 0 instead of 5)."
+    },
+    {
+      "task_id": "wrong-op-003",
+      "task_type": "logic_wrong_operator",
+      "title": "clamp uses wrong comparison for upper bound",
+      "problem_statement": "The `clamp` function in `mathkit/comparison.py` has a flipped comparison operator for the upper-bound check. Instead of clamping values above `high`, it clamps values below `high`. Fix the comparison so values above `high` are correctly clamped.",
+      "repo_a_name": "synthetic/mathkit",
+      "repo_b_name": "",
+      "repo_a_id": 920000003,
+      "repo_b_id": 0,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/wrong-op-003.patch",
+      "gold_patch_path": "patches/gold/wrong-op-003.patch",
+      "pytest_targets": [
+        "tests/test_comparison.py"
+      ],
+      "expected_relevant_files": [
+        "mathkit/comparison.py"
+      ],
+      "expected_relevant_symbols": [
+        "clamp"
+      ],
+      "context_modes_supported": [
+        "code"
+      ],
+      "visible_api_names": [],
+      "test_context": "test_clamp_within_range fails because clamp(5, 0, 10) returns 10 instead of 5 (values below high are incorrectly returned as high). test_clamp_above_high fails because clamp(15, 0, 10) returns 15 instead of 10."
+    },
+    {
+      "task_id": "wrong-op-004",
+      "task_type": "logic_wrong_operator",
+      "title": "is_in_range uses or instead of and",
+      "problem_statement": "The `is_in_range` function in `mathkit/comparison.py` uses `or` instead of `and` to combine its two boundary checks. This causes it to return True for values outside the range. Fix the logical operator.",
+      "repo_a_name": "synthetic/mathkit",
+      "repo_b_name": "",
+      "repo_a_id": 920000004,
+      "repo_b_id": 0,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/wrong-op-004.patch",
+      "gold_patch_path": "patches/gold/wrong-op-004.patch",
+      "pytest_targets": [
+        "tests/test_comparison.py"
+      ],
+      "expected_relevant_files": [
+        "mathkit/comparison.py"
+      ],
+      "expected_relevant_symbols": [
+        "is_in_range"
+      ],
+      "context_modes_supported": [
+        "code"
+      ],
+      "visible_api_names": [],
+      "test_context": "test_is_in_range_below and test_is_in_range_above fail because the function returns True for out-of-range values (e.g. is_in_range(-1, 0, 10) returns True instead of False)."
+    },
+    {
+      "task_id": "wrong-op-005",
+      "task_type": "logic_wrong_operator",
+      "title": "overlaps uses or instead of and",
+      "problem_statement": "The `overlaps` function in `mathkit/ranges.py` uses `or` instead of `and` to combine its two interval checks. This causes non-overlapping intervals to be reported as overlapping. Fix the logical operator.",
+      "repo_a_name": "synthetic/mathkit",
+      "repo_b_name": "",
+      "repo_a_id": 920000005,
+      "repo_b_id": 0,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/wrong-op-005.patch",
+      "gold_patch_path": "patches/gold/wrong-op-005.patch",
+      "pytest_targets": [
+        "tests/test_ranges.py"
+      ],
+      "expected_relevant_files": [
+        "mathkit/ranges.py"
+      ],
+      "expected_relevant_symbols": [
+        "overlaps"
+      ],
+      "context_modes_supported": [
+        "code"
+      ],
+      "visible_api_names": [],
+      "test_context": "test_overlaps_false fails because overlaps(1, 3, 5, 7) returns True instead of False. The `or` operator makes non-overlapping intervals appear to overlap."
+    },
+    {
+      "task_id": "wrong-op-006",
+      "task_type": "logic_wrong_operator",
+      "title": "span_length subtracts one instead of adding one",
+      "problem_statement": "The `span_length` function in `mathkit/ranges.py` uses `- 1` instead of `+ 1` in its closed-interval length formula. This produces lengths that are off by two. Fix the arithmetic operator.",
+      "repo_a_name": "synthetic/mathkit",
+      "repo_b_name": "",
+      "repo_a_id": 920000006,
+      "repo_b_id": 0,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/wrong-op-006.patch",
+      "gold_patch_path": "patches/gold/wrong-op-006.patch",
+      "pytest_targets": [
+        "tests/test_ranges.py"
+      ],
+      "expected_relevant_files": [
+        "mathkit/ranges.py"
+      ],
+      "expected_relevant_symbols": [
+        "span_length"
+      ],
+      "context_modes_supported": [
+        "code"
+      ],
+      "visible_api_names": [],
+      "test_context": "test_span_length_normal fails because span_length(1, 5) returns 3 instead of 5. test_span_length_single fails because span_length(3, 3) returns -1 instead of 1."
+    },
+    {
+      "task_id": "wrong-op-007",
+      "task_type": "logic_wrong_operator",
+      "title": "mean uses floor division instead of true division",
+      "problem_statement": "The `mean` function in `mathkit/statistics.py` uses `//` (floor division) instead of `/` (true division). This truncates fractional means to integers. Fix the division operator.",
+      "repo_a_name": "synthetic/mathkit",
+      "repo_b_name": "",
+      "repo_a_id": 920000007,
+      "repo_b_id": 0,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/wrong-op-007.patch",
+      "gold_patch_path": "patches/gold/wrong-op-007.patch",
+      "pytest_targets": [
+        "tests/test_statistics.py"
+      ],
+      "expected_relevant_files": [
+        "mathkit/statistics.py"
+      ],
+      "expected_relevant_symbols": [
+        "mean"
+      ],
+      "context_modes_supported": [
+        "code"
+      ],
+      "visible_api_names": [],
+      "test_context": "test_mean_fractional fails because mean([1, 2]) returns 1 instead of 1.5. Floor division truncates the fractional result."
+    },
+    {
+      "task_id": "wrong-op-008",
+      "task_type": "logic_wrong_operator",
+      "title": "median indexes mid+1 instead of mid-1 for even-length lists",
+      "problem_statement": "The `median` function in `mathkit/statistics.py` uses `mid + 1` instead of `mid - 1` when averaging the two middle elements of an even-length list. This picks the wrong pair of elements. Fix the index offset.",
+      "repo_a_name": "synthetic/mathkit",
+      "repo_b_name": "",
+      "repo_a_id": 920000008,
+      "repo_b_id": 0,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/wrong-op-008.patch",
+      "gold_patch_path": "patches/gold/wrong-op-008.patch",
+      "pytest_targets": [
+        "tests/test_statistics.py"
+      ],
+      "expected_relevant_files": [
+        "mathkit/statistics.py"
+      ],
+      "expected_relevant_symbols": [
+        "median"
+      ],
+      "context_modes_supported": [
+        "code"
+      ],
+      "visible_api_names": [],
+      "test_context": "test_median_even fails because median([1, 2, 3, 4]) returns 3.5 instead of 2.5. The function averages ordered[3] and ordered[2] instead of ordered[1] and ordered[2]."
+    },
+    {
+      "task_id": "wrong-op-009",
+      "task_type": "logic_wrong_operator",
+      "title": "count_words splits on literal space instead of any whitespace",
+      "problem_statement": "The `count_words` function in `mathkit/strings.py` uses `.split(\" \")` instead of `.split()`. This counts empty strings between consecutive spaces as words. Fix the split call.",
+      "repo_a_name": "synthetic/mathkit",
+      "repo_b_name": "",
+      "repo_a_id": 920000009,
+      "repo_b_id": 0,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/wrong-op-009.patch",
+      "gold_patch_path": "patches/gold/wrong-op-009.patch",
+      "pytest_targets": [
+        "tests/test_strings.py"
+      ],
+      "expected_relevant_files": [
+        "mathkit/strings.py"
+      ],
+      "expected_relevant_symbols": [
+        "count_words"
+      ],
+      "context_modes_supported": [
+        "code"
+      ],
+      "visible_api_names": [],
+      "test_context": "test_count_words_multiple_spaces fails because count_words(\"one  two  three\") returns 5 instead of 3. Splitting on a literal space produces empty strings between consecutive spaces."
+    },
+    {
+      "task_id": "wrong-op-010",
+      "task_type": "logic_wrong_operator",
+      "title": "truncate adds suffix length instead of subtracting it",
+      "problem_statement": "The `truncate` function in `mathkit/strings.py` uses `+ len(suffix)` instead of `- len(suffix)` when computing the slice endpoint. This produces output longer than max_length. Fix the arithmetic operator.",
+      "repo_a_name": "synthetic/mathkit",
+      "repo_b_name": "",
+      "repo_a_id": 920000010,
+      "repo_b_id": 0,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/wrong-op-010.patch",
+      "gold_patch_path": "patches/gold/wrong-op-010.patch",
+      "pytest_targets": [
+        "tests/test_strings.py"
+      ],
+      "expected_relevant_files": [
+        "mathkit/strings.py"
+      ],
+      "expected_relevant_symbols": [
+        "truncate"
+      ],
+      "context_modes_supported": [
+        "code"
+      ],
+      "visible_api_names": [],
+      "test_context": "test_truncate_long fails because truncate(\"hello world\", 8) returns \"hello world...\" instead of \"hello...\". The slice takes 11 characters instead of 5 before appending the suffix."
+    }
+  ]
+}

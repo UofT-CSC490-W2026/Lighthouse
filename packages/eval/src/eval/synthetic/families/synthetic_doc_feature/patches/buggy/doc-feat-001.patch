@@ -1,0 +1,15 @@
+diff --git a/consumer_app/reports.py b/consumer_app/reports.py
+--- a/consumer_app/reports.py
++++ b/consumer_app/reports.py
+@@ -4,10 +4,8 @@
+ from domainlib.output import format_table
+ 
+ 
+ def category_report(csv_data: str, category_field: str) -> str:
+-    records = load_records(csv_data)
+-    counts = aggregate(records, category_field)
+-    return format_table(counts, title="Category Report")
++    raise NotImplementedError("category_report not yet implemented")
+ 
+ 
+ def filtered_category_report(csv_data: str, filter_field: str, filter_value: str, category_field: str) -> str:

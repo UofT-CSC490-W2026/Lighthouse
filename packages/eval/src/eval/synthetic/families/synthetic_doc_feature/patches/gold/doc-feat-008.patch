@@ -1,0 +1,20 @@
+diff --git a/consumer_app/summaries.py b/consumer_app/summaries.py
+--- a/consumer_app/summaries.py
++++ b/consumer_app/summaries.py
+@@ -5,9 +5,14 @@
+ from domainlib.output import format_summary
+ 
+ 
+ def total_summary(csv_data: str, value_field: str, label: str) -> str:
+-    raise NotImplementedError("total_summary not yet implemented")
++    records = load_records(csv_data)
++    total = sum_field(records, value_field)
++    return format_summary(label, total, len(records))
+ 
+ 
+ def filtered_summary(csv_data: str, filter_field: str, filter_value: str, value_field: str, label: str) -> str:
+-    raise NotImplementedError("filtered_summary not yet implemented")
++    records = load_records(csv_data)
++    filtered = filter_records(records, filter_field, filter_value)
++    total = sum_field(filtered, value_field)
++    return format_summary(label, total, len(filtered))

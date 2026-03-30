@@ -1,0 +1,11 @@
+diff --git a/mathkit/comparison.py b/mathkit/comparison.py
+--- a/mathkit/comparison.py
++++ b/mathkit/comparison.py
+@@ -5,6 +5,6 @@
+     """Constrain value to the inclusive range [low, high]."""
+     if value < low:
+         return low
+-    if value > high:
++    if value < high:
+         return high
+     return value
