@@ -1,8 +1,10 @@
 # Lighthouse
 
 <!-- coverage:start -->
+
 [![Tests](https://github.com/UofT-CSC490-W2026/Lighthouse/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/UofT-CSC490-W2026/Lighthouse/actions/workflows/tests.yml)
 ![Test Coverage](https://img.shields.io/badge/test%20coverage-87.54%25-yellow)
+
 <!-- coverage:end -->
 
 Better context for coding agents.
@@ -47,8 +49,10 @@ monorepo/
 
 ### Documentation
 
-- [Search Service](docs/search.md)
-- [Ingestion Service](docs/ingestion.md)
+- [Search Service](docs/services/search.md)
+- [Ingestion Service](docs/services/ingestion.md)
+- [MCP Server](docs/services/mcp_server.md)
+- [Web Service](docs/services/web.md)
 - [Evaluation Framework](docs/evaluation.md)
 - [Testing Guide](docs/testing.md)
 
