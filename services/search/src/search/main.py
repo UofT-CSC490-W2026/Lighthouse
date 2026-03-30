@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from contextlib import asynccontextmanager
+from urllib.parse import urlparse
 
 from db import DatabaseManager
 from fastapi import Depends, FastAPI, HTTPException
@@ -35,6 +37,14 @@ from search.strategies.wiki_search_strategy import HybridWikiSearchStrategy
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+def _dsn_target(dsn: str) -> str:
+    parsed = urlparse(dsn)
+    host = parsed.hostname or "<missing-host>"
+    port = parsed.port or "<default-port>"
+    db_name = parsed.path.lstrip("/") or "<missing-db>"
+    return f"{host}:{port}/{db_name}"
 
 
 def _build_embedder(
@@ -71,20 +81,36 @@ def create_app(
         s = _settings or SearchSettings()
         app.state.settings = s
 
+        logger.info(
+            "Search startup: resolved config postgres=%s milvus=%s embedding_strategy=%s ssm_parameter=%s",
+            _dsn_target(s.postgres_dsn),
+            s.milvus_uri,
+            s.embedding_strategy,
+            "set" if os.getenv("SEARCH_SETTINGS_SSM_PARAMETER", "").strip() else "unset",
+        )
+
+        logger.info("Search startup: connecting to Postgres")
         db_manager = DatabaseManager(s.postgres_dsn)
         db_manager.connect()
+        logger.info("Search startup: Postgres connection established")
 
+        logger.info("Search startup: creating Milvus client for %s", MILVUS_COLLECTION_NAME)
         milvus = MilvusClient(
             uri=s.milvus_uri,
             collection_name=MILVUS_COLLECTION_NAME,
         )
+        logger.info("Search startup: Milvus client ready for %s", MILVUS_COLLECTION_NAME)
 
+        logger.info("Search startup: building embedder")
         emb = _build_embedder(s, _embedder)
+        logger.info("Search startup: embedder ready")
 
+        logger.info("Search startup: creating Milvus client for %s", WIKI_MILVUS_COLLECTION_NAME)
         wiki_milvus = MilvusClient(
             uri=s.milvus_uri,
             collection_name=WIKI_MILVUS_COLLECTION_NAME,
         )
+        logger.info("Search startup: Milvus client ready for %s", WIKI_MILVUS_COLLECTION_NAME)
 
         app.state.strategy = HybridSearchStrategy(
             db_manager=db_manager,
