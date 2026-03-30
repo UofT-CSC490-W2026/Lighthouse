@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 import pytest
 from temporalio import activity, workflow
 from temporalio.client import WorkflowFailureError
+from temporalio.exceptions import ApplicationError
 from temporalio.worker import UnsandboxedWorkflowRunner, Worker
 
 from ingestion.temporal.activities.inputs import (
@@ -48,6 +49,15 @@ class _StubGenerateWikiWorkflow:
     @workflow.run
     async def run(self, input: GenerateWikiInput) -> str:
         return "wiki stub"
+
+
+@workflow.defn(name="GenerateWikiWorkflow")
+class _FailingGenerateWikiWorkflow:
+    """Stand-in for GenerateWikiWorkflow that always fails — covers exception handling."""
+
+    @workflow.run
+    async def run(self, input: GenerateWikiInput) -> str:
+        raise ApplicationError("wiki generation failed in test", non_retryable=True)
 
 
 # ---------------------------------------------------------------------------
@@ -418,3 +428,27 @@ class TestIndexBranchWorkflow:
             branch="feature/cool",
         )
         assert result == "Indexed myorg/myrepo/feature/cool at abc123"
+
+    async def test_wiki_generation_failure_does_not_fail_workflow(self, workflow_environment):
+        """Lines 175-176: wiki generation exception is caught and logged, workflow still succeeds.
+
+        Why: Wiki generation is best-effort. If the child workflow fails, the
+        parent workflow should still mark the branch as indexed and return success.
+        """
+        tracker = ActivityTracker(chunk_count=5)
+        queue = _queue()
+        async with Worker(
+            workflow_environment.client,
+            task_queue=queue,
+            workflows=[IndexBranchWorkflow, _FailingGenerateWikiWorkflow],
+            activities=make_mock_activities(tracker),
+            workflow_runner=UnsandboxedWorkflowRunner(),
+        ):
+            result = await workflow_environment.client.execute_workflow(
+                IndexBranchWorkflow.run,
+                _default_input(),
+                id=f"test-{uuid.uuid4().hex[:8]}",
+                task_queue=queue,
+            )
+        # Workflow completes successfully despite wiki failure
+        assert "Indexed" in result

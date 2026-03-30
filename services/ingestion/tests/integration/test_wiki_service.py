@@ -160,6 +160,54 @@ class TestWikiServiceFinal:
         svc.write_staging_embeddings(batch_id, 0, embeddings)
         return svc, batch_id
 
+    def test_ensure_milvus_raises_when_not_provided(self, db_manager):
+        svc = WikiService(db_manager)
+        with pytest.raises(RuntimeError, match="MilvusClient not provided"):
+            svc._ensure_milvus()
+
+    def test_move_to_final_empty_staging_returns_zero(self, db_manager, milvus_client):
+        repo = create_repository(db_manager)
+        svc = WikiService(db_manager, milvus_client)
+        gen = svc.create_generation(
+            repository_id=repo.id,
+            branch="main",
+            wiki_title="Empty",
+            wiki_description="",
+            structure_json="{}",
+            page_count=0,
+        )
+        count = svc.move_to_final("nonexistent-batch-id", gen.id)
+        assert count == 0
+
+    def test_move_to_final_skips_pages_with_no_embedding(self, db_manager, milvus_client):
+        repo = create_repository(db_manager)
+        svc = WikiService(db_manager, milvus_client)
+        batch_id = str(uuid.uuid4())
+        # Write staging pages WITHOUT embeddings
+        pages = [
+            {
+                "repository_id": repo.id,
+                "branch": "main",
+                "slug": f"page-{i}",
+                "title": f"Page {i}",
+                "content": f"content {i}",
+                "section_path": "overview",
+            }
+            for i in range(2)
+        ]
+        svc.write_staging(batch_id, pages)
+        gen = svc.create_generation(
+            repository_id=repo.id,
+            branch="main",
+            wiki_title="Test",
+            wiki_description="",
+            structure_json="{}",
+            page_count=2,
+        )
+        # Pages have no embedding — move_to_final should skip Milvus insert for them
+        count = svc.move_to_final(batch_id, gen.id)
+        assert count == 2  # Postgres insert still happens; Milvus is skipped
+
     def test_move_to_final(self, db_manager, milvus_client):
         repo = create_repository(db_manager)
         svc, batch_id = self._stage_with_embeddings(db_manager, milvus_client, repo.id)

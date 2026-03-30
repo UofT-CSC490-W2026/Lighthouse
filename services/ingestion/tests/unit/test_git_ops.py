@@ -58,6 +58,24 @@ class TestGitOperations:
         mock_repo.remotes.origin.fetch.assert_called_once()
         mock_repo.git.checkout.assert_called_once_with("dev")
         mock_repo.git.pull.assert_called_once_with("origin", "dev")
+
+    @patch("ingestion.utilities.git_ops.Repo")
+    def test_fetch_unshallows_shallow_repo(self, mock_repo_cls: MagicMock, tmp_path: Path) -> None:
+        """When the repo is shallow, fetch --unshallow is called instead of plain fetch."""
+        repo_dir = tmp_path / "my-repo"
+        repo_dir.mkdir()
+        (repo_dir / ".git").mkdir()
+
+        mock_repo = MagicMock()
+        mock_repo_cls.return_value = mock_repo
+        # Simulate shallow repo
+        mock_repo.git.rev_parse.return_value = "true"
+
+        ops = GitOperations(str(tmp_path), github_token="tok")
+        result = ops.clone_or_fetch("https://github.com/o/r", "my-repo", branch="main")
+
+        mock_repo.remotes.origin.fetch.assert_called_once_with("--unshallow")
+        assert result == repo_dir
         assert result == repo_dir
 
     def test_list_files_filters_extensions(self, tmp_path: Path) -> None:

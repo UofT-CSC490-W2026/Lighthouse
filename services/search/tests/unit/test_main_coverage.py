@@ -21,7 +21,7 @@ from shared.schemas.search import (
     WikiSnippet,
 )
 from search.config import SearchSettings
-from search.main import _build_embedder, create_app, health, search
+from search.main import _build_embedder, create_app, health, search, search_wiki
 from search.strategies.hybrid_strategy import BranchNotIndexedError, HybridSearchStrategy
 from search.strategies.llm_combined_strategy import KEYWORD_SYSTEM_PROMPT, LLMCombinedSearchStrategy
 from vectordb import MilvusClient
@@ -210,6 +210,30 @@ async def test_health_endpoint():
 
 
 @pytest.mark.unit
+def test_build_embedder_falls_back_to_default_when_empty(monkeypatch):
+    """When embedding_strategy is empty, DEFAULT_EMBEDDING_STRATEGY is used."""
+    fake_provider = MagicMock()
+    get_provider = MagicMock(return_value=fake_provider)
+    monkeypatch.setattr("search.main.get_embedding_provider", get_provider)
+
+    settings = SearchSettings(
+        postgres_dsn="postgres://example",
+        milvus_uri="http://milvus",
+        embedding_strategy="",  # empty → fallback
+        embedding_model="text-embedding-3-large",
+        openai_api_key="key",
+    )
+
+    result = _build_embedder(settings, embedder=None)
+    assert result is fake_provider
+    # Should have used DEFAULT_EMBEDDING_STRATEGY (openai)
+    strategy = get_provider.call_args.args[0]
+    assert str(strategy) == "openai"
+    call_kwargs = get_provider.call_args.kwargs
+    assert "api_key" in call_kwargs
+
+
+@pytest.mark.unit
 def test_build_embedder_uses_configured_strategy(monkeypatch):
     fake_provider = MagicMock()
     get_provider = MagicMock(return_value=fake_provider)
@@ -300,6 +324,96 @@ def test_is_branch_indexed_rejects_blank_branch_without_hitting_db():
     )
 
     assert strategy._is_branch_indexed("repo-1", "   ") is False
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_search_endpoint_dispatches_to_llm_combined_strategy(monkeypatch):
+    from shared.schemas.search import CombinedSearchResult, CombinedSnippet, SearchContextSource
+
+    llm_combined_strategy = SimpleNamespace(
+        search=AsyncMock(
+            return_value=CombinedSearchResult(
+                snippets=[],
+                query="q",
+                total_results=0,
+            )
+        )
+    )
+    monkeypatch.setattr(
+        "search.main.app",
+        SimpleNamespace(
+            state=SimpleNamespace(
+                strategy=MagicMock(),
+                wiki_strategy=MagicMock(),
+                llm_combined_strategy=llm_combined_strategy,
+            )
+        ),
+    )
+
+    result = await search(
+        SearchRequest(
+            query="q",
+            github_repo_id=1,
+            context_sources=(SearchContextSource.llm_combined,),
+        )
+    )
+    assert result.query == "q"
+    llm_combined_strategy.search.assert_awaited_once()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_search_wiki_endpoint_returns_result(monkeypatch):
+    from search.main import search_wiki
+    from shared.schemas.search import WikiSearchRequest, WikiSearchResult
+
+    wiki_strategy = SimpleNamespace(
+        search=AsyncMock(
+            return_value=WikiSearchResult(snippets=[], query="q", total_results=0)
+        )
+    )
+    monkeypatch.setattr(
+        "search.main.app",
+        SimpleNamespace(
+            state=SimpleNamespace(
+                strategy=MagicMock(),
+                wiki_strategy=wiki_strategy,
+                llm_combined_strategy=MagicMock(),
+            )
+        ),
+    )
+
+    result = await search_wiki(WikiSearchRequest(query="q", github_repo_id=1))
+    assert result.query == "q"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_search_wiki_endpoint_raises_on_branch_not_indexed(monkeypatch):
+    from search.main import search_wiki
+    from search.strategies.hybrid_strategy import BranchNotIndexedError
+    from shared.schemas.search import WikiSearchRequest
+    from fastapi import HTTPException
+
+    wiki_strategy = SimpleNamespace(
+        search=AsyncMock(side_effect=BranchNotIndexedError("dev", indexed_branches=["main"]))
+    )
+    monkeypatch.setattr(
+        "search.main.app",
+        SimpleNamespace(
+            state=SimpleNamespace(
+                strategy=MagicMock(),
+                wiki_strategy=wiki_strategy,
+                llm_combined_strategy=MagicMock(),
+            )
+        ),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await search_wiki(WikiSearchRequest(query="q", github_repo_id=1, branch="dev"))
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail["code"] == "BRANCH_UNAVAILABLE"
 
 
 @pytest.mark.unit

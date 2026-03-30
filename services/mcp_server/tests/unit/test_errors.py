@@ -48,3 +48,31 @@ def test_default_error_code_mapping():
     assert default_error_code_for_status(401) == "AUTH_REQUIRED"
     assert default_error_code_for_status(409) == "CONFLICT"
     assert default_error_code_for_status(500) == "INTERNAL_ERROR"
+
+
+def test_default_error_code_mapping_upstream_unavailable():
+    assert default_error_code_for_status(502) == "UPSTREAM_UNAVAILABLE"
+    assert default_error_code_for_status(503) == "UPSTREAM_UNAVAILABLE"
+    assert default_error_code_for_status(504) == "UPSTREAM_UNAVAILABLE"
+
+
+def test_default_error_code_mapping_forbidden():
+    assert default_error_code_for_status(403) == "FORBIDDEN"
+
+
+def test_to_public_error_with_generic_exception():
+    """A non-RequestError exception should map to 500 INTERNAL_ERROR."""
+    exc = RuntimeError("something went very wrong")
+    status_code, envelope = to_public_error(exc)
+    payload = envelope.model_dump(mode="json")
+
+    assert status_code == 500
+    assert payload["message"] == "An internal server error occurred."
+    assert payload["error_code"] == "INTERNAL_ERROR"
+    assert payload["recoverable"] is False
+    assert "error_id" in payload
+
+
+def test_default_error_code_for_404():
+    """Line 79: 404 maps to REPOSITORY_NOT_FOUND_OR_INACCESSIBLE."""
+    assert default_error_code_for_status(404) == "REPOSITORY_NOT_FOUND_OR_INACCESSIBLE"
