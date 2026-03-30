@@ -55,7 +55,7 @@ lighthouse/
 - [Docker Desktop](https://docs.docker.com/desktop/) for containerization.
 - [`uv`](https://docs.astral.sh/uv/getting-started/installation/) for Python package management.
 - [`bun`](https://bun.sh/docs/installation) for JavaScript package management.
-- [`Terraform`](https://developer.hashicorp.com/terraform/tutorials/aws-get-started/install-cli) for infrastructure as code.
+- `Terraform`(https://developer.hashicorp.com/terraform/tutorials/aws-get-started/install-cli) for infrastructure as code.
 - [`ngrok`](https://ngrok.com/download) for local tunneling. Install this if you want to use the `/webhook` endpoint of the ingestion service.
 
 ### Setting Up the Local Environment
