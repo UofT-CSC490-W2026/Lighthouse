@@ -122,6 +122,79 @@ with db.connection_context():
     repo = Repository.get_or_none(Repository.full_name == "owner/repo")
 ```
 
+## Database migrations
+
+The `db` package is the source of truth for Lighthouse's relational schema, so any schema migration should be derived from changes to the models in this package.
+
+### Current state
+
+- The package declares `alembic` as a dependency.
+- The runtime model layer is implemented with Peewee, not SQLAlchemy ORM models.
+- Tests and local profiling utilities sometimes create tables directly from the Peewee models, but that is a convenience for isolated environments, not a production migration strategy.
+
+### Practical migration rule
+
+When you change any of these models:
+
+- `User`
+- `Session`
+- `Repository`
+- `UserHiddenRepository`
+- `IndexedBranch`
+- `Chunk`
+- `IndexedFile`
+- `StagingChunk`
+- `WikiGeneration`
+- `WikiPage`
+- `StagingWikiPage`
+
+you should treat that as a schema change and add or update the corresponding database migration before relying on the new shape in a deployed service.
+
+### What belongs in a migration
+
+Typical changes include:
+
+- creating or dropping tables
+- adding, renaming, or removing columns
+- changing nullability or uniqueness constraints
+- adding or changing indexes
+- backfilling data needed by new application logic
+
+### How to run migrations
+
+Alembic is configured under `packages/db/alembic.ini` with scripts in `packages/db/alembic/versions`.
+
+Run migrations from the package directory:
+
+```bash
+cd packages/db
+alembic upgrade head
+```
+
+If you are using the workspace-managed environment, the equivalent command is:
+
+```bash
+cd packages/db
+uv run alembic upgrade head
+```
+
+### Connection resolution
+
+- If `POSTGRES_DSN` is set, Alembic uses that value.
+- If `POSTGRES_DSN` starts with `postgresql://`, the Alembic env rewrites it to `postgresql+asyncpg://` for the async engine.
+- If `POSTGRES_DSN` is not set, Alembic falls back to the `sqlalchemy.url` value in `packages/db/alembic.ini`.
+
+Example:
+
+```bash
+cd packages/db
+POSTGRES_DSN=postgresql://lighthouse:lighthouse@localhost:5432/lighthouse uv run alembic upgrade head
+```
+
+### Important distinction
+
+`db.database.create_tables(...)` is appropriate for tests, throwaway local databases, and profiling scripts. It should not be treated as a substitute for a versioned migration path in shared or production environments.
+
 ## Operational assumptions
 
 - The package expects a valid DSN string, typically supplied via `postgres_dsn` in service settings.
