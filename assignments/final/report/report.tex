@@ -1,0 +1,201 @@
+\documentclass[a4paper,12pt]{article}
+
+\usepackage{a4wide}
+\usepackage{amsfonts}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{csquotes}
+\usepackage{lipsum}
+\usepackage{bm}
+\usepackage{tabularx}
+\usepackage{longtable}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{tikz}
+\usepackage{float}
+\usetikzlibrary{positioning, arrows.meta, shapes.geometric, fit}
+
+\usepackage{graphicx}  % For including images
+\usepackage{xcolor}  % For a colorfull presentation
+\usepackage{listings}  % For presenting code 
+
+\usepackage{algorithm}
+\usepackage[noend]{algpseudocode}
+\makeatletter
+\def\BState{\State\hskip-\ALG@thistlm}
+\makeatletter
+\usepackage[normalem]{ulem}
+\usepackage{array}
+\usepackage{hyperref}
+% \usepackage[hyphens]{url}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue,
+  urlcolor=blue,
+  citecolor=blue
+}
+\newcommand{\bluehref}[2]{\href{#1}{\textcolor{blue}{\uline{#2}}}}
+\makeatletter
+\newcommand*{\citelinktext}[2]{%
+  \hyper@@link[cite]{}{cite.#1}{#2}}
+\makeatother
+
+\usepackage{booktabs} 
+\usepackage{enumitem}
+\usepackage{bbm}
+\usepackage{tcolorbox}
+
+\usepackage{minted}
+\usepackage{subcaption}
+
+\usepackage[font=small,labelfont=bf]{caption}
+
+\usepackage{fullpage,amsmath,amsthm,amssymb}
+\newtheorem*{solution}{Solution}
+\newtheorem*{part1}{Part 1}
+\newtheorem*{part2}{Part 2}
+
+\newcommand{\Cov}{\mathrm{Cov}}
+\newcommand{\Var}{\mathrm{Var}}
+\newcommand{\rank}{\mathrm{rank}}
+\newcommand{\Span}{\mathrm{span}}
+\newcommand{\clip}{\mathrm{clip}}
+\newcommand{\Dim}{\mathrm{dim}}
+
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\newcolumntype{R}[1]{>{\raggedright\arraybackslash}p{#1}}
+
+\tcbset{
+  colback=gray!3,
+  colframe=black!20,
+  boxsep=1mm,
+  left=1mm,
+  right=1mm,
+  top=1mm,
+  bottom=1mm,
+}
+
+\usepackage{changepage}
+\setlength{\parindent}{0pt}
+
+\newenvironment{restoretext}%
+    {
+     \begin{adjustwidth}{}{\leftmargin}%
+    }{\end{adjustwidth}
+     }
+
+% Definition of a style for code, matter of taste
+\lstdefinestyle{mystyle}{
+  language=Python,
+  basicstyle=\ttfamily\footnotesize,
+  backgroundcolor=\color[HTML]{F7F7F7},
+  rulecolor=\color[HTML]{EEEEEE},
+  identifierstyle=\color[HTML]{24292E},
+  emphstyle=\color[HTML]{005CC5},
+  keywordstyle=\color[HTML]{D73A49},
+  commentstyle=\color[HTML]{6A737D},
+  stringstyle=\color[HTML]{032F62},
+  emph={@property,self,range,True,False},
+  morekeywords={super,with,as,lambda},
+  literate=%
+    {+}{{{\color[HTML]{D73A49}+}}}1
+    {-}{{{\color[HTML]{D73A49}-}}}1
+    {*}{{{\color[HTML]{D73A49}*}}}1
+    {/}{{{\color[HTML]{D73A49}/}}}1
+    {=}{{{\color[HTML]{D73A49}=}}}1
+    {/=}{{{\color[HTML]{D73A49}=}}}1,
+  breakatwhitespace=false,
+  breaklines=true,
+  captionpos=b,
+  keepspaces=true,
+  numbers=none,
+  showspaces=false,
+  showstringspaces=false,
+  showtabs=false,
+  tabsize=4,
+  frame=single,
+}
+\lstset{style=mystyle}
+
+\begin{document}
+\begin{titlepage}
+    \centering
+    \vspace*{1cm}
+    
+    \Huge
+    \textbf{CSC490: Project Report}
+    
+    \vspace{0.5cm}
+    
+    \vspace{1.5cm}
+    
+    \textbf{Team Members}
+    
+    \vspace{0.8cm}
+    
+    \large
+    \begin{tabular}{ll}
+        \textbf{Name} & \textbf{Student ID} \\
+        \midrule
+        Aarya Prakash & 1008790257 \\
+        Derek Huynh & 1008849052 \\
+        Merrick Liu & 1008951920 \\
+        Rhys Balevicius & 1000801974 \\
+    \end{tabular}
+    
+    \vfill
+    
+    \large
+    University of Toronto\\
+    Department of Computer Science    
+\end{titlepage}
+% ================================================================================
+\section{Abstract}
+
+
+% ================================================================================
+\section{Introduction and Problem Statement}
+
+
+
+% ================================================================================
+\section{Related Work (Academic and Industry)}
+
+% CodeRAG bench is highly relevant (they indexed public domain info)
+
+
+% ================================================================================
+\section{Technical Approach, Solution, and Designs}
+
+
+
+% ================================================================================
+\section{Experiments, Key Metrics, and Results}
+
+
+% ================================================================================
+\section{Future Work and Next Steps}
+
+% Frame project as a research instrument/proof of concept with potential to be turned into a product
+
+% - Synchronization
+% - Repository discovery (UX enhancement) e.g. indexing repository dependencies (right now flow assumes you will manually index all relevant codebases, and relevant context might pertain to the details of some package the repo you're working on consumes)
+% - Scaling repository indexing (it slow)
+% - Experiment with more search types (agent conversation history, knowledge graph, commit history)
+
+
+% ================================================================================
+\section{Team Reflection}
+% On the project including connection to the course material (1 page)
+
+
+
+% ================================================================================
+\begin{thebibliography}{9}
+% \bibitem{deepseekmath} Shao, Z., et al. (2024). DeepSeekMath: Pushing the Limits of Mathematical Reasoning in Open Language Models. arXiv preprint arXiv:2402.03300.
+% \bibitem{nanochat-discussion}
+% Karpathy, A. (2025). Nanochat Discussion \#1: Introducing nanochat: The best ChatGPT that \$100 can buy. GitHub Discussions. Available at: \url{https://github.com/karpathy/nanochat/discussions/1} (accessed March 11, 2026).
+
+\end{thebibliography}
+\end{document}
