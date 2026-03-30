@@ -23,6 +23,7 @@ from shared.schemas.search import (
 from search.config import SearchSettings
 from search.main import _build_embedder, create_app, health, search
 from search.strategies.hybrid_strategy import BranchNotIndexedError, HybridSearchStrategy
+from search.strategies.llm_combined_strategy import KEYWORD_SYSTEM_PROMPT, LLMCombinedSearchStrategy
 from vectordb import MilvusClient
 
 
@@ -33,6 +34,7 @@ async def test_create_app_lifespan_initializes_and_closes(monkeypatch):
         postgres_dsn="postgres://example",
         milvus_uri="http://milvus",
         openai_api_key="key",
+        llm_reasoning_effort="none",
     )
     db_manager = MagicMock()
     milvus = MagicMock()
@@ -40,6 +42,9 @@ async def test_create_app_lifespan_initializes_and_closes(monkeypatch):
     embedder = MagicMock()
     strategy = MagicMock()
     wiki_strategy = MagicMock()
+    llm_provider = MagicMock()
+    reranker = MagicMock()
+    llm_combined_strategy = MagicMock()
 
     monkeypatch.setattr("search.main.DatabaseManager", MagicMock(return_value=db_manager))
     monkeypatch.setattr(
@@ -54,16 +59,33 @@ async def test_create_app_lifespan_initializes_and_closes(monkeypatch):
         "search.main.HybridWikiSearchStrategy",
         MagicMock(return_value=wiki_strategy),
     )
+    openai_provider_cls = MagicMock(return_value=llm_provider)
+    monkeypatch.setattr("search.main.OpenAILLMProvider", openai_provider_cls)
+    cohere_reranker_cls = MagicMock(return_value=reranker)
+    monkeypatch.setattr("search.main.CohereReranker", cohere_reranker_cls)
+    llm_strategy_cls = MagicMock(return_value=llm_combined_strategy)
+    monkeypatch.setattr("search.main.LLMCombinedSearchStrategy", llm_strategy_cls)
 
     app = create_app(settings=settings, embedder=embedder)
 
     async with app.router.lifespan_context(app):
         assert app.state.strategy is strategy
+        assert app.state.llm_combined_strategy is llm_combined_strategy
 
     db_manager.connect.assert_called_once_with()
     db_manager.close.assert_called_once_with()
     milvus.close.assert_called_once_with()
     wiki_milvus.close.assert_called_once_with()
+    openai_provider_cls.assert_called_once_with(api_key="key", model="gpt-5.4-nano")
+    llm_strategy_cls.assert_called_once_with(
+        db_manager=db_manager,
+        milvus_code=milvus,
+        milvus_wiki=wiki_milvus,
+        embedder=embedder,
+        llm=llm_provider,
+        reranker=reranker,
+        llm_reasoning_effort="none",
+    )
 
 
 @pytest.mark.unit
@@ -278,3 +300,30 @@ def test_is_branch_indexed_rejects_blank_branch_without_hitting_db():
     )
 
     assert strategy._is_branch_indexed("repo-1", "   ") is False
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_llm_combined_strategy_passes_reasoning_effort_to_llm():
+    llm = MagicMock()
+    llm.complete_json.return_value = {"keywords": ["search", "rank"]}
+    strategy = LLMCombinedSearchStrategy(
+        db_manager=MagicMock(),
+        milvus_code=MagicMock(),
+        milvus_wiki=MagicMock(),
+        embedder=MagicMock(),
+        llm=llm,
+        reranker=MagicMock(),
+        llm_reasoning_effort="none",
+    )
+
+    keywords = await strategy._generate_keywords("ranking bug")
+
+    assert keywords == ["search", "rank"]
+    llm.complete_json.assert_called_once_with(
+        [
+            {"role": "system", "content": KEYWORD_SYSTEM_PROMPT},
+            {"role": "user", "content": "ranking bug"},
+        ],
+        reasoning_effort="none",
+    )

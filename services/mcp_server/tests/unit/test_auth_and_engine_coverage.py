@@ -425,7 +425,7 @@ async def test_search_and_user_engines_cover_error_paths(monkeypatch):
         "branch": "main",
         "file_path": "a.py",
         "top_k": 7,
-        "context_sources": ["code", "wiki"],
+        "context_sources": ["llm_combined"],
     }
     assert result.status == "ok"
     assert result.query == "fix bug"

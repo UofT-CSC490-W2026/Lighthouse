@@ -19,6 +19,8 @@ class SearchSettings(BaseSettings):
     cohere_api_key: str = ""
     internal_service_token: str = ""
     rerank_model: str = DEFAULT_RERANK_MODEL
+    llm_model: str = "gpt-5.4-nano"
+    llm_reasoning_effort: str = "none"
 
     model_config = {"env_prefix": "", "env_file": ".env", "extra": "ignore"}
 

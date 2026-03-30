@@ -14,6 +14,7 @@ class SearchContextSource(str, Enum):
     code = "code"
     wiki = "wiki"
     ast = "ast"
+    llm_combined = "llm_combined"
 
 
 class SearchRequest(BaseModel):

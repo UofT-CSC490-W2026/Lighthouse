@@ -13,6 +13,7 @@ from fastapi import HTTPException
 
 from db.database import DatabaseManager
 from ingestion.chunking.registry import Chunker, ChunkerStrategy, get_chunker, register_chunker
+from ingestion.chunking.sliding_window_chunker import SlidingWindowChunker
 from ingestion.embedding.registry import (
     EmbeddingStrategy,
     get_embedding_provider,
@@ -51,7 +52,10 @@ def test_chunker_registry_registers_and_rejects_unknown():
         get_chunker("missing")  # type: ignore[arg-type]
 
     register_chunker(ChunkerStrategy.SLIDING_WINDOW, DummyChunker)
-    assert isinstance(get_chunker(ChunkerStrategy.SLIDING_WINDOW), DummyChunker)
+    try:
+        assert isinstance(get_chunker(ChunkerStrategy.SLIDING_WINDOW), DummyChunker)
+    finally:
+        register_chunker(ChunkerStrategy.SLIDING_WINDOW, SlidingWindowChunker)
 
 
 @pytest.mark.unit
@@ -152,6 +156,96 @@ def test_chunk_files_skips_blank_content(monkeypatch, tmp_path):
 
     assert result.chunk_count == 0
     service.write_staging.assert_not_called()
+
+
+@pytest.mark.unit
+def test_chunk_files_ast_falls_back_sliding_for_unsupported_ast_language(monkeypatch, tmp_path):
+    """astchunk rejects some detected languages (e.g. toml); chunk_file fallback must run."""
+    repo_path = tmp_path / "repo"
+    repo_path.mkdir()
+    toml_file = repo_path / "pyproject.toml"
+    toml_file.write_text("[project]\nname = \"x\"\n", encoding="utf-8")
+
+    service = SimpleNamespace(write_staging=MagicMock())
+    closed: list[bool] = []
+
+    monkeypatch.setattr(
+        "ingestion.temporal.activities.chunking.get_settings",
+        MagicMock(return_value=SimpleNamespace(clone_base_dir=str(tmp_path))),
+    )
+    monkeypatch.setattr(
+        "ingestion.temporal.activities.chunking.make_db",
+        MagicMock(return_value=SimpleNamespace(close=lambda: closed.append(True))),
+    )
+    monkeypatch.setattr(
+        "ingestion.temporal.activities.chunking.ChunkService",
+        MagicMock(return_value=service),
+    )
+
+    result = asyncio.run(
+        chunk_files(
+            ChunkFilesInput(
+                repository_id="repo-id",
+                branch="main",
+                repo_path=str(repo_path),
+                chunker_strategy="ast_code",
+                file_filter=["pyproject.toml"],
+            )
+        )
+    )
+
+    assert result.chunk_count >= 1
+    service.write_staging.assert_called_once()
+    assert closed == [True]
+
+
+@pytest.mark.unit
+def test_chunk_files_ast_falls_back_when_get_chunker_raises(monkeypatch, tmp_path):
+    repo_path = tmp_path / "repo"
+    repo_path.mkdir()
+    py_file = repo_path / "a.py"
+    py_file.write_text("x = 1\n", encoding="utf-8")
+
+    service = SimpleNamespace(write_staging=MagicMock())
+    closed: list[bool] = []
+
+    def boom_get_chunker(strategy, language=None, chunker_config=None):
+        if strategy is ChunkerStrategy.AST_CODE:
+            raise ValueError("AST chunker construction failed")
+        return get_chunker(strategy, language=language, chunker_config=chunker_config)
+
+    monkeypatch.setattr(
+        "ingestion.temporal.activities.chunking.get_settings",
+        MagicMock(return_value=SimpleNamespace(clone_base_dir=str(tmp_path))),
+    )
+    monkeypatch.setattr(
+        "ingestion.temporal.activities.chunking.make_db",
+        MagicMock(return_value=SimpleNamespace(close=lambda: closed.append(True))),
+    )
+    monkeypatch.setattr(
+        "ingestion.temporal.activities.chunking.get_chunker",
+        boom_get_chunker,
+    )
+    monkeypatch.setattr(
+        "ingestion.temporal.activities.chunking.ChunkService",
+        MagicMock(return_value=service),
+    )
+
+    result = asyncio.run(
+        chunk_files(
+            ChunkFilesInput(
+                repository_id="repo-id",
+                branch="main",
+                repo_path=str(repo_path),
+                chunker_strategy="ast_code",
+                file_filter=["a.py"],
+            )
+        )
+    )
+
+    assert result.chunk_count >= 1
+    service.write_staging.assert_called_once()
+    assert closed == [True]
 
 
 @pytest.mark.unit

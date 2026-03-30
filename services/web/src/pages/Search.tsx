@@ -205,11 +205,24 @@ export default function Search() {
             )}
 
             {/* Submit */}
-            <div className="flex justify-end">
+            <div className="flex justify-end gap-2">
               <Button type="submit" disabled={!canSubmit} size="lg" className="gap-2">
                 <SearchIcon className="size-4" />
                 {submitting ? "Searching..." : "Run Search"}
               </Button>
+              {result && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="lg"
+                  onClick={() => {
+                    setResult(null);
+                    setError(null);
+                  }}
+                >
+                  Clear
+                </Button>
+              )}
             </div>
           </form>
         </div>

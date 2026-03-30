@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
-from shared.config import DEFAULT_LLM_STRATEGY, default_llm_model
+from shared.config import (
+    DEFAULT_LLM_STRATEGY,
+    OPENAI_REASONING_EFFORT,
+    default_llm_model,
+)
 from shared.ssm import ssm_settings_sources
 
 SSM_PARAMETER_ENV_VAR = "INGESTION_SETTINGS_SSM_PARAMETER"
@@ -24,6 +28,7 @@ class IngestionSettings(BaseSettings):
     embedding_dimension: int = 0
     llm_strategy: str = DEFAULT_LLM_STRATEGY
     llm_model: str = ""
+    llm_reasoning_effort: str = ""
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -65,3 +70,11 @@ class IngestionSettings(BaseSettings):
         if configured:
             return configured
         return default_llm_model(self.resolved_llm_strategy())
+
+    def resolved_llm_reasoning_effort(self) -> str:
+        configured = self.llm_reasoning_effort.strip()
+        if configured:
+            return configured
+        if self.resolved_llm_strategy() == "openai":
+            return OPENAI_REASONING_EFFORT
+        return ""
