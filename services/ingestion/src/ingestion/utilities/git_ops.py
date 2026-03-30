@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
+import subprocess
 
 from git import Repo
 
@@ -27,6 +28,9 @@ class GitOperations:
         self.base_dir = Path(base_dir)
         self.base_dir.mkdir(parents=True, exist_ok=True)
         self.github_token = github_token
+        self.git_global_config_path = self.base_dir / ".ingestion-gitconfig"
+        if not os.environ.get("GIT_CONFIG_GLOBAL"):
+            os.environ["GIT_CONFIG_GLOBAL"] = str(self.git_global_config_path)
 
     def _authenticated_url(self, repo_url: str) -> str:
         """Inject GitHub token into HTTPS URL for private repo access."""
@@ -41,6 +45,7 @@ class GitOperations:
     ) -> Path:
         """Clone if not exists, else fetch and checkout branch. Returns repo path."""
         repo_path = self.base_dir / repo_dir_name
+        self._ensure_safe_directory(repo_path)
 
         auth_url = self._authenticated_url(repo_url)
 
@@ -60,11 +65,13 @@ class GitOperations:
                 branch=branch,
                 depth=1,
             )
+            self._ensure_safe_directory(repo_path)
 
         return repo_path
 
     def get_latest_commit(self, repo_path: Path, branch: str) -> str:
         """Return the HEAD commit SHA for the branch."""
+        self._ensure_safe_directory(repo_path)
         repo = Repo(repo_path)
         return str(repo.head.commit.hexsha)
 
@@ -104,6 +111,7 @@ class GitOperations:
         self, repo_path: Path, old_commit: str, new_commit: str
     ) -> list[Path]:
         """Return files changed between two commits."""
+        self._ensure_safe_directory(repo_path)
         repo = Repo(repo_path)
         diff = repo.git.diff("--name-only", old_commit, new_commit)
         if not diff.strip():
@@ -115,3 +123,23 @@ class GitOperations:
             if full.exists() and full.is_file():
                 changed.append(full)
         return changed
+
+    def _ensure_safe_directory(self, repo_path: Path) -> None:
+        """Allow git access to synthetic repos mounted with differing ownership."""
+        candidates = [str(repo_path)]
+        dot_git = repo_path / ".git"
+        if dot_git.exists():
+            candidates.append(str(dot_git))
+        for candidate in candidates:
+            result = subprocess.run(
+                ["git", "config", "--global", "--add", "safe.directory", candidate],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if result.returncode != 0:
+                logger.warning(
+                    "Failed to set git safe.directory for %s: %s",
+                    candidate,
+                    (result.stderr or result.stdout).strip() or "unknown error",
+                )
