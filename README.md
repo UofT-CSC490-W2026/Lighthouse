@@ -49,6 +49,10 @@ monorepo/
 
 ### Documentation
 
+You can find documentation in the `docs/` directory. For the most part, it mirrors the structure of the repository. For example, the documentation for each package is in the `docs/packages/<package>/` directory.
+
+Below are some key documentation:
+
 - [Search Service](docs/services/search.md)
 - [Ingestion Service](docs/services/ingestion.md)
 - [MCP Server](docs/services/mcp_server.md)
