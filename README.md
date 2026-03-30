@@ -58,7 +58,7 @@ lighthouse/
 - [`Terraform`](https://developer.hashicorp.com/terraform/tutorials/aws-get-started/install-cli) for infrastructure as code.
 - [`ngrok`](https://ngrok.com/download) for local tunneling. Install this if you want to use the `/webhook` endpoint of the ingestion service.
 
-### Setup
+### Setting Up the Local Environment
 
 1. Run `uv sync --all-packages --dev` to install dependencies for the entire monorepo.
 2. Run `cd services/web && bun install` to install dependencies for the web service.
