@@ -218,36 +218,16 @@ require custom setup and lack code-aware, continuously updated indexing. It is w
 
 \subsection{Lighthouse: A Context Layer for Coding Agents}
 
-We propose and implement \textbf{Lighthouse}, a retrieval system that treats
-context retrieval as a first-class infrastructure concern for AI coding agents.
-Lighthouse allows developers to register GitHub repositories for indexing.
-An ingestion pipeline—orchestrated by Temporal for durability and incremental
-correctness—clones each repository, splits source files into semantically
-coherent chunks using AST-aware or sliding-window strategies, generates
-embeddings via OpenAI or AWS Bedrock, and writes the results to a dual-store
-backend (PostgreSQL for metadata and full-text search, Milvus for dense vector
-retrieval).
-A separate workflow generates natural-language wiki documentation from the
-indexed code using an LLM, providing an additional retrieval surface for
-architectural and behavioral queries.\\
-
-At query time, a hybrid retrieval pipeline combines dense vector similarity
-search, PostgreSQL full-text search, LLM-driven keyword expansion, and
-Cohere reranking to surface the most relevant code snippets and documentation
-from across all indexed repositories.
-The system is exposed to coding agents via the \textbf{Model Context Protocol
-(MCP)}, a standardized tool-use interface that allows any MCP-compatible agent
-to query Lighthouse without any agent-side modification.\\
-
-We make the following contributions:
+We propose and implement \textbf{Lighthouse}, a
+retrieval layer for AI coding agents. At a high level, Lighthouse consists of:
 
 \begin{enumerate}
   \item A \textbf{production-grade ingestion pipeline} with full and incremental
-    indexing, durable execution via Temporal, and a publish-and-switch model
+    indexing of GitHub repositories, durable execution via Temporal, and a publish-and-switch model
     that eliminates search gaps during re-indexing.
-  \item A \textbf{multi-stage hybrid retrieval strategy} combining dense vector
-    search, sparse full-text search, LLM keyword extraction, and neural
-    reranking via Cohere.
+  \item A \textbf{multi-stage federated hybrid retrieval strategy} combining dense vector
+    search, sparse full-text search, LLM keyword extraction, and
+    reranking from multiple sources (wiki and code).
   \item An \textbf{automated wiki generation system} that uses an LLM to
     synthesize repository documentation from indexed source code, expanding the
     retrievable surface beyond raw code.
@@ -255,7 +235,7 @@ We make the following contributions:
     as first-class tools consumable by AI coding agents with no custom
     integration.
   \item A \textbf{reproducible evaluation framework} integrating synthetic API-contract benchmarks to measure the impact of Lighthouse on agent task completion.
-\end{enumerate}
+\end{enumerate} 
 
 % ================================================================================
 \section{Related Work}
@@ -263,9 +243,8 @@ We make the following contributions:
 
 Lighthouse sits at the intersection of code retrieval, retrieval-augmented
 generation, and AI agent tooling.
-We survey the most relevant prior work across three dimensions: industry
-products that address adjacent problems, academic techniques that underpin our
-design, and evaluation benchmarks we use to measure system performance.\\
+We survey the most relevant prior work across two dimensions: industry
+products and academic literature.\\
 
 \subsection{Industry Solutions}
 
@@ -284,17 +263,13 @@ limitations relative to Lighthouse.\\
 \toprule
 \textbf{Tool} & \textbf{Approach} & \textbf{Limitation vs.\ Lighthouse} \\
 \midrule
-GitHub Copilot
-  & LLM-based inline completion and chat; context scoped to open editor tabs.
-  & No cross-repository indexing; context not queryable by agents as a tool. \\
+Cursor, Copilot, Codex, etc.
+  & The standard coding agents, tab completion, chat, tool calls, etc.
+  & No native cross-repository indexing. \\
 \addlinespace
-Cursor
-  & AI code editor with codebase indexing and multi-file context.
-  & Index is local and per-session; not exposed via a standardized agent protocol. \\
-\addlinespace
-Sourcegraph / Cody
-  & Enterprise code search platform; Cody adds LLM-based Q\&A over indexed code.
-  & Search is developer-facing; no MCP interface; not designed for agent-driven retrieval. \\
+Sourcegraph
+  & Enterprise code search platform.
+  & Most similar to Lighthouse. However, only surfaces and indexes code. \\
 \addlinespace
 AugmentCode
   & Codebase-aware AI coding assistant that indexes large monorepos for context.
@@ -341,7 +316,7 @@ DPR \cite{karpukhin2020dpr}
 \addlinespace
 CodeSearchNet \cite{husain2019codesearchnet}
   & Large-scale code--docstring pairs across six languages for training code search models.
-  & Provides a reference approach to NL$\to$code retrieval; informs our embedding evaluation methodology. \\
+  & Provides a reference approach to NL$\to$code retrieval. \\
 \addlinespace
 Reciprocal Rank Fusion \cite{cormack2009rrf}
   & Score-free fusion of ranked lists by inverse rank position.
@@ -349,43 +324,7 @@ Reciprocal Rank Fusion \cite{cormack2009rrf}
 \addlinespace
 CodeRAG-Bench \cite{wang2024coderag}
   & Benchmark for RAG-augmented code generation covering eight task types and five retrieval corpora.
-  & Most directly comparable to our evaluation design; establishes retrieval+generation as a joint evaluation target. \\
-\bottomrule
-\end{tabularx}
-\end{table}
-
-\subsection{Evaluation Benchmarks}
-
-Measuring whether Lighthouse actually improves agent outcomes requires
-benchmarks that capture real-world coding tasks at the repository level.
-Table~\ref{tab:benchmarks} lists the benchmarks most relevant to our
-evaluation setup, selected from a broader landscape surveyed in our earlier
-design work.\\
-
-\begin{table}[H]
-\centering
-\small
-\caption{Evaluation benchmarks used in or considered for Lighthouse experiments.}
-\label{tab:benchmarks}
-\begin{tabularx}{\textwidth}{R{2.6cm}YY}
-\toprule
-\textbf{Benchmark} & \textbf{Description} & \textbf{Role in Lighthouse Evaluation} \\
-\midrule
-SWE-bench \cite{jimenez2024swebench}
-  & 2,294 GitHub issue-resolution tasks across 12 Python repositories, each with a linked PR and test patch.
-  & Primary end-to-end evaluation: run agents with and without Lighthouse MCP and compare resolution rates. \\
-\addlinespace
-RepoBench \cite{liu2023repobench}
-  & 11K cross-file code completion instances requiring imports and related functions from other files in the same repo.
-  & Tests whether Lighthouse surfaces correct cross-file context; directly exercises our vector and FTS pipelines. \\
-\addlinespace
-CodeRAG-Bench \cite{wang2024coderag}
-  & RAG-augmented generation benchmark with five retrieval corpora and execution-based correctness metrics.
-  & Provides a controlled setting for ablating retrieval strategies (vector-only vs.\ hybrid vs.\ LLM-combined). \\
-\addlinespace
-GitChameleon 2.0 \cite{gitchameleon}
-  & 328 version-conditioned Python code-completion problems spanning 26 library versions (2014--2023).
-  & Tests whether Lighthouse can retrieve version-specific documentation to resolve API incompatibilities. \\
+  & Inspiration for our evaluation designs; establishes retrieval+generation as a joint evaluation target. \\
 \bottomrule
 \end{tabularx}
 \end{table}
@@ -751,77 +690,22 @@ Lighthouse is a research instrument and proof of concept with a clear path
 toward becoming a production product.
 Future work spans two lenses: product maturity and research depth.\\
 
-\subsection{Product}
+\textbf{On the product side}, the clearest next step is automated webhook setup so that
+repositories re-index on every push without manual intervention, removing the
+largest remaining onboarding friction point. We also want incremental wiki
+generation so only pages affected by changed source chunks are regenerated,
+reducing the dominant ingestion cost, and expanded search coverage over agent
+history, commits and PRs, and issue threads so Lighthouse can retrieve more of
+the intent and debugging context that lives outside the code itself.\\
 
-\textbf{Automated webhook setup.}
-Currently, a developer must manually trigger re-indexing after pushing to a
-repository.
-The natural next step is to register GitHub webhooks automatically when a
-repository is added, so that every push triggers an incremental index update
-without any developer action.
-This removes the largest remaining friction point in the onboarding flow.\\
-
-\textbf{Incremental wiki generation.}
-Wiki generation is currently re-run in full on every indexing job, making it
-the dominant cost in the ingestion pipeline.
-Because a typical push changes only a small fraction of the codebase, the wiki
-should be updated incrementally: only pages whose source chunks changed need
-to be regenerated.
-This would reduce wiki generation from a per-job full pass to a diff-driven
-partial update, substantially improving ingestion throughput.\\
-
-\textbf{Expanded search types.}
-The current retrieval surface covers code chunks and wiki pages.
-Useful additions include agent conversation history (surfacing context from
-prior sessions on the same codebase), commit history and PR descriptions
-(capturing intent and rationale that does not appear in the code itself), and
-issue threads (linking failing tests or bug reports back to relevant code
-regions).
-Each of these extends the types of questions an agent can answer with
-Lighthouse context.\\
-
-\subsection{Research}
-
-\textbf{Graph-structured indexing.}
-The current index treats code chunks independently.
-A natural extension is to index the dependency graph explicitly — representing
-files, modules, and packages as nodes and import/call relationships as edges —
-enabling retrieval that follows structural dependencies rather than relying
-solely on semantic similarity.
-Graph databases such as Neo4j are well-suited to this representation.\\
-
-\textbf{Agentic retrieval.}
-Our current retrieval pipeline is a single-shot query-then-rank process.
-An agentic retrieval layer could iteratively refine queries based on
-intermediate results: issuing a first retrieval pass, inspecting the top
-candidates, and re-querying with refined or expanded terms.
-This is especially valuable for complex tasks where the relevant context is
-spread across multiple files or repositories and cannot be captured in a single
-query.\\
-
-\textbf{Top-$k$ tuning and budget-aware retrieval.}
-The current retriever uses a fixed number of returned results, but the optimal
-$k$ likely varies by task and query type.
-Future work should tune this parameter empirically, measuring how retrieval
-quality and downstream answer quality change as $k$ increases.
-Beyond static tuning, Lighthouse could choose $k$ dynamically based on the
-query and the remaining token budget: broad exploratory questions may benefit
-from retrieving more context, while highly specific queries or tight context
-windows may require a smaller, more selective result set.\\
-
-
-\textbf{Indexing beyond source code.}
-We currently index source files and LLM-generated wiki pages.
-Extending the index to external documentation (library API docs, changelogs,
-README files) and package dependency manifests would allow agents to retrieve
-context for third-party APIs and version-specific behavior — the class of
-failures that benchmarks like GitChameleon 2.0 are designed to stress-test.\\
-
-The directions above represent a few of many paths forward.
-Lighthouse opens up a large and largely unexplored design space — in how
-context is indexed, what is indexed, how it is retrieved, and how it is
-consumed by agents — and we expect the most impactful directions to emerge
-from empirical experimentation on real agent tasks.
+\textbf{On the research side}, we see promise in graph-structured indexing that encodes
+dependency relationships directly, enabling retrieval over code structure as
+well as semantics, and in agentic retrieval that iteratively refines queries
+after inspecting early results. We also want to study top-$k$ tuning and
+budget-aware retrieval so the system can adapt result count to the task and
+available context window, and to expand indexing beyond source code to external
+documentation and dependency metadata, which would improve support for
+third-party APIs and version-specific behavior.
 
 
 % ================================================================================
