@@ -573,7 +573,7 @@ Three strategies are available, selected per request via the
 and \texttt{publish\_id} versioning.
 Full-text search uses PostgreSQL's built-in \texttt{tsvector}/\texttt{tsquery}
 operators (\texttt{@@}), enabling language-aware stemming and lexeme indexing
-over chunk content.
+over chunk content.\\
 
 \textbf{Milvus} stores embedding vectors in two collections:
 \texttt{chunk\_embeddings} (code) and \texttt{wiki\_embeddings} (wiki pages).
@@ -581,7 +581,7 @@ Both use an HNSW index with $M=16$, \textit{efConstruction}$=256$, and
 cosine similarity as the distance metric.
 Each Milvus record carries \texttt{repository\_id}, \texttt{branch},
 \texttt{file\_path}, and \texttt{publish\_id} scalar fields to support
-filtered approximate nearest-neighbor search.
+filtered approximate nearest-neighbor search.\\
 
 The search service issues Milvus queries with a \texttt{publish\_id} filter
 derived from the current \texttt{IndexedFile.active\_publish\_id}, so stale
@@ -678,14 +678,14 @@ Lighthouse exposes its retrieval capabilities to coding agents via the
 \textbf{Model Context Protocol (MCP)}, mounted at \texttt{/mcp} on the MCP
 Server service using the FastMCP library.
 Agents connect once with a long-lived MCP token and interact through a
-standard tool-call interface with no Lighthouse-specific client code.
+standard tool-call interface with no Lighthouse-specific client code.\\
 
 The MCP toolset includes:
 \texttt{search\_code(repository, query, branch, top\_k)},
 \texttt{search\_wiki(repository, query, branch, top\_k)},
 \texttt{list\_user\_repos()},
 \texttt{add\_user\_repo(url, branches)}, and
-\texttt{get\_wiki(repository, branch)}.
+\texttt{get\_wiki(repository, branch)}.\\
 
 Authentication uses GitHub OAuth for the initial login flow.
 The server issues encrypted session tokens (Fernet, 7-day TTL) for the web
@@ -707,7 +707,7 @@ the root path serves the React web UI, \texttt{/v1/*} and \texttt{/mcp/*}
 route to the MCP Server, and \texttt{/webhook} routes to the Ingestion
 service for GitHub push events.
 Internal service-to-service calls resolve over AWS Cloud Map private DNS
-(e.g., \texttt{search.lighthouse-prod.local:8002}).
+(e.g., \texttt{search.lighthouse-prod.local:8002}).\\
 
 \textbf{Milvus} runs as a standalone instance on an EC2 \texttt{t3.large}
 in a private subnet, with etcd and MinIO co-located via Docker Compose on
@@ -715,14 +715,14 @@ the same host.
 This configuration avoids the operational complexity of a distributed Milvus
 cluster while remaining adequate for the current scale.
 The Milvus host is accessible to ECS tasks via a security group rule
-permitting port 19530 from the VPC CIDR.
+permitting port 19530 from the VPC CIDR.\\
 
 \textbf{PostgreSQL} is provisioned as Amazon RDS (version 17.7,
 \texttt{db.t3.micro}, 20\,GB gp3) in a private subnet DB group, accessible
-only from ECS task security groups.
+only from ECS task security groups.\\
 
 \textbf{Temporal} is consumed as a managed cloud service (Temporal Cloud),
-eliminating the need to operate the Temporal server cluster in production.
+eliminating the need to operate the Temporal server cluster in production.\\
 
 Runtime configuration for each service is stored as an encrypted JSON
 \texttt{SecureString} in AWS SSM Parameter Store
