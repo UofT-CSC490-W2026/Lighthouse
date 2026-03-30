@@ -51,10 +51,13 @@ from eval.synthetic import (
     shared_resolved_repository,
 )
 from eval.synthetic.compare import (
+    SyntheticPassAtKSummary,
     SyntheticRunComparison,
+    compute_synthetic_pass_at_k,
     render_synthetic_score_table,
     compare_synthetic_runs,
     render_synthetic_comparison_tables,
+    render_synthetic_pass_at_k_table,
 )
 from eval.synthetic.eval import (
     SyntheticRunSummary,
@@ -925,6 +928,31 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Display label for the Lighthouse run",
     )
 
+    pass_at_k_synthetic = subparsers.add_parser(
+        "pass-at-k-synthetic",
+        help="Aggregate multiple synthetic runs and compute pass@k metrics",
+    )
+    pass_at_k_synthetic.add_argument(
+        "--run-id",
+        action="append",
+        required=True,
+        default=[],
+        help="Synthetic run id to include; may be repeated",
+    )
+    pass_at_k_synthetic.add_argument(
+        "--k",
+        action="append",
+        type=int,
+        required=True,
+        default=[],
+        help="pass@k value to compute; may be repeated",
+    )
+    pass_at_k_synthetic.add_argument(
+        "--runs-root",
+        default=str(DEFAULT_SYNTHETIC_RUNS_ROOT),
+        help="Directory where synthetic evaluation runs are stored",
+    )
+
     run_synthetic_experiment = subparsers.add_parser(
         "run-synthetic-experiment",
         help="Prepare, index, generate, evaluate, and compare a synthetic experiment in one command",
@@ -1545,6 +1573,17 @@ def _cmd_compare_synthetic(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_pass_at_k_synthetic(args: argparse.Namespace) -> int:
+    runs_root = Path(args.runs_root)
+    summary = compute_synthetic_pass_at_k(
+        run_ids=args.run_id,
+        k_values=args.k,
+        runs_root=runs_root,
+    )
+    _print_synthetic_pass_at_k(summary)
+    return 0
+
+
 def _cmd_run_synthetic_experiment(args: argparse.Namespace) -> int:
     if args.max_tokens < 1:
         raise ValueError("--max-tokens must be at least 1")
@@ -1792,6 +1831,10 @@ def _print_synthetic_comparison(comparison: SyntheticRunComparison) -> None:
     print(render_synthetic_comparison_tables(comparison))
 
 
+def _print_synthetic_pass_at_k(summary: SyntheticPassAtKSummary) -> None:
+    print(render_synthetic_pass_at_k_table(summary))
+
+
 def _print_synthetic_experiment_result(result: SyntheticExperimentResult) -> None:
     _print_prepared_synthetic_workspace(result.workspace)
     print(f"Experiment report: {result.report_path.resolve()}")
@@ -1882,6 +1925,8 @@ def main() -> int:
         return _cmd_summarize_synthetic(args)
     if args.command == "compare-synthetic":
         return _cmd_compare_synthetic(args)
+    if args.command == "pass-at-k-synthetic":
+        return _cmd_pass_at_k_synthetic(args)
     if args.command == "run-synthetic-experiment":
         return _cmd_run_synthetic_experiment(args)
 
