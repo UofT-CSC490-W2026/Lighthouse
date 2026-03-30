@@ -18,7 +18,7 @@ import uuid
 from dataclasses import dataclass, field
 
 import pytest
-from temporalio import activity
+from temporalio import activity, workflow
 from temporalio.client import WorkflowFailureError
 from temporalio.worker import UnsandboxedWorkflowRunner, Worker
 
@@ -37,7 +37,17 @@ from ingestion.temporal.activities.inputs import (
     PublishStagedChunksOutput,
     UpdateBranchStatusInput,
 )
+from ingestion.temporal.activities.wiki import GenerateWikiInput
 from ingestion.temporal.workflows.index_branch import IndexBranchWorkflow
+
+
+@workflow.defn(name="GenerateWikiWorkflow")
+class _StubGenerateWikiWorkflow:
+    """Minimal stand-in for GenerateWikiWorkflow — completes instantly in tests."""
+
+    @workflow.run
+    async def run(self, input: GenerateWikiInput) -> str:
+        return "wiki stub"
 
 
 # ---------------------------------------------------------------------------
@@ -153,7 +163,7 @@ async def _run_workflow(workflow_environment, tracker, **input_overrides):
     async with Worker(
         workflow_environment.client,
         task_queue=queue,
-        workflows=[IndexBranchWorkflow],
+        workflows=[IndexBranchWorkflow, _StubGenerateWikiWorkflow],
         activities=make_mock_activities(tracker),
         workflow_runner=UnsandboxedWorkflowRunner(),
     ):
@@ -171,7 +181,7 @@ async def _run_workflow_expect_failure(workflow_environment, tracker, **input_ov
     async with Worker(
         workflow_environment.client,
         task_queue=queue,
-        workflows=[IndexBranchWorkflow],
+        workflows=[IndexBranchWorkflow, _StubGenerateWikiWorkflow],
         activities=make_mock_activities(tracker),
         workflow_runner=UnsandboxedWorkflowRunner(),
     ):

@@ -33,10 +33,6 @@ class WikiEngine:
         name="generate_wiki",
         description="Generate wiki documentation for an indexed repository.",
     )
-    @toolcall(
-        "generate_wiki",
-        description="Generate wiki documentation for an indexed repository.",
-    )
     async def generate_wiki(
         self,
         auth: AuthenticatedUser,

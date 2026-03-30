@@ -153,6 +153,7 @@ async def index_repos(request: IndexRequest):
                         chunker_strategy=repo.chunker_strategy
                         or settings.chunker_strategy,
                         embedding_strategy=settings.embedding_strategy,
+                        llm_strategy=settings.resolved_llm_strategy(),
                     ),
                     id=workflow_id,
                     task_queue=settings.temporal_task_queue,
@@ -228,6 +229,7 @@ async def github_webhook(request: Request):
         after_commit=after_commit,
         chunker_strategy=settings.chunker_strategy,
         embedding_strategy=settings.embedding_strategy,
+        llm_strategy=settings.resolved_llm_strategy(),
     )
     signal_input = IncrementalPushSignalInput(
         github_repo_id=github_repo_id,
@@ -237,6 +239,7 @@ async def github_webhook(request: Request):
         after_commit=after_commit,
         chunker_strategy=settings.chunker_strategy,
         embedding_strategy=settings.embedding_strategy,
+        llm_strategy=settings.resolved_llm_strategy(),
     )
 
     try:

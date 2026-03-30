@@ -7,6 +7,8 @@ from temporalio import workflow
 from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
+    from .generate_wiki import GenerateWikiWorkflow
+    from ..activities.wiki import GenerateWikiInput
     from ..activities import (
         EMBED_BATCH_SIZE,
         ChunkFilesInput,
@@ -156,7 +158,26 @@ class IndexBranchWorkflow:
                 retry_policy=_DB_RETRY,
             )
 
-            # 7. Best-effort cleanup of superseded publish versions
+            # 7. Best-effort wiki generation as a child workflow
+            try:
+                await workflow.execute_child_workflow(
+                    GenerateWikiWorkflow.run,
+                    GenerateWikiInput(
+                        repository_id=input.repository_id,
+                        github_repo_id=input.github_repo_id,
+                        full_name=input.full_name,
+                        branch=input.branch,
+                        llm_strategy=input.llm_strategy,
+                        embedding_strategy=input.embedding_strategy,
+                    ),
+                    id=f"wiki-{input.github_repo_id}-{input.branch}",
+                )
+            except Exception:
+                workflow.logger.warning(
+                    "Wiki generation failed for %s/%s", input.full_name, input.branch
+                )
+
+            # 8. Best-effort cleanup of superseded publish versions
             if publish_result.cleanup_targets:
                 try:
                     await workflow.execute_activity(
