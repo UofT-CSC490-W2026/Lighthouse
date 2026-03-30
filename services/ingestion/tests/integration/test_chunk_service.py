@@ -2,7 +2,7 @@ import json
 import uuid
 
 import pytest
-from db import Chunk, IndexedFile, StagingChunk
+from db import Chunk, IndexedBranch, IndexedFile, StagingChunk
 from ingestion.utilities.services.chunk import ChunkService, FilePublishCleanupTarget
 from testing_utils.factories import create_repository
 from testing_utils.mock_embedding import MockEmbeddingProvider
@@ -157,6 +157,62 @@ class TestChunkServiceFinal:
             )
             assert indexed_file.active_publish_id == batch_id
             assert chunk.publish_id == batch_id
+
+    def test_publish_incremental_batch_skips_stale_target_commit(self, db_manager, milvus_client):
+        repo = create_repository(db_manager)
+        svc = ChunkService(db_manager, milvus_client)
+        batch_id = str(uuid.uuid4())
+        content = f"content {uuid.uuid4().hex}"
+        svc.write_staging(
+            batch_id,
+            [
+                {
+                    "chunk_id": str(uuid.uuid4()),
+                    "repository_id": repo.id,
+                    "branch": "main",
+                    "file_path": "file0.py",
+                    "start_line": 1,
+                    "end_line": 10,
+                    "content": content,
+                    "language": "python",
+                    "chunk_hash": f"hash-{uuid.uuid4().hex}",
+                }
+            ],
+        )
+        svc.write_staging_embeddings(
+            batch_id,
+            0,
+            MockEmbeddingProvider(dimension=8).embed_batch([content]),
+        )
+        with db_manager.connection_context():
+            IndexedBranch.create(
+                repository=repo,
+                branch_name="main",
+                status="indexing",
+                target_commit="newer-commit",
+            )
+
+        cleanup_targets = svc.publish_incremental_batch(
+            batch_id=batch_id,
+            repository_id=repo.id,
+            branch="main",
+            changed_files=["file0.py"],
+            target_commit="older-commit",
+        )
+
+        assert cleanup_targets == []
+        with db_manager.connection_context():
+            assert not IndexedFile.select().where(
+                IndexedFile.repository == repo.id,
+                IndexedFile.branch_name == "main",
+                IndexedFile.file_path == "file0.py",
+            ).exists()
+            assert not Chunk.select().where(
+                Chunk.repository == repo.id,
+                Chunk.branch == "main",
+                Chunk.file_path == "file0.py",
+            ).exists()
+            assert not StagingChunk.select().where(StagingChunk.batch_id == batch_id).exists()
 
     def test_publish_full_batch_updates_all_indexed_files(self, db_manager, milvus_client):
         """publish_full_batch sets active_publish_id for new files and None for deleted ones."""

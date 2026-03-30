@@ -18,12 +18,13 @@ class TestBranchService:
     def test_update_status_updates_existing(self, db_manager):
         repo = create_repository(db_manager)
         svc = BranchService(db_manager)
-        svc.update_status(repo.id, "main", "indexing")
+        svc.update_status(repo.id, "main", "indexing", target_commit="abc123")
         svc.update_status(repo.id, "main", "indexed", latest_commit="abc123")
         with db_manager.connection_context():
             ib = IndexedBranch.get(IndexedBranch.repository == repo.id)
             assert ib.status == "indexed"
             assert ib.last_indexed_commit == "abc123"
+            assert ib.target_commit is None
 
     def test_indexed_status_sets_indexed_at(self, db_manager):
         repo = create_repository(db_manager)
@@ -48,6 +49,18 @@ class TestBranchService:
         with db_manager.connection_context():
             ib = IndexedBranch.get(IndexedBranch.repository == repo.id)
             assert ib.github_token_encrypted == "my-token"
+
+    def test_stale_indexed_update_does_not_overwrite_newer_target(self, db_manager):
+        repo = create_repository(db_manager)
+        svc = BranchService(db_manager)
+        svc.update_status(repo.id, "main", "indexing", target_commit="new123")
+        result = svc.update_status(repo.id, "main", "indexed", latest_commit="old123")
+        with db_manager.connection_context():
+            ib = IndexedBranch.get(IndexedBranch.repository == repo.id)
+            assert result == "indexing"
+            assert ib.status == "indexing"
+            assert ib.target_commit == "new123"
+            assert ib.last_indexed_commit is None
 
     def test_get_github_token_exists(self, db_manager):
         repo = create_repository(db_manager)

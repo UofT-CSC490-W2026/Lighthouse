@@ -4,7 +4,7 @@ import hashlib
 import hmac
 import json
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
@@ -233,10 +233,62 @@ class TestIngestionEndpoints:
         )
         assert resp.status_code == 200
         assert resp.json()["status"] == "accepted"
+        assert resp.json()["workflow_id"] == "incremental-123-main"
         start_call = (
             client._transport.app.state.temporal_client.start_workflow.await_args
         )
+        assert start_call.kwargs["id"] == "incremental-123-main"
         assert start_call.args[1].embedding_strategy == "bedrock"
+
+    @pytest.mark.asyncio
+    async def test_webhook_duplicate_push_signals_existing_workflow(
+        self, client, test_settings, monkeypatch
+    ):
+        class FakeWorkflowAlreadyStartedError(Exception):
+            pass
+
+        handle = SimpleNamespace(signal=AsyncMock())
+        payload = {
+            "ref": "refs/heads/main",
+            "before": "aaa",
+            "after": "bbb",
+            "repository": {"id": 123, "full_name": "owner/repo"},
+        }
+        body = json.dumps(payload).encode()
+        sig = (
+            "sha256="
+            + hmac.new(
+                test_settings.github_webhook_secret.encode(), body, hashlib.sha256
+            ).hexdigest()
+        )
+
+        monkeypatch.setattr(
+            "ingestion.main.WorkflowAlreadyStartedError",
+            FakeWorkflowAlreadyStartedError,
+        )
+        client._transport.app.state.temporal_client.start_workflow = AsyncMock(
+            side_effect=FakeWorkflowAlreadyStartedError("already running")
+        )
+        client._transport.app.state.temporal_client.get_workflow_handle = MagicMock(
+            return_value=handle
+        )
+
+        resp = await client.post(
+            "/webhook",
+            content=body,
+            headers={
+                "X-Hub-Signature-256": sig,
+                "X-GitHub-Event": "push",
+                "Content-Type": "application/json",
+            },
+        )
+
+        assert resp.status_code == 200
+        assert resp.json()["workflow_id"] == "incremental-123-main"
+        client._transport.app.state.temporal_client.get_workflow_handle.assert_called_once_with(
+            "incremental-123-main"
+        )
+        handle.signal.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_webhook_invalid_signature(self, client):

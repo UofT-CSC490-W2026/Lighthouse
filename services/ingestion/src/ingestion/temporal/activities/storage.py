@@ -30,6 +30,7 @@ async def publish_staged_chunks(
             repository_id=input.repository_id,
             branch=input.branch,
             changed_files=input.changed_files,
+            target_commit=input.target_commit,
         )
         return PublishStagedChunksOutput(
             cleanup_targets=[

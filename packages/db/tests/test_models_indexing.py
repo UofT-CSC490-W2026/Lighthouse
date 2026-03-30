@@ -16,6 +16,7 @@ class TestIndexedBranch:
         with db_manager.connection_context():
             ib = IndexedBranch.create(repository=repo, branch_name="main")
             assert ib.status == "pending"
+            assert ib.target_commit is None
             assert ib.last_indexed_commit is None
 
     def test_unique_repo_branch(self, db_manager):

@@ -19,6 +19,7 @@ class UpdateBranchStatusInput:
     branch: str
     status: str
     latest_commit: str | None = None
+    target_commit: str | None = None
     github_token: str | None = None
 
 
@@ -71,6 +72,7 @@ class PublishStagedChunksInput:
     batch_id: str
     repository_id: str
     branch: str
+    target_commit: str | None = None
     changed_files: list[str] = field(default_factory=list)
 
 
@@ -126,6 +128,16 @@ class IncrementalIndexInput:
     branch: str
     before_commit: str
     after_commit: str
+    chunker_strategy: str = "sliding_window"
     embedding_strategy: str = "openai"
+
+
+@dataclass
+class IncrementalPushSignalInput:
+    github_repo_id: int
+    full_name: str
+    branch: str
+    before_commit: str
+    after_commit: str
     chunker_strategy: str = "sliding_window"
     embedding_strategy: str = "openai"

@@ -36,6 +36,7 @@ class IndexedBranch(BaseModel):
         index=True,
     )
     branch_name = CharField()
+    target_commit = CharField(null=True)
     last_indexed_commit = CharField(null=True)
     status = CharField(default="pending")
     github_token_encrypted = TextField(null=True)

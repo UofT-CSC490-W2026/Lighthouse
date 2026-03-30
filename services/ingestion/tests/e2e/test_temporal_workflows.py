@@ -5,6 +5,7 @@ and early exit paths for all three workflows. No real Postgres or Milvus.
 """
 from __future__ import annotations
 
+import asyncio
 import uuid
 from dataclasses import dataclass, field
 
@@ -27,6 +28,7 @@ from ingestion.temporal.activities.inputs import (
     GitCloneFetchOutput,
     IndexBranchInput,
     IncrementalIndexInput,
+    IncrementalPushSignalInput,
     PublishFullBranchInput,
     PublishStagedChunksInput,
     PublishStagedChunksOutput,
@@ -49,6 +51,8 @@ class ActivityTracker:
     fail_on: str | None = None
     chunk_count: int = 10
     changed_files: list[str] = field(default_factory=lambda: ["a.py", "b.py"])
+    delay_on: str | None = None
+    delay_seconds: float = 0.0
 
 
 def make_mock_activities(tracker: ActivityTracker):
@@ -71,6 +75,8 @@ def make_mock_activities(tracker: ActivityTracker):
     @activity.defn(name="git_clone_or_fetch")
     async def mock_git_clone(input: GitCloneFetchInput) -> GitCloneFetchOutput:
         tracker.calls.append(("git_clone_or_fetch", input))
+        if tracker.delay_on == "git_clone_or_fetch":
+            await asyncio.sleep(tracker.delay_seconds)
         if tracker.fail_on == "git_clone_or_fetch":
             raise RuntimeError("mock git failure")
         return GitCloneFetchOutput(
@@ -388,6 +394,51 @@ class TestIncrementalIndexWorkflow:
         # Should still mark indexed
         status_calls = [inp for name, inp in tracker.calls if name == "update_branch_status"]
         assert any(s.status == "indexed" for s in status_calls)
+
+    async def test_signal_queues_second_push_on_same_workflow(self, workflow_environment):
+        tracker = ActivityTracker(
+            chunk_count=1,
+            changed_files=["a.py"],
+            delay_on="git_clone_or_fetch",
+            delay_seconds=1.0,
+        )
+        queue = _queue()
+        async with Worker(
+            workflow_environment.client,
+            task_queue=queue,
+            workflows=[IncrementalIndexWorkflow],
+            activities=make_mock_activities(tracker),
+            workflow_runner=UnsandboxedWorkflowRunner(),
+        ):
+            handle = await workflow_environment.client.start_workflow(
+                IncrementalIndexWorkflow.run,
+                IncrementalIndexInput(
+                    github_repo_id=1,
+                    full_name="o/r",
+                    branch="main",
+                    before_commit="aaa11111",
+                    after_commit="bbb22222",
+                ),
+                id=f"test-{uuid.uuid4().hex[:8]}",
+                task_queue=queue,
+            )
+            await handle.signal(
+                IncrementalIndexWorkflow.enqueue_push,
+                IncrementalPushSignalInput(
+                    github_repo_id=1,
+                    full_name="o/r",
+                    branch="main",
+                    before_commit="bbb22222",
+                    after_commit="ccc33333",
+                ),
+            )
+            result = await handle.result()
+
+        assert "bbb22222..ccc33333" in result
+        changed_inputs = [inp for name, inp in tracker.calls if name == "get_changed_files"]
+        assert [inp.after_commit for inp in changed_inputs] == ["bbb22222", "ccc33333"]
+        status_calls = [inp for name, inp in tracker.calls if name == "update_branch_status"]
+        assert status_calls[-1].latest_commit == "ccc33333"
 
     async def test_changed_files_but_zero_chunks(self, workflow_environment):
         tracker = ActivityTracker(chunk_count=0, changed_files=["deleted.py"])

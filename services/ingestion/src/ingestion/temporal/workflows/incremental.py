@@ -19,6 +19,7 @@ with workflow.unsafe.imports_passed_through():
         GitCloneFetchInput,
         GitCloneFetchOutput,
         IncrementalIndexInput,
+        IncrementalPushSignalInput,
         PublishStagedChunksInput,
         PublishStagedChunksOutput,
         UpdateBranchStatusInput,
@@ -52,41 +53,84 @@ _EMBED_RETRY = RetryPolicy(
     maximum_interval=timedelta(seconds=60),
 )
 
+_IDLE_TIMEOUT = timedelta(seconds=15)
+
 
 @workflow.defn
 class IncrementalIndexWorkflow:
-    """Workflow for incremental re-indexing on push events."""
+    """Branch-scoped coordinator for incremental re-indexing on push events."""
+
+    def __init__(self) -> None:
+        self._pending_push: IncrementalPushSignalInput | None = None
+
+    @workflow.signal
+    def enqueue_push(self, input: IncrementalPushSignalInput) -> None:
+        """Queue the latest push for this branch, coalescing earlier pending pushes."""
+        self._pending_push = input
 
     @workflow.run
     async def run(self, input: IncrementalIndexInput) -> str:
-        settings_input = EnsureRepoInput(
+        current_push = IncrementalPushSignalInput(
             github_repo_id=input.github_repo_id,
-            repo_url="",
             full_name=input.full_name,
+            branch=input.branch,
+            before_commit=input.before_commit,
+            after_commit=input.after_commit,
+            chunker_strategy=input.chunker_strategy,
+            embedding_strategy=input.embedding_strategy,
         )
-        # Resolve repository_id
+
         repository_id = await workflow.execute_activity(
             ensure_repository_record,
-            settings_input,
+            EnsureRepoInput(
+                github_repo_id=input.github_repo_id,
+                repo_url="",
+                full_name=input.full_name,
+            ),
             start_to_close_timeout=timedelta(seconds=30),
             retry_policy=_DB_RETRY,
         )
 
+        last_result = f"No changes for {input.full_name}/{input.branch}"
+        while current_push is not None:
+            last_result = await self._run_incremental_pass(repository_id, current_push)
+
+            if self._pending_push is not None:
+                current_push = self._pending_push
+                self._pending_push = None
+                continue
+
+            try:
+                await workflow.wait_condition(
+                    lambda: self._pending_push is not None,
+                    timeout=_IDLE_TIMEOUT,
+                )
+            except TimeoutError:
+                break
+            current_push = self._pending_push
+            self._pending_push = None
+
+        return last_result
+
+    async def _run_incremental_pass(
+        self,
+        repository_id: str,
+        input: IncrementalPushSignalInput,
+    ) -> str:
         batch_id: str | None = None
         try:
-            # 1. Mark branch as indexing
             await workflow.execute_activity(
                 update_branch_status,
                 UpdateBranchStatusInput(
                     repository_id=repository_id,
                     branch=input.branch,
                     status="indexing",
+                    target_commit=input.after_commit,
                 ),
                 start_to_close_timeout=timedelta(seconds=30),
                 retry_policy=_DB_RETRY,
             )
 
-            # 2. Clone or fetch
             git_result: GitCloneFetchOutput = await workflow.execute_activity(
                 git_clone_or_fetch,
                 GitCloneFetchInput(
@@ -99,7 +143,6 @@ class IncrementalIndexWorkflow:
                 retry_policy=_GIT_RETRY,
             )
 
-            # 3. Get changed files
             changed_files: list[str] = await workflow.execute_activity(
                 get_changed_files,
                 GetChangedFilesInput(
@@ -125,7 +168,6 @@ class IncrementalIndexWorkflow:
                 )
                 return f"No changes for {input.full_name}/{input.branch}"
 
-            # 4. Chunk changed files -> staging
             chunk_result: ChunkFilesOutput = await workflow.execute_activity(
                 chunk_files,
                 ChunkFilesInput(
@@ -143,7 +185,6 @@ class IncrementalIndexWorkflow:
 
             publish_result = PublishStagedChunksOutput()
             if chunk_result.chunk_count > 0:
-                # 5. Embed in batches
                 embed_futures = []
                 for offset in range(0, chunk_result.chunk_count, EMBED_BATCH_SIZE):
                     embed_futures.append(
@@ -161,20 +202,19 @@ class IncrementalIndexWorkflow:
                     )
                 await asyncio.gather(*embed_futures)
 
-            # 6. Publish staged chunks and switch active file versions
             publish_result = await workflow.execute_activity(
                 publish_staged_chunks,
                 PublishStagedChunksInput(
                     batch_id=batch_id,
                     repository_id=repository_id,
                     branch=input.branch,
+                    target_commit=input.after_commit,
                     changed_files=changed_files,
                 ),
                 start_to_close_timeout=timedelta(minutes=5),
                 retry_policy=_DB_RETRY,
             )
 
-            # 7. Mark indexed
             await workflow.execute_activity(
                 update_branch_status,
                 UpdateBranchStatusInput(
@@ -187,7 +227,6 @@ class IncrementalIndexWorkflow:
                 retry_policy=_DB_RETRY,
             )
 
-            # 8. Best-effort cleanup of superseded publishes
             if publish_result.cleanup_targets:
                 try:
                     await workflow.execute_activity(
@@ -212,7 +251,6 @@ class IncrementalIndexWorkflow:
                 f"{input.before_commit[:8]}..{input.after_commit[:8]} "
                 f"({len(changed_files)} files)"
             )
-
         except Exception:
             await workflow.execute_activity(
                 update_branch_status,
@@ -220,6 +258,7 @@ class IncrementalIndexWorkflow:
                     repository_id=repository_id,
                     branch=input.branch,
                     status="failed",
+                    latest_commit=input.after_commit,
                 ),
                 start_to_close_timeout=timedelta(seconds=30),
                 retry_policy=_DB_RETRY,

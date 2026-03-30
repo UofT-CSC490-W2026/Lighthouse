@@ -112,11 +112,25 @@ class ChunkService:
         repository_id: str,
         branch: str,
         changed_files: list[str],
+        target_commit: str | None = None,
     ) -> list[FilePublishCleanupTarget]:
         """Publish staged chunks for changed files without a delete-first gap."""
         milvus = self._ensure_milvus()
 
         with self.db.connection_context():
+            if target_commit is not None:
+                from db import IndexedBranch
+
+                indexed_branch = IndexedBranch.get_or_none(
+                    (IndexedBranch.repository == repository_id)
+                    & (IndexedBranch.branch_name == branch)
+                )
+                if indexed_branch is None or indexed_branch.target_commit != target_commit:
+                    StagingChunk.delete().where(
+                        StagingChunk.batch_id == batch_id
+                    ).execute()
+                    return []
+
             staging_rows = list(
                 StagingChunk.select(
                     StagingChunk.id,

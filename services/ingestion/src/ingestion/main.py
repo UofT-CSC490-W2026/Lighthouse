@@ -31,6 +31,7 @@ from .temporal import (
 from .temporal.activities import (
     GenerateWikiInput,
     IncrementalIndexInput,
+    IncrementalPushSignalInput,
     IndexBranchInput,
 )
 from .embedding import EmbeddingStrategy
@@ -216,22 +217,36 @@ async def github_webhook(request: Request):
 
     # Start incremental indexing workflow
     temporal: Client = app.state.temporal_client
-    workflow_id = f"incremental-{github_repo_id}-{branch}-{after_commit[:8]}"
-
-    await temporal.start_workflow(
-        IncrementalIndexWorkflow.run,
-        IncrementalIndexInput(
-            github_repo_id=github_repo_id,
-            full_name=full_name,
-            branch=branch,
-            before_commit=before_commit,
-            after_commit=after_commit,
-            chunker_strategy=settings.chunker_strategy,
-            embedding_strategy=settings.embedding_strategy,
-        ),
-        id=workflow_id,
-        task_queue=settings.temporal_task_queue,
+    workflow_id = f"incremental-{github_repo_id}-{branch}"
+    workflow_input = IncrementalIndexInput(
+        github_repo_id=github_repo_id,
+        full_name=full_name,
+        branch=branch,
+        before_commit=before_commit,
+        after_commit=after_commit,
+        chunker_strategy=settings.chunker_strategy,
+        embedding_strategy=settings.embedding_strategy,
     )
+    signal_input = IncrementalPushSignalInput(
+        github_repo_id=github_repo_id,
+        full_name=full_name,
+        branch=branch,
+        before_commit=before_commit,
+        after_commit=after_commit,
+        chunker_strategy=settings.chunker_strategy,
+        embedding_strategy=settings.embedding_strategy,
+    )
+
+    try:
+        await temporal.start_workflow(
+            IncrementalIndexWorkflow.run,
+            workflow_input,
+            id=workflow_id,
+            task_queue=settings.temporal_task_queue,
+        )
+    except WorkflowAlreadyStartedError:
+        handle = temporal.get_workflow_handle(workflow_id)
+        await handle.signal(IncrementalIndexWorkflow.enqueue_push, signal_input)
 
     logger.info("Started incremental indexing workflow %s", workflow_id)
     return {"status": "accepted", "workflow_id": workflow_id}

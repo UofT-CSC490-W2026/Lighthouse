@@ -19,6 +19,7 @@ async def update_branch_status(input: UpdateBranchStatusInput) -> str:
             branch=input.branch,
             status=input.status,
             latest_commit=input.latest_commit,
+            target_commit=input.target_commit,
             github_token=input.github_token,
         )
     finally:

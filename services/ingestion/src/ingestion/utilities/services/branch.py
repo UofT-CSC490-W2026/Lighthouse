@@ -17,6 +17,7 @@ class BranchService:
         branch: str,
         status: str,
         latest_commit: str | None = None,
+        target_commit: str | None = None,
         github_token: str | None = None,
     ) -> str:
         """Update or create an IndexedBranch record with the given status."""
@@ -29,12 +30,33 @@ class BranchService:
                     "github_token_encrypted": github_token,
                 },
             )
+            if target_commit is not None:
+                indexed_branch.target_commit = target_commit
+
+            current_target_commit = indexed_branch.target_commit
+            commit_matches_target = (
+                latest_commit is not None
+                and current_target_commit is not None
+                and latest_commit == current_target_commit
+            )
+
+            if status == "failed" and current_target_commit and latest_commit is not None:
+                if latest_commit != current_target_commit:
+                    return indexed_branch.status
+
+            if status == "indexed" and latest_commit is not None and current_target_commit is not None:
+                if latest_commit != current_target_commit:
+                    return indexed_branch.status
+
             indexed_branch.status = status
             indexed_branch.updated_at = datetime.now(timezone.utc)
             if latest_commit is not None:
-                indexed_branch.last_indexed_commit = latest_commit
+                if status != "indexed" or current_target_commit is None or commit_matches_target:
+                    indexed_branch.last_indexed_commit = latest_commit
             if status == "indexed":
                 indexed_branch.indexed_at = datetime.now(timezone.utc)
+                if commit_matches_target:
+                    indexed_branch.target_commit = None
             if github_token is not None:
                 indexed_branch.github_token_encrypted = github_token
             indexed_branch.save()
