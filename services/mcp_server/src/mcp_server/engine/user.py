@@ -26,6 +26,11 @@ if TYPE_CHECKING:
 class UserEngine:
     """Handle authenticated user profile and indexed-repository operations."""
 
+    LIST_USER_REPOS_DESCRIPTION = (
+        "List repositories visible to the current user."
+        " Use first to confirm repository names/visibility before retrieval calls."
+    )
+
     def __init__(self, engine: Engine) -> None:
         """Bind the user service to the shared engine."""
         self.engine = engine
@@ -56,11 +61,11 @@ class UserEngine:
         "GET",
         "/v1/user/repos",
         name="list_user_repos",
-        description="List repositories visible to the current user.",
+        description=LIST_USER_REPOS_DESCRIPTION,
     )
     @toolcall(
         "list_user_repos",
-        description="List repositories visible to the current user.",
+        description=LIST_USER_REPOS_DESCRIPTION,
     )
     async def list_user_repos(
         self, auth: AuthenticatedUser

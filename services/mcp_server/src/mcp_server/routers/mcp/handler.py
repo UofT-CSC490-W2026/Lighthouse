@@ -26,27 +26,34 @@ def _safe_log(app: Any, exc: Exception, envelope) -> None:
 MCP_INSTRUCTIONS = """
 Lighthouse is a retrieval-focused MCP server for coding agents.
 
-Use this server when you need better context for a coding task than is available from the
-current file or local workspace alone. The goal is to surface the broader understanding
-needed to make correct changes, such as architectural decisions, important invariants,
-cross-file relationships, repository conventions, and deeper codebase context.
+Prefer using this server when a coding task likely depends on information outside the currently open
+files or local workspace snapshot, especially information that may already be indexed in
+Lighthouse (for example shared services, internal packages, dependencies, or docs-like context).
+The goal is to surface broader understanding needed to make correct changes: architecture,
+invariants, cross-file relationships, conventions, and non-local dependencies.
+
+Use Lighthouse when:
+- the user asks for context from parts of the codebase not currently visible
+- the task references a service/module/package/dependency outside the open workspace context
+- you need broader architecture or convention knowledge before making edits
+
+Avoid Lighthouse when:
+- the task is fully local and can be completed confidently from currently visible files
+- retrieval would not change your plan or decisions
 
 The primary retrieval entrypoint is `search_code`.
 
-When calling `search_code`, provide:
-- the repository you are working in
-- the search query or task you are trying to complete
-- the branch you want to search
-- an optional file path when you want to narrow the search to a specific file
+Recommended call order:
+1. `list_user_repos` when repository visibility or exact repository names are uncertain
+2. `search_code` for coding-context retrieval
+3. `search_wiki` or `get_wiki` when generated repository docs are likely useful and relevant doc
+snippets were not produced from the search_code call
 
 Use Lighthouse to answer questions like:
 - What context is missing for this change?
 - What parts of the codebase or architecture matter for this task?
 - Are there conventions, historical constraints, or non-local dependencies I should know?
 - What additional files or code regions should I inspect before editing?
-
-Prefer Lighthouse when the task likely depends on broader repository understanding rather
-than only the code already visible in the editor.
 """.strip()
 
 
@@ -135,7 +142,7 @@ class MCPToolHandler:
         # the module globals of the underlying function.
         fn = getattr(method, "__func__", method)
         try:
-            resolved_hints = typing.get_type_hints(fn)
+            resolved_hints = typing.get_type_hints(fn, include_extras=True)
         except Exception:
             resolved_hints = {}
 

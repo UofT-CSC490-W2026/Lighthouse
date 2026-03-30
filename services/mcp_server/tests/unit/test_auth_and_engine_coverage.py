@@ -10,7 +10,7 @@ import pytest
 from cryptography.fernet import Fernet
 from fastapi import Request
 
-from db import IndexedBranch, Repository, Session, User
+from db import IndexedBranch, Session, User
 from mcp_server.engine.auth import AuthEngine
 from mcp_server.engine.search import SearchEngine
 from mcp_server.engine.user import AddRepoBranchesRequest, AddUserRepoRequest, UserEngine
@@ -329,6 +329,8 @@ async def test_search_and_user_engines_cover_error_paths(monkeypatch):
     monkeypatch.setattr(search_engine, "_resolve_github_repo_id", MagicMock(return_value=11))
     with pytest.raises(RequestError, match="query is required"):
         await search_engine.search_code(auth, "owner/repo", "   ")
+    with pytest.raises(RequestError, match="Invalid search request payload"):
+        await search_engine.search_code(auth, "owner/repo", "fix bug", top_k=0)
     validation_error = Exception()
     monkeypatch.setattr(
         "mcp_server.engine.search.SearchRequest",
@@ -415,13 +417,14 @@ async def test_search_and_user_engines_cover_error_paths(monkeypatch):
         " owner/repo ",
         "fix bug",
         file_path=" a.py ",
+        top_k=7,
     )
     assert captured_request == {
         "query": "fix bug",
         "github_repo_id": 11,
         "branch": "main",
         "file_path": "a.py",
-        "top_k": 10,
+        "top_k": 7,
         "context_sources": ["code", "wiki"],
     }
     assert result.status == "ok"
