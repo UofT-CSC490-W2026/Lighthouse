@@ -1,8 +1,10 @@
 # Lighthouse
 
 <!-- coverage:start -->
+
 [![Tests](https://github.com/UofT-CSC490-W2026/Lighthouse/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/UofT-CSC490-W2026/Lighthouse/actions/workflows/tests.yml)
 ![Test Coverage](https://img.shields.io/badge/test%20coverage-97.27%25-brightgreen)
+
 <!-- coverage:end -->
 
 Better context for coding agents.
@@ -53,7 +55,7 @@ lighthouse/
 - [Docker Desktop](https://docs.docker.com/desktop/) for containerization.
 - [`uv`](https://docs.astral.sh/uv/getting-started/installation/) for Python package management.
 - [`bun`](https://bun.sh/docs/installation) for JavaScript package management.
-- `Terraform`(https://developer.hashicorp.com/terraform/tutorials/aws-get-started/install-cli) for infrastructure as code.
+- [Terraform](https://developer.hashicorp.com/terraform/tutorials/aws-get-started/install-cli) for infrastructure as code.
 - [`ngrok`](https://ngrok.com/download) for local tunneling. Install this if you want to use the `/webhook` endpoint of the ingestion service.
 
 ### Setting Up the Local Environment
