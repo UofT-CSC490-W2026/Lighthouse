@@ -131,12 +131,24 @@ export interface CodeContextRequest {
 }
 
 export interface CodeContextSnippet {
+  context_source: "code";
   file_path: string;
   start_line: number | null;
   end_line: number | null;
   content: string;
   reason: string | null;
 }
+
+export interface WikiContextSnippet {
+  context_source: "wiki";
+  content: string;
+  reason: string | null;
+  page_title: string | null;
+  slug: string | null;
+  section_path: string | null;
+}
+
+export type ContextSnippet = CodeContextSnippet | WikiContextSnippet;
 
 export interface CodeContextResponse {
   status: string;
@@ -145,6 +157,6 @@ export interface CodeContextResponse {
   branch: string;
   query: string;
   requested_by_user_id: string;
-  snippets: CodeContextSnippet[];
+  snippets: ContextSnippet[];
   follow_up: string[];
 }

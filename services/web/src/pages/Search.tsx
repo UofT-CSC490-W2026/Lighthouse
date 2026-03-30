@@ -4,6 +4,7 @@ import { apiFetch, type CodeContextRequest, type CodeContextResponse, type UserR
 import { Navbar } from "@/components/Navbar";
 import { useUser } from "@/lib/hooks";
 import { SnippetCard } from "@/components/SnippetCard";
+import { WikiCard } from "@/components/WikiCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -262,13 +263,17 @@ export default function Search() {
                     No snippets returned.
                   </div>
                 ) : (
-                  result.snippets.map((snippet, index) => (
-                    <SnippetCard
-                      key={`${snippet.file_path}-${snippet.start_line}-${index}`}
-                      snippet={snippet}
-                      branch={result.branch}
-                    />
-                  ))
+                  result.snippets.map((snippet, index) =>
+                    snippet.context_source === "wiki" ? (
+                      <WikiCard key={`wiki-${snippet.slug}-${index}`} snippet={snippet} />
+                    ) : (
+                      <SnippetCard
+                        key={`${snippet.file_path}-${snippet.start_line}-${index}`}
+                        snippet={snippet}
+                        branch={result.branch}
+                      />
+                    ),
+                  )
                 )}
               </div>
 
