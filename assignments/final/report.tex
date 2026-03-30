@@ -161,7 +161,7 @@ service boundaries, and years of accumulated architectural conventions—this
 constraint is a critical bottleneck.
 Agents that lack knowledge of upstream API contracts, cross-repository
 dependencies, or established design patterns produce incorrect, inconsistent, or
-redundant code.
+redundant code.\\
 
 We present \textbf{Lighthouse}, a retrieval-augmented context engine designed
 specifically to address this gap for AI coding agents.
@@ -202,7 +202,7 @@ Developers navigating this environment carry substantial implicit knowledge: the
 know which endpoints are stable versus unstable, which patterns are idiomatic in
 the organization's codebase, and which decisions were made for historical reasons
 that are no longer obvious from the code alone.
-An AI coding agent starting a new session has none of this knowledge.
+An AI coding agent starting a new session has none of this knowledge.\\
 
 This produces a concrete and common class of agent failure.
 When an agent is asked to implement a new feature that calls an internal service,
@@ -214,7 +214,7 @@ exists two repositories away.
 When asked to refactor a shared utility, it cannot reason about downstream
 consumers it has never seen.
 In each case, the agent's output is syntactically plausible but semantically
-wrong—and the error is invisible until it propagates to testing or review.
+wrong—and the error is invisible until it propagates to testing or review.\\
 
 The root cause is not a deficiency in the agent's reasoning capability; it is a
 deficiency in the information available to it.
@@ -251,7 +251,7 @@ backend (PostgreSQL for metadata and full-text search, Milvus for dense vector
 retrieval).
 A separate workflow generates natural-language wiki documentation from the
 indexed code using an LLM, providing an additional retrieval surface for
-architectural and behavioral queries.
+architectural and behavioral queries.\\
 
 At query time, a hybrid retrieval pipeline combines dense vector similarity
 search, PostgreSQL full-text search, LLM-driven keyword expansion, and
@@ -259,7 +259,7 @@ Cohere reranking to surface the most relevant code snippets and documentation
 from across all indexed repositories.
 The system is exposed to coding agents via the \textbf{Model Context Protocol
 (MCP)}, a standardized tool-use interface that allows any MCP-compatible agent
-to query Lighthouse without any agent-side modification.
+to query Lighthouse without any agent-side modification.\\
 
 We make the following contributions:
 
