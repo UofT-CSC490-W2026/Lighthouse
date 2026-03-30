@@ -17,9 +17,26 @@ async function getErrorDetail(res: Response): Promise<string> {
 
   if (contentType.includes("application/json")) {
     try {
-      const body = (await res.json()) as { detail?: unknown };
+      const body = (await res.json()) as {
+        detail?: unknown;
+      };
       if (typeof body.detail === "string" && body.detail.trim()) {
         return body.detail;
+      }
+      if (body.detail && typeof body.detail === "object") {
+        const detail = body.detail as {
+          message?: unknown;
+          error_code?: unknown;
+          error_id?: unknown;
+        };
+        if (typeof detail.message === "string" && detail.message.trim()) {
+          const code = typeof detail.error_code === "string" ? detail.error_code : "";
+          const errorId = typeof detail.error_id === "string" ? detail.error_id : "";
+          const suffix = [code ? `code=${code}` : "", errorId ? `error_id=${errorId}` : ""]
+            .filter(Boolean)
+            .join(", ");
+          return suffix ? `${detail.message} (${suffix})` : detail.message;
+        }
       }
       return JSON.stringify(body);
     } catch {

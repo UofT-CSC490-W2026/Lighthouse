@@ -101,6 +101,24 @@ async def test_search_endpoint_dispatches_wiki_requests(monkeypatch):
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_search_endpoint_returns_structured_branch_error(monkeypatch):
+    strategy = SimpleNamespace(search=AsyncMock(side_effect=BranchNotIndexedError("dev", indexed_branches=["main"])))
+    monkeypatch.setattr(
+        "search.main.app",
+        SimpleNamespace(state=SimpleNamespace(strategy=strategy, wiki_strategy=MagicMock())),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await search(SearchRequest(query="q", github_repo_id=1, branch="dev"))
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail["code"] == "BRANCH_UNAVAILABLE"
+    assert exc_info.value.detail["context"]["requested_branch"] == "dev"
+    assert exc_info.value.detail["context"]["indexed_branches"] == ["main"]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_search_endpoint_fuses_code_and_wiki_requests(monkeypatch):
     strategy = SimpleNamespace(
         search=AsyncMock(

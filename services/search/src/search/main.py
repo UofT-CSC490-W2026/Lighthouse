@@ -239,7 +239,18 @@ async def search(request: SearchRequest) -> SearchResult | WikiSearchResult | Co
     try:
         return await _search_impl(request)
     except BranchNotIndexedError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "code": "BRANCH_UNAVAILABLE",
+                "message": str(exc),
+                "recoverable": True,
+                "context": {
+                    "requested_branch": exc.branch,
+                    "indexed_branches": exc.indexed_branches,
+                },
+            },
+        ) from exc
 
 @app.post("/search/wiki", response_model=WikiSearchResult, dependencies=[Depends(verify_internal_token)])
 async def search_wiki(request: WikiSearchRequest) -> WikiSearchResult:
@@ -247,7 +258,18 @@ async def search_wiki(request: WikiSearchRequest) -> WikiSearchResult:
         result = await _search_impl(request)
         return WikiSearchResult.model_validate(result.model_dump(mode="json"))
     except BranchNotIndexedError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "code": "BRANCH_UNAVAILABLE",
+                "message": str(exc),
+                "recoverable": True,
+                "context": {
+                    "requested_branch": exc.branch,
+                    "indexed_branches": exc.indexed_branches,
+                },
+            },
+        ) from exc
 
 
 @app.get("/health")

@@ -11,9 +11,9 @@ from shared.schemas.ingestion import IndexAcceptedResponse, IndexRequest, RepoIn
 
 from db import IndexedBranch, Repository, UserHiddenRepository
 from ..utilities import (
+    AppError,
     AuthenticatedUser,
     GitHubRepository,
-    RequestError,
     get_logger,
     httproute,
     toolcall,
@@ -138,7 +138,14 @@ class UserEngine:
         normalized_full_name = self._normalize_full_name(full_name)
         requested_branches = self._normalize_branch_names(request.branches)
         if not requested_branches:
-            raise RequestError("At least one branch is required.", status_code=422)
+            raise AppError(
+                message="At least one branch is required.",
+                status_code=422,
+                error_code="INVALID_ARGUMENT",
+                recoverable=True,
+                context={"field": "branches"},
+                internal_message="All provided branches were blank after normalization.",
+            )
 
         visible_private_repo_ids = (
             await self.engine.app.authenticator.list_visible_private_repository_ids(
@@ -152,9 +159,12 @@ class UserEngine:
             visible_private_repo_ids,
         )
         if repo is None:
-            raise RequestError(
-                "Repository does not exist or you do not currently have access to it.",
+            raise AppError(
+                message="Repository does not exist or you do not currently have access to it.",
                 status_code=404,
+                error_code="REPOSITORY_NOT_FOUND_OR_INACCESSIBLE",
+                recoverable=True,
+                context={"full_name": normalized_full_name},
             )
 
         existing_branch_names = {branch.branch_name for branch in indexed_branches}
@@ -162,9 +172,12 @@ class UserEngine:
             branch for branch in requested_branches if branch not in existing_branch_names
         ]
         if not new_branches:
-            raise RequestError(
-                "All requested branches are already indexed for this repository.",
+            raise AppError(
+                message="All requested branches are already indexed for this repository.",
                 status_code=409,
+                error_code="CONFLICT",
+                recoverable=True,
+                context={"full_name": normalized_full_name},
             )
 
         github_repo = await self.engine.app.authenticator.fetch_github_repository(
@@ -241,25 +254,33 @@ class UserEngine:
                 )
                 resp.raise_for_status()
         except httpx.HTTPStatusError as exc:
-            self.log.error(
-                "Ingestion service returned %s for %s: %s",
-                exc.response.status_code,
-                github_repo.full_name,
-                exc.response.text,
-            )
-            raise RequestError(
-                f"Ingestion service error: {exc.response.status_code}",
+            raise AppError(
+                message=f"Ingestion service error: {exc.response.status_code}",
                 status_code=502,
+                error_code="UPSTREAM_ERROR",
+                recoverable=True,
+                context={
+                    "service": "ingestion",
+                    "repository": github_repo.full_name,
+                    "upstream_status": exc.response.status_code,
+                },
+                internal_message=(
+                    f"Ingestion service returned {exc.response.status_code} for "
+                    f"{github_repo.full_name}."
+                ),
+                upstream_detail=exc.response.text,
             ) from exc
         except httpx.RequestError as exc:
-            self.log.error(
-                "Failed to reach ingestion service for %s: %s",
-                github_repo.full_name,
-                exc,
-            )
-            raise RequestError(
-                "Ingestion service unavailable.",
+            raise AppError(
+                message="Ingestion service unavailable.",
                 status_code=502,
+                error_code="UPSTREAM_UNAVAILABLE",
+                recoverable=True,
+                context={"service": "ingestion", "repository": github_repo.full_name},
+                internal_message=str(exc),
+                cause_metadata={
+                    "request_url": str(exc.request.url) if exc.request else None
+                },
             ) from exc
 
         result = IndexAcceptedResponse.model_validate(resp.json())
@@ -416,13 +437,25 @@ class UserEngine:
         """Normalize a GitHub repository reference into `owner/repo` form."""
         candidate = repo.strip()
         if not candidate:
-            raise RequestError("Repository is required.", status_code=422)
+            raise AppError(
+                message="Repository is required.",
+                status_code=422,
+                error_code="INVALID_ARGUMENT",
+                recoverable=True,
+                context={"field": "repo"},
+            )
 
         if candidate.startswith(("http://", "https://")):
             parsed = urlparse(candidate)
             host = parsed.netloc.lower()
             if host not in {"github.com", "www.github.com"}:
-                raise RequestError("Only github.com repositories are supported.")
+                raise AppError(
+                    message="Only github.com repositories are supported.",
+                    status_code=422,
+                    error_code="INVALID_ARGUMENT",
+                    recoverable=True,
+                    context={"host": host},
+                )
             path = parsed.path
         else:
             path = candidate
@@ -434,14 +467,26 @@ class UserEngine:
 
         parts = [part for part in path.strip("/").split("/") if part]
         if len(parts) < 2:
-            raise RequestError("Repository must be in owner/repo form.")
+            raise AppError(
+                message="Repository must be in owner/repo form.",
+                status_code=422,
+                error_code="INVALID_ARGUMENT",
+                recoverable=True,
+                context={"repository": candidate},
+            )
 
         owner = parts[0].strip()
         repo_name = parts[1].strip()
         if repo_name.lower().endswith(".git"):
             repo_name = repo_name[:-4]
         if not owner or not repo_name:
-            raise RequestError("Repository must be in owner/repo form.")
+            raise AppError(
+                message="Repository must be in owner/repo form.",
+                status_code=422,
+                error_code="INVALID_ARGUMENT",
+                recoverable=True,
+                context={"repository": candidate},
+            )
 
         return f"{owner.lower()}/{repo_name.lower()}"
 

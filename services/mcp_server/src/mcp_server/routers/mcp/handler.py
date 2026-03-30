@@ -2,16 +2,25 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import json
+import logging
 import typing
 from typing import TYPE_CHECKING, Any
 
 from fastmcp import Context, FastMCP
 
 from ...utilities.decorators import BoundToolCall, collect_toolcalls, params_to_model
-from ...utilities import RequestError
+from ...utilities import RequestError, log_error, to_public_error
 
 if TYPE_CHECKING:
     from ...main import App
+
+
+def _safe_log(app: Any, exc: Exception, envelope) -> None:
+    logger = getattr(app, "log", None)
+    if logger is None:
+        logger = logging.getLogger(__name__)
+    log_error(logger, exc, envelope)
 
 
 MCP_INSTRUCTIONS = """
@@ -163,19 +172,39 @@ class MCPToolHandler:
                 try:
                     auth = await self.app.authenticator.require_mcp_context(ctx)
                 except RequestError as exc:
-                    raise PermissionError(exc.detail) from exc
+                    _, envelope = to_public_error(exc)
+                    _safe_log(self.app, exc, envelope)
+                    raise PermissionError(
+                        json.dumps(envelope.model_dump(mode="json"))
+                    ) from exc
                 if expects_auth:
                     call_kwargs["auth"] = auth
 
             try:
                 result = method(**call_kwargs)
             except RequestError as exc:
-                raise ValueError(exc.detail) from exc
+                _, envelope = to_public_error(exc)
+                _safe_log(self.app, exc, envelope)
+                raise ValueError(json.dumps(envelope.model_dump(mode="json"))) from exc
+            except Exception as exc:
+                _, envelope = to_public_error(exc)
+                _safe_log(self.app, exc, envelope)
+                raise ValueError(json.dumps(envelope.model_dump(mode="json"))) from exc
             if asyncio.iscoroutine(result):
                 try:
                     result = await result
                 except RequestError as exc:
-                    raise ValueError(exc.detail) from exc
+                    _, envelope = to_public_error(exc)
+                    _safe_log(self.app, exc, envelope)
+                    raise ValueError(
+                        json.dumps(envelope.model_dump(mode="json"))
+                    ) from exc
+                except Exception as exc:
+                    _, envelope = to_public_error(exc)
+                    _safe_log(self.app, exc, envelope)
+                    raise ValueError(
+                        json.dumps(envelope.model_dump(mode="json"))
+                    ) from exc
             if hasattr(result, "model_dump"):
                 return result.model_dump(mode="json")
             if isinstance(result, list) and result and hasattr(result[0], "model_dump"):
