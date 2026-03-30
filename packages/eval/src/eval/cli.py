@@ -850,7 +850,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     generate_synthetic_lighthouse.add_argument(
         "--context-source",
-        choices=["code", "wiki", "ast", "combined", "code+wiki"],
+        choices=["code", "wiki", "ast", "combined", "code+wiki", "grep"],
         default="code",
         help="Which Lighthouse retrieval source to use for prompt context",
     )
@@ -1022,11 +1022,11 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     run_synthetic_experiment.add_argument(
         "--context-source",
-        choices=["code", "wiki", "ast", "combined", "code+wiki", "all"],
+        choices=["code", "wiki", "ast", "combined", "code+wiki", "grep", "all"],
         default="code",
         help=(
             "Which Lighthouse retrieval source to use: code, wiki, ast, combined, "
-            "legacy code+wiki, or all (baseline + code + wiki + ast + combined)"
+            "legacy code+wiki, grep, or all (baseline + code + wiki + ast + combined + grep)"
         ),
     )
     run_synthetic_experiment.add_argument(
@@ -1255,6 +1255,15 @@ def _build_parser() -> argparse.ArgumentParser:
         "--continue-on-error",
         action="store_true",
         help="Continue matrix execution when a cell fails",
+    )
+    run_synthetic_matrix_cmd.add_argument(
+        "--max-parallel-cells",
+        type=int,
+        default=1,
+        help=(
+            "Maximum number of matrix cells to execute in parallel after one-time "
+            "preprocessing for each family/chunking/embedding group"
+        ),
     )
 
     return parser
@@ -1870,6 +1879,7 @@ def _cmd_run_synthetic_matrix(args: argparse.Namespace) -> int:
         max_tokens=args.max_tokens,
         dry_run=args.dry_run,
         continue_on_error=args.continue_on_error,
+        max_parallel_cells=args.max_parallel_cells,
     )
     print(f"Matrix rows JSON: {result.rows_json_path.resolve()}")
     print(f"Matrix rows table: {result.rows_markdown_path.resolve()}")
@@ -2061,7 +2071,7 @@ def _print_synthetic_experiment_suite_result(
     print(f"Score table: {result.score_text_path.resolve()}")
     print(f"Score JSON: {result.score_json_path.resolve()}")
     print(f"Baseline predictions: {result.baseline_predictions_path.resolve()}")
-    for label in ("code", "wiki", "code+wiki"):
+    for label in ("code", "wiki", "code+wiki", "ast", "combined", "grep"):
         predictions_path = result.lighthouse_predictions_paths.get(label)
         if predictions_path is not None:
             print(f"{label.capitalize()} predictions: {predictions_path.resolve()}")

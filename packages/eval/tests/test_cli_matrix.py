@@ -16,6 +16,8 @@ def test_cli_parses_run_synthetic_matrix_arguments() -> None:
             ".cache/eval/synthetic_experiments/matrix",
             "--dry-run",
             "--continue-on-error",
+            "--max-parallel-cells",
+            "4",
         ]
     )
     assert args.command == "run-synthetic-matrix"
@@ -23,3 +25,4 @@ def test_cli_parses_run_synthetic_matrix_arguments() -> None:
     assert args.run_prefix == "exp-a"
     assert args.dry_run is True
     assert args.continue_on_error is True
+    assert args.max_parallel_cells == 4
