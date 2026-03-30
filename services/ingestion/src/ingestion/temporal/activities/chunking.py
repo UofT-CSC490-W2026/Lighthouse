@@ -58,8 +58,18 @@ async def chunk_files(input: ChunkFilesInput) -> ChunkFilesOutput:
 
             chunker = chunkers_by_language.get(language)
             if chunker is None:
-                if strategy is ChunkerStrategy.AST_CODE and language is None:
-                    chunker = get_chunker(ChunkerStrategy.SLIDING_WINDOW)
+                if strategy is ChunkerStrategy.AST_CODE:
+                    try:
+                        chunker = get_chunker(strategy, language=language)
+                    except Exception:
+                        logger.exception(
+                            "Chunker init failed for %s with strategy=%s and language=%s; "
+                            "falling back to sliding_window",
+                            relative_path,
+                            strategy,
+                            language,
+                        )
+                        chunker = get_chunker(ChunkerStrategy.SLIDING_WINDOW)
                 else:
                     chunker = get_chunker(strategy, language=language)
                 chunkers_by_language[language] = chunker
