@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import difflib
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 from typing import Any
 
@@ -15,6 +17,7 @@ FAMILY_CONFIG_PATH = FAMILY_DIR / "family.json"
 PATCHES_BUGGY = FAMILY_DIR / "patches" / "buggy"
 PATCHES_GOLD = FAMILY_DIR / "patches" / "gold"
 REPO_A_TEMPLATE = FAMILY_DIR / "repo_a_template"
+REPO_B_TEMPLATE = FAMILY_DIR / "repo_b_template"
 
 TASK_IDS = tuple(f"{i:03d}" for i in range(1, 11))
 
@@ -180,6 +183,59 @@ def _validate_patch_pair(*, buggy_patch_path: Path, gold_patch_path: Path) -> No
         _run_checked(["git", "-C", str(temp_repo), "apply", "--check", str(gold_patch_path)])
 
 
+def _run_pytest_for_task(*, repo_a_path: Path, repo_b_path: Path, pytest_targets: list[str]) -> int:
+    env = dict(os.environ)
+    existing_pythonpath = env.get("PYTHONPATH", "")
+    extra_paths = f"{repo_a_path.resolve()}:{repo_b_path.resolve()}"
+    env["PYTHONPATH"] = (
+        f"{extra_paths}:{existing_pythonpath}" if existing_pythonpath else extra_paths
+    )
+    completed = subprocess.run(
+        [sys.executable, "-m", "pytest", "-q", *pytest_targets],
+        cwd=repo_a_path,
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+    )
+    return completed.returncode
+
+
+def _validate_mutant_behavior(
+    *,
+    task_id: str,
+    pytest_targets: list[str],
+    buggy_patch_path: Path,
+    gold_patch_path: Path,
+) -> None:
+    with tempfile.TemporaryDirectory(prefix="doc-behav-semantic-") as temp_dir:
+        temp_root = Path(temp_dir)
+        repo_a_path = temp_root / "repo_a"
+        repo_b_path = temp_root / "repo_b"
+        shutil.copytree(REPO_A_TEMPLATE, repo_a_path)
+        shutil.copytree(REPO_B_TEMPLATE, repo_b_path)
+        _run_checked(["git", "-C", str(repo_a_path), "apply", str(buggy_patch_path)])
+        buggy_returncode = _run_pytest_for_task(
+            repo_a_path=repo_a_path,
+            repo_b_path=repo_b_path,
+            pytest_targets=pytest_targets,
+        )
+        if buggy_returncode == 0:
+            raise RuntimeError(
+                f"{task_id}: buggy mutant still passes pytest targets {pytest_targets}"
+            )
+        _run_checked(["git", "-C", str(repo_a_path), "apply", str(gold_patch_path)])
+        repaired_returncode = _run_pytest_for_task(
+            repo_a_path=repo_a_path,
+            repo_b_path=repo_b_path,
+            pytest_targets=pytest_targets,
+        )
+        if repaired_returncode != 0:
+            raise RuntimeError(
+                f"{task_id}: gold patch does not repair pytest targets {pytest_targets}"
+            )
+
+
 def canonicalize_patches() -> None:
     tasks_raw = json.loads(TASKS_PATH.read_text(encoding="utf-8"))
     tasks = tasks_raw.get("tasks", [])
@@ -208,6 +264,12 @@ def canonicalize_patches() -> None:
         buggy_patch_path.write_text(buggy_patch, encoding="utf-8")
         gold_patch_path.write_text(gold_patch, encoding="utf-8")
         _validate_patch_pair(
+            buggy_patch_path=buggy_patch_path,
+            gold_patch_path=gold_patch_path,
+        )
+        _validate_mutant_behavior(
+            task_id=task_id,
+            pytest_targets=list(task["pytest_targets"]),
             buggy_patch_path=buggy_patch_path,
             gold_patch_path=gold_patch_path,
         )
