@@ -271,7 +271,27 @@ run_db_migration() {
   )"
 
   if [[ "$exit_code" != "0" ]]; then
+    local stopped_reason
+    local container_reason
+    stopped_reason="$(
+      aws ecs describe-tasks \
+        --cluster "$cluster_name" \
+        --tasks "$task_arn" \
+        --region "$REGION" \
+        --query 'tasks[0].stoppedReason' \
+        --output text
+    )"
+    container_reason="$(
+      aws ecs describe-tasks \
+        --cluster "$cluster_name" \
+        --tasks "$task_arn" \
+        --region "$REGION" \
+        --query 'tasks[0].containers[0].reason' \
+        --output text
+    )"
     echo "DB migration task failed with exit code ${exit_code}" >&2
+    echo "Task stopped reason: ${stopped_reason}" >&2
+    echo "Container reason: ${container_reason}" >&2
     exit 1
   fi
 }

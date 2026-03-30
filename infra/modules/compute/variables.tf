@@ -17,6 +17,10 @@ variable "search_settings_ssm_parameter_name" { type = string }
 variable "search_settings_ssm_parameter_arn" { type = string }
 variable "ingestion_settings_ssm_parameter_name" { type = string }
 variable "ingestion_settings_ssm_parameter_arn" { type = string }
+variable "db_endpoint" { type = string }
+variable "db_name" { type = string }
+variable "db_username" { type = string }
+variable "db_password" { type = string }
 
 variable "ssm_kms_key_arns" {
   type    = list(string)

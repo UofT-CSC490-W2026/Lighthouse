@@ -5,6 +5,7 @@ locals {
   milvus_uri            = "http://${aws_instance.milvus.private_ip}:19530"
   search_service_url    = "http://search.${local.private_dns_namespace}:8002"
   ingestion_service_url = "http://ingestion.${local.private_dns_namespace}:8001"
+  postgres_dsn          = "postgresql://${var.db_username}:${var.db_password}@${var.db_endpoint}/${var.db_name}"
 }
 
 resource "aws_ecs_cluster" "main" {
@@ -462,13 +463,14 @@ resource "aws_ecs_task_definition" "db_migrate" {
 
   container_definitions = jsonencode([
     {
-      name      = "db-migrate"
-      image     = var.ingestion_image
-      essential = true
-      command   = ["alembic", "-c", "packages/db/alembic.ini", "upgrade", "head"]
+      name             = "db-migrate"
+      image            = var.ingestion_image
+      essential        = true
+      workingDirectory = "/app/packages/db"
+      command          = ["alembic", "upgrade", "head"]
       environment = [
         { name = "AWS_REGION", value = data.aws_region.current.name },
-        { name = "INGESTION_SETTINGS_SSM_PARAMETER", value = var.ingestion_settings_ssm_parameter_name },
+        { name = "POSTGRES_DSN", value = local.postgres_dsn },
       ]
       logConfiguration = {
         logDriver = "awslogs"

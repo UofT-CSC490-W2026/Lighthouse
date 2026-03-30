@@ -52,6 +52,10 @@ module "compute" {
   ingestion_settings_ssm_parameter_arn   = var.ingestion_settings_ssm_parameter_arn
   ssm_kms_key_arns                       = var.ssm_kms_key_arns
   private_dns_namespace_name             = var.private_dns_namespace_name
+  db_endpoint                            = module.database.db_endpoint
+  db_name                                = var.db_name
+  db_username                            = var.db_username
+  db_password                            = var.db_password
 
   temporal_instance_type = var.temporal_instance_type
   milvus_instance_type   = var.milvus_instance_type
