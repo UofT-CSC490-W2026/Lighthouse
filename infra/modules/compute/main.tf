@@ -746,6 +746,12 @@ resource "aws_instance" "milvus" {
   key_name               = var.ec2_key_name != "" ? var.ec2_key_name : null
   user_data              = local.milvus_user_data
 
+  root_block_device {
+    volume_size           = var.milvus_root_volume_size
+    volume_type           = "gp3"
+    delete_on_termination = true
+  }
+
   tags = {
     Name = "${var.project_name}-${var.environment}-milvus"
   }

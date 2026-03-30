@@ -108,6 +108,12 @@ variable "milvus_instance_type" {
   default = "t3.large"
 }
 
+variable "milvus_root_volume_size" {
+  type        = number
+  description = "Root EBS volume size in GiB for the Milvus EC2 host."
+  default     = 40
+}
+
 variable "ec2_key_name" {
   type        = string
   description = "Optional EC2 key pair name for SSH. Leave empty to disable SSH key access."

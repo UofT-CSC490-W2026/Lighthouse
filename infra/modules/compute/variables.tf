@@ -34,6 +34,7 @@ variable "private_dns_namespace_name" {
 
 variable "temporal_instance_type" { type = string }
 variable "milvus_instance_type" { type = string }
+variable "milvus_root_volume_size" { type = number }
 
 variable "ec2_key_name" {
   type    = string

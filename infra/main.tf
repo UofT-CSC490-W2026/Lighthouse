@@ -57,10 +57,11 @@ module "compute" {
   db_username                            = var.db_username
   db_password                            = var.db_password
 
-  temporal_instance_type = var.temporal_instance_type
-  milvus_instance_type   = var.milvus_instance_type
-  ec2_key_name           = var.ec2_key_name
-  admin_ssh_cidr         = var.admin_ssh_cidr
+  temporal_instance_type  = var.temporal_instance_type
+  milvus_instance_type    = var.milvus_instance_type
+  milvus_root_volume_size = var.milvus_root_volume_size
+  ec2_key_name            = var.ec2_key_name
+  admin_ssh_cidr          = var.admin_ssh_cidr
 }
 
 module "database" {
