@@ -2,9 +2,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
+import logging
+import socket
 from typing import Any
+from urllib.parse import urlparse
 
 from pymilvus import MilvusClient as _MilvusClient, DataType
+
+
+logger = logging.getLogger(__name__)
 
 
 class CollectionField(StrEnum):
@@ -39,7 +45,23 @@ class MilvusClient:
     ) -> None:
         self.uri = uri
         self.collection_name = collection_name
+        target = self._uri_target(uri)
+        logger.info(
+            "Milvus client init: collection=%s uri=%s target=%s",
+            collection_name,
+            uri,
+            target,
+        )
+        self._log_tcp_probe(uri, collection_name)
+        logger.info(
+            "Milvus client init: creating pymilvus client for collection=%s",
+            collection_name,
+        )
         self._client = _MilvusClient(uri=uri)
+        logger.info(
+            "Milvus client init: pymilvus client created for collection=%s",
+            collection_name,
+        )
 
     def ensure_collection(self, dimension: int = 3072) -> None:
         """Create the collection if it does not exist."""
@@ -247,3 +269,42 @@ class MilvusClient:
         if isinstance(value, int | float):
             return str(value)
         raise TypeError(f"Unsupported filter value type: {type(value).__name__}")
+
+    @staticmethod
+    def _uri_target(uri: str) -> str:
+        parsed = urlparse(uri)
+        host = parsed.hostname or "<missing-host>"
+        port = parsed.port or 19530
+        return f"{host}:{port}"
+
+    @staticmethod
+    def _log_tcp_probe(uri: str, collection_name: str, timeout_seconds: float = 3.0) -> None:
+        parsed = urlparse(uri)
+        host = parsed.hostname
+        port = parsed.port or 19530
+        if not host:
+            logger.warning(
+                "Milvus client init: skipping TCP probe for collection=%s because uri=%s has no host",
+                collection_name,
+                uri,
+            )
+            return
+
+        try:
+            with socket.create_connection((host, port), timeout=timeout_seconds):
+                logger.info(
+                    "Milvus client init: TCP probe succeeded for collection=%s target=%s:%s timeout=%ss",
+                    collection_name,
+                    host,
+                    port,
+                    timeout_seconds,
+                )
+        except OSError as exc:
+            logger.warning(
+                "Milvus client init: TCP probe failed for collection=%s target=%s:%s timeout=%ss error=%s",
+                collection_name,
+                host,
+                port,
+                timeout_seconds,
+                exc,
+            )

@@ -662,6 +662,9 @@ locals {
 
     dnf update -y
     dnf install -y docker
+    if ! rpm -q amazon-ssm-agent >/dev/null 2>&1; then
+      dnf install -y "https://s3.${data.aws_region.current.name}.amazonaws.com/amazon-ssm-${data.aws_region.current.name}/latest/linux_amd64/amazon-ssm-agent.rpm"
+    fi
     systemctl enable amazon-ssm-agent
     systemctl start amazon-ssm-agent
     systemctl enable docker
