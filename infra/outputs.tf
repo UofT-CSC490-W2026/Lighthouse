@@ -45,3 +45,7 @@ output "db_migrate_task_definition_arn" {
 output "milvus_private_ip" {
   value = module.compute.milvus_private_ip
 }
+
+output "milvus_instance_id" {
+  value = module.compute.milvus_instance_id
+}

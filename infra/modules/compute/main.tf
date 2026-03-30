@@ -58,6 +58,17 @@ data "aws_iam_policy_document" "ecs_task_assume" {
   }
 }
 
+data "aws_iam_policy_document" "ec2_assume" {
+  statement {
+    actions = ["sts:AssumeRole"]
+
+    principals {
+      type        = "Service"
+      identifiers = ["ec2.amazonaws.com"]
+    }
+  }
+}
+
 resource "aws_iam_role" "ecs_execution_role" {
   name               = "${var.project_name}-${var.environment}-ecs-exec-role"
   assume_role_policy = data.aws_iam_policy_document.ecs_task_assume.json
@@ -97,6 +108,21 @@ resource "aws_iam_policy" "ecs_task_policy" {
 resource "aws_iam_role_policy_attachment" "ecs_task_attach" {
   role       = aws_iam_role.ecs_task_role.name
   policy_arn = aws_iam_policy.ecs_task_policy.arn
+}
+
+resource "aws_iam_role" "milvus_instance" {
+  name               = "${var.project_name}-${var.environment}-milvus-instance-role"
+  assume_role_policy = data.aws_iam_policy_document.ec2_assume.json
+}
+
+resource "aws_iam_role_policy_attachment" "milvus_ssm_core" {
+  role       = aws_iam_role.milvus_instance.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
+resource "aws_iam_instance_profile" "milvus" {
+  name = "${var.project_name}-${var.environment}-milvus-instance-profile"
+  role = aws_iam_role.milvus_instance.name
 }
 
 resource "aws_security_group" "alb" {
@@ -700,6 +726,7 @@ resource "aws_instance" "milvus" {
   instance_type          = var.milvus_instance_type
   subnet_id              = element(var.private_subnet_ids, 1)
   vpc_security_group_ids = [aws_security_group.stateful_ec2.id]
+  iam_instance_profile   = aws_iam_instance_profile.milvus.name
   key_name               = var.ec2_key_name != "" ? var.ec2_key_name : null
   user_data              = local.milvus_user_data
 

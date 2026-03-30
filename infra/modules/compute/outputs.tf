@@ -29,3 +29,7 @@ output "db_migrate_task_definition_arn" {
 output "milvus_private_ip" {
   value = aws_instance.milvus.private_ip
 }
+
+output "milvus_instance_id" {
+  value = aws_instance.milvus.id
+}
