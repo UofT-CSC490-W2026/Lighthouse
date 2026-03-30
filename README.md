@@ -43,9 +43,21 @@ monorepo/
 
 ## Setup Instructions
 
-1. Install [Docker Desktop](https://docs.docker.com/desktop/)
-2. Install [`uv`](https://docs.astral.sh/uv/getting-started/installation/) for Python package management.
-3. Run `uv sync --all-packages --dev` to install dependencies for the entire monorepo.
+### Prerequisites
+
+- Install [Docker Desktop](https://docs.docker.com/desktop/)
+- Install [`uv`](https://docs.astral.sh/uv/getting-started/installation/) for Python package management.
+- Install [`bun`](https://bun.sh/docs/installation) for JavaScript package management.
+
+### Setup
+
+1. Run `uv sync --all-packages --dev` to install dependencies for the entire monorepo.
+2. Run `cd services/web && bun install` to install dependencies for the web service.
+3. Run `scripts/setup-local-env-files.sh` to setup local `.env` files for all services.
+
+## Running Lighthouse Locally
+
+Run `docker compose up -d` to start all services (see `docker-compose.yml` for more details).
 
 ## Documentation
 
@@ -59,11 +71,6 @@ Below are some key documentation:
 - [Web Service](docs/services/web.md)
 - [Evaluation Framework](docs/evaluation.md)
 - [Testing Guide](docs/testing.md)
-
-## Running the Services
-
-1. Run `docker compose up -d` to start Postgres, Milvus, Temporal, and other services.
-2. For running a `service`, use `uv run --package <service> ...`.
 
 ## Running Tests
 
