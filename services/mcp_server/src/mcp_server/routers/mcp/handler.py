@@ -31,9 +31,9 @@ current file or local workspace alone. The goal is to surface the broader unders
 needed to make correct changes, such as architectural decisions, important invariants,
 cross-file relationships, repository conventions, and deeper codebase context.
 
-The primary retrieval entrypoint is `get_code_context`.
+The primary retrieval entrypoint is `search_code`.
 
-When calling `get_code_context`, provide:
+When calling `search_code`, provide:
 - the repository you are working in
 - the search query or task you are trying to complete
 - the branch you want to search

@@ -9,7 +9,7 @@ Its main purpose is to help coding agents retrieve better context for a task tha
 - non-local dependencies and invariants
 - relevant files or code regions to inspect before editing
 
-The primary retrieval entrypoint is `get_code_context`.
+The primary retrieval entrypoint is `search_code`.
 
 ## Local Setup
 
@@ -114,25 +114,25 @@ Protected routes:
 - `GET /v1/auth/me`
 - `POST /v1/user/repos`
 - `DELETE /v1/user/repos/{repo_id:path}`
-- `POST /v1/search/code-context`
+- `POST /v1/search/search-code`
 
 ## Current MCP Tools
 
 - `get_current_user`
 - `add_user_repo`
 - `remove_user_repo`
-- `get_code_context`
+- `search_code`
 
 All current MCP tools require bearer authentication.
 
 ## Search Entry Point
 
-The intended main coding-agent entrypoint is `get_code_context`.
+The intended main coding-agent entrypoint is `search_code`.
 
 It is exposed as:
 
-- HTTP: `POST /v1/search/code-context`
-- MCP: `get_code_context`
+- HTTP: `POST /v1/search/search-code`
+- MCP: `search_code`
 
 Current request fields:
 

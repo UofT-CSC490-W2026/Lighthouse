@@ -73,7 +73,7 @@ export default function Search() {
     if (normalizedFilePath) payload.file_path = normalizedFilePath;
 
     try {
-      const response = await apiFetch<CodeContextResponse>("/v1/search/code-context", {
+      const response = await apiFetch<CodeContextResponse>("/v1/search/search-code", {
         method: "POST",
         body: payload,
       });

@@ -11,7 +11,7 @@ Its main job is to help coding agents get better context for a task than they ca
 - non-local dependencies and invariants
 - relevant files or code regions to inspect before making a change
 
-Today, the primary search entrypoint is `get_code_context`. The surrounding auth and repository-management APIs exist to support that retrieval workflow.
+Today, the primary search entrypoint is `search_code`. The surrounding auth and repository-management APIs exist to support that retrieval workflow.
 
 ## Current State
 
@@ -26,7 +26,7 @@ The service has been refactored around:
 
 Important current limitation:
 
-- `get_code_context` is still a placeholder. It validates and captures the request envelope but does not yet perform real retrieval.
+- `search_code` is still a placeholder. It validates and captures the request envelope but does not yet perform real retrieval.
 
 ## Source Layout
 
@@ -198,14 +198,14 @@ This means handlers do not perform repeated auth checks themselves.
 
 The search surface is owned by `SearchService` in `services/mcp_server/src/mcp_server/engine/search.py`.
 
-### Main Entry Point: `get_code_context`
+### Main Entry Point: `search_code`
 
 This is the intended main MCP entrypoint for coding agents that need non-local context for a task.
 
 It is exposed as:
 
-- HTTP: `POST /v1/search/code-context`
-- MCP: `get_code_context`
+- HTTP: `POST /v1/search/search-code`
+- MCP: `search_code`
 
 Current request fields:
 
@@ -272,7 +272,7 @@ The current HTTP routes are:
 - `GET /v1/auth/me`
 - `POST /v1/user/repos`
 - `DELETE /v1/user/repos/{repo_id:path}`
-- `POST /v1/search/code-context`
+- `POST /v1/search/search-code`
 
 ## Current MCP Surface
 
@@ -281,7 +281,7 @@ The current MCP tools are:
 - `get_current_user`
 - `add_user_repo`
 - `remove_user_repo`
-- `get_code_context`
+- `search_code`
 
 All current MCP tools require authorization.
 
@@ -420,7 +420,7 @@ uvicorn mcp_server.main:app --reload --host 0.0.0.0 --port 8000 --env-file .env
 
 The most important gaps at the time of writing are:
 
-- `get_code_context` is a validated placeholder and does not yet retrieve real context
+- `search_code` is a validated placeholder and does not yet retrieve real context
 - there is no search backend, ranking pipeline, or snippet retrieval implemented yet
 - repository registration does not yet kick off indexing or retrieval preparation
 - `Session` remains in the schema as legacy state

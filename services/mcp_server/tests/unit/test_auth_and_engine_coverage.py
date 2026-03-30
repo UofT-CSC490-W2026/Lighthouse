@@ -324,11 +324,11 @@ async def test_search_and_user_engines_cover_error_paths(monkeypatch):
 
     monkeypatch.setattr(search_engine, "_resolve_github_repo_id", MagicMock(return_value=None))
     with pytest.raises(RequestError, match="not found"):
-        await search_engine.get_code_context(auth, " owner/repo ", "fix bug")
+        await search_engine.search_code(auth, " owner/repo ", "fix bug")
 
     monkeypatch.setattr(search_engine, "_resolve_github_repo_id", MagicMock(return_value=11))
     with pytest.raises(RequestError, match="query is required"):
-        await search_engine.get_code_context(auth, "owner/repo", "   ")
+        await search_engine.search_code(auth, "owner/repo", "   ")
     validation_error = Exception()
     monkeypatch.setattr(
         "mcp_server.engine.search.SearchRequest",
@@ -336,7 +336,7 @@ async def test_search_and_user_engines_cover_error_paths(monkeypatch):
     )
     monkeypatch.setattr("mcp_server.engine.search.ValidationError", Exception)
     with pytest.raises(RequestError):
-        await search_engine.get_code_context(auth, "owner/repo", "fix bug")
+        await search_engine.search_code(auth, "owner/repo", "fix bug")
     monkeypatch.undo()
     monkeypatch.setattr(search_engine, "_resolve_github_repo_id", MagicMock(return_value=11))
 
@@ -346,14 +346,14 @@ async def test_search_and_user_engines_cover_error_paths(monkeypatch):
         response=httpx.Response(500, text="oops"),
     )
     monkeypatch.setattr("mcp_server.engine.search.httpx.AsyncClient", lambda *args, **kwargs: _AsyncClient(post_error=http_status))
-    result = await search_engine.get_code_context(auth, "owner/repo", "fix bug")
+    result = await search_engine.search_code(auth, "owner/repo", "fix bug")
     assert result.status == "error"
 
     monkeypatch.setattr(
         "mcp_server.engine.search.httpx.AsyncClient",
         lambda *args, **kwargs: _AsyncClient(post_error=httpx.RequestError("down", request=httpx.Request("POST", "http://search"))),
     )
-    result = await search_engine.get_code_context(auth, "owner/repo", "fix bug")
+    result = await search_engine.search_code(auth, "owner/repo", "fix bug")
     assert result.message == "Search service unavailable."
 
     monkeypatch.setattr(
@@ -410,7 +410,7 @@ async def test_search_and_user_engines_cover_error_paths(monkeypatch):
         ),
     )
 
-    result = await search_engine.get_code_context(
+    result = await search_engine.search_code(
         auth,
         " owner/repo ",
         "fix bug",
