@@ -90,7 +90,7 @@ export default function Search() {
 
   const canSubmit = !!repositoryName.trim() && !!query.trim() && !reposLoading && !submitting;
   const selectedRepo = repos.find((r) => r.full_name === repositoryName) ?? null;
-  const availableBranches = (selectedRepo?.branches ?? []).filter((b) => b.status === "INDEXED");
+  const availableBranches = selectedRepo?.branches ?? [];
 
   return (
     <>
