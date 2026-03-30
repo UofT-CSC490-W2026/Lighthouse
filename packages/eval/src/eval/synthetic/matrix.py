@@ -56,6 +56,12 @@ class SyntheticMatrixCellResult:
     repeat_scores_pct: tuple[float, ...]
     mean_score_pct: float
     stddev_score_pct: float
+    repeat_total_duration_seconds: tuple[float, ...]
+    mean_total_duration_seconds: float
+    repeat_generation_total_tokens: tuple[int, ...]
+    mean_generation_total_tokens: float
+    repeat_generation_cost_usd: tuple[float | None, ...]
+    mean_generation_cost_usd: float | None
     pass_at_k: tuple[tuple[int, float], ...]
     pass_at_k_table_path: Path | None
     error: str | None
@@ -67,6 +73,8 @@ class SyntheticMatrixResult:
     output_root: Path
     rows_json_path: Path
     rows_markdown_path: Path
+    efficiency_json_path: Path
+    efficiency_text_path: Path
     heatmap_paths: tuple[Path, ...]
     cell_results: tuple[SyntheticMatrixCellResult, ...]
 
@@ -193,6 +201,12 @@ def run_synthetic_matrix(
                     repeat_scores_pct=(),
                     mean_score_pct=math.nan,
                     stddev_score_pct=math.nan,
+                    repeat_total_duration_seconds=(),
+                    mean_total_duration_seconds=math.nan,
+                    repeat_generation_total_tokens=(),
+                    mean_generation_total_tokens=math.nan,
+                    repeat_generation_cost_usd=(),
+                    mean_generation_cost_usd=None,
                     pass_at_k=(),
                     pass_at_k_table_path=None,
                     error=None,
@@ -238,6 +252,12 @@ def run_synthetic_matrix(
                 repeat_scores_pct=(),
                 mean_score_pct=math.nan,
                 stddev_score_pct=math.nan,
+                repeat_total_duration_seconds=(),
+                mean_total_duration_seconds=math.nan,
+                repeat_generation_total_tokens=(),
+                mean_generation_total_tokens=math.nan,
+                repeat_generation_cost_usd=(),
+                mean_generation_cost_usd=None,
                 pass_at_k=(),
                 pass_at_k_table_path=None,
                 error=str(exc),
@@ -256,6 +276,12 @@ def run_synthetic_matrix(
                     "repeat_scores_pct": list(result.repeat_scores_pct),
                     "mean_score_pct": result.mean_score_pct,
                     "stddev_score_pct": result.stddev_score_pct,
+                    "repeat_total_duration_seconds": list(result.repeat_total_duration_seconds),
+                    "mean_total_duration_seconds": result.mean_total_duration_seconds,
+                    "repeat_generation_total_tokens": list(result.repeat_generation_total_tokens),
+                    "mean_generation_total_tokens": result.mean_generation_total_tokens,
+                    "repeat_generation_cost_usd": list(result.repeat_generation_cost_usd),
+                    "mean_generation_cost_usd": result.mean_generation_cost_usd,
                     "pass_at_k": {
                         str(k): value for k, value in result.pass_at_k
                     },
@@ -274,7 +300,43 @@ def run_synthetic_matrix(
         + "\n",
         encoding="utf-8",
     )
-    rows_markdown_path.write_text(render_matrix_rows_markdown(results), encoding="utf-8")
+    rows_markdown_path.write_text(
+        "\n".join(
+            [
+                "Scores and Pass@k",
+                render_matrix_rows_markdown(results).strip(),
+                "",
+                "Efficiency",
+                render_matrix_efficiency_markdown(results).strip(),
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    efficiency_json_path = resolved_output_root / "matrix_efficiency.json"
+    efficiency_text_path = resolved_output_root / "matrix_efficiency.txt"
+    efficiency_json_path.write_text(
+        json.dumps(
+            [
+                {
+                    **asdict(result.spec),
+                    "mean_total_duration_seconds": result.mean_total_duration_seconds,
+                    "mean_generation_total_tokens": result.mean_generation_total_tokens,
+                    "mean_generation_cost_usd": result.mean_generation_cost_usd,
+                    "repeat_total_duration_seconds": list(result.repeat_total_duration_seconds),
+                    "repeat_generation_total_tokens": list(result.repeat_generation_total_tokens),
+                    "repeat_generation_cost_usd": list(result.repeat_generation_cost_usd),
+                    "error": result.error,
+                }
+                for result in results
+            ],
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    efficiency_text_path.write_text(render_matrix_efficiency_markdown(results), encoding="utf-8")
 
     heatmap_paths = () if dry_run else _render_heatmaps(results, config, resolved_output_root)
     return SyntheticMatrixResult(
@@ -282,6 +344,8 @@ def run_synthetic_matrix(
         output_root=resolved_output_root,
         rows_json_path=rows_json_path,
         rows_markdown_path=rows_markdown_path,
+        efficiency_json_path=efficiency_json_path,
+        efficiency_text_path=efficiency_text_path,
         heatmap_paths=heatmap_paths,
         cell_results=tuple(results),
     )
@@ -320,6 +384,9 @@ def render_matrix_rows_markdown(rows: Sequence[SyntheticMatrixCellResult]) -> st
         "embedding_model",
         "mean_score_pct",
         "stddev_score_pct",
+        "mean_duration_s",
+        "mean_gen_tokens",
+        "mean_gen_cost_usd",
         "pass_at_k",
         "error",
     )
@@ -335,11 +402,44 @@ def render_matrix_rows_markdown(rows: Sequence[SyntheticMatrixCellResult]) -> st
                 row.spec.embedding_model,
                 "-" if math.isnan(row.mean_score_pct) else f"{row.mean_score_pct:.2f}",
                 "-" if math.isnan(row.stddev_score_pct) else f"{row.stddev_score_pct:.2f}",
+                "-" if math.isnan(row.mean_total_duration_seconds) else f"{row.mean_total_duration_seconds:.2f}",
+                "-" if math.isnan(row.mean_generation_total_tokens) else f"{row.mean_generation_total_tokens:.1f}",
+                "-" if row.mean_generation_cost_usd is None else f"{row.mean_generation_cost_usd:.6f}",
                 pass_at_k,
                 row.error or "",
             )
         )
     return _render_table(headers, body_rows) + "\n"
+
+
+def render_matrix_efficiency_markdown(rows: Sequence[SyntheticMatrixCellResult]) -> str:
+    headers = (
+        "family",
+        "context",
+        "chunking",
+        "codegen_model",
+        "embedding_model",
+        "mean_duration_s",
+        "mean_gen_tokens",
+        "mean_gen_cost_usd",
+        "error",
+    )
+    table_rows = []
+    for row in rows:
+        table_rows.append(
+            (
+                row.spec.family_name,
+                row.spec.context_source,
+                row.spec.chunking_strategy,
+                row.spec.codegen_model,
+                row.spec.embedding_model,
+                "-" if math.isnan(row.mean_total_duration_seconds) else f"{row.mean_total_duration_seconds:.2f}",
+                "-" if math.isnan(row.mean_generation_total_tokens) else f"{row.mean_generation_total_tokens:.1f}",
+                "-" if row.mean_generation_cost_usd is None else f"{row.mean_generation_cost_usd:.6f}",
+                row.error or "",
+            )
+        )
+    return _render_table(headers, table_rows) + "\n"
 
 
 def _run_cell(
@@ -375,6 +475,9 @@ def _run_cell(
         chunking_strategy=spec.chunking_strategy,
     )
     repeat_scores_pct: list[float] = []
+    repeat_total_duration_seconds: list[float] = []
+    repeat_generation_total_tokens: list[int] = []
+    repeat_generation_cost_usd: list[float | None] = []
     run_ids: list[str] = []
     baseline_run_ids: list[str] = []
     for rep in range(1, config.repeat_count + 1):
@@ -426,6 +529,9 @@ def _run_cell(
             else (summary.resolved_instances / summary.total_instances) * 100.0
         )
         repeat_scores_pct.append(score_pct)
+        repeat_total_duration_seconds.append(experiment.lighthouse_efficiency.total_duration_seconds)
+        repeat_generation_total_tokens.append(experiment.lighthouse_efficiency.generation.total_tokens)
+        repeat_generation_cost_usd.append(experiment.lighthouse_efficiency.generation.estimated_cost_usd)
 
     pass_summary = compute_synthetic_pass_at_k(
         run_ids=run_ids,
@@ -444,6 +550,9 @@ def _run_cell(
     )
     mean_score = sum(repeat_scores_pct) / len(repeat_scores_pct)
     stddev_score = _population_stddev(repeat_scores_pct)
+    mean_total_duration_seconds = sum(repeat_total_duration_seconds) / len(repeat_total_duration_seconds)
+    mean_generation_total_tokens = sum(repeat_generation_total_tokens) / len(repeat_generation_total_tokens)
+    mean_generation_cost_usd = _mean_optional_float(repeat_generation_cost_usd)
     return SyntheticMatrixCellResult(
         spec=spec,
         run_ids=tuple(run_ids),
@@ -451,6 +560,12 @@ def _run_cell(
         repeat_scores_pct=tuple(repeat_scores_pct),
         mean_score_pct=mean_score,
         stddev_score_pct=stddev_score,
+        repeat_total_duration_seconds=tuple(repeat_total_duration_seconds),
+        mean_total_duration_seconds=mean_total_duration_seconds,
+        repeat_generation_total_tokens=tuple(repeat_generation_total_tokens),
+        mean_generation_total_tokens=mean_generation_total_tokens,
+        repeat_generation_cost_usd=tuple(repeat_generation_cost_usd),
+        mean_generation_cost_usd=mean_generation_cost_usd,
         pass_at_k=pass_summary.macro_pass_at_k,
         pass_at_k_table_path=pass_table_path,
         error=None,
@@ -658,6 +773,13 @@ def _population_stddev(values: Sequence[float]) -> float:
     mean = sum(values) / len(values)
     variance = sum((value - mean) ** 2 for value in values) / len(values)
     return math.sqrt(variance)
+
+
+def _mean_optional_float(values: Sequence[float | None]) -> float | None:
+    observed = [value for value in values if value is not None]
+    if not observed:
+        return None
+    return sum(observed) / len(observed)
 
 
 def _as_non_empty_str_tuple(value: object, *, field_name: str) -> tuple[str, ...]:
