@@ -163,21 +163,16 @@ Agents that lack knowledge of upstream API contracts, cross-repository
 dependencies, or established design patterns produce incorrect, inconsistent, or
 redundant code.\\
 
-We present \textbf{Lighthouse}, a retrieval-augmented context engine designed
+We present \textbf{Lighthouse}, a search engine designed
 specifically to address this gap for AI coding agents.
 Lighthouse indexes GitHub repositories through durable, Temporal-orchestrated
 pipelines that produce semantically chunked, embedded representations of source
 code and auto-generated documentation.
 At query time, a hybrid retrieval strategy combining dense vector search
-(Milvus), full-text search (PostgreSQL), LLM-driven keyword expansion, and
-Cohere reranking surfaces the most relevant context from across all indexed
-repositories.
+(Milvus), full-text search (PostgreSQL), LLM-driven keyword expansion (OpenAI), 
+and reranking (Cohere) to surface the most relevant context from across all indexed repositories.
 This context is delivered to agents via the Model Context Protocol (MCP), a
 standardized interface that requires no changes to the agent or its tooling.
-Lighthouse is built to production standards: 100\% line coverage across 2{,}418
-source lines, zero-downtime incremental re-indexing via a publish-and-switch
-model, and a reproducible evaluation framework benchmarked against SWE-bench
-and synthetic API-contract tasks.
 
 % ================================================================================
 \section{Introduction and Problem Statement}
@@ -193,50 +188,33 @@ For the kinds of tasks that arise in real engineering organizations—tasks that
 cross service boundaries, depend on the implicit contracts of internal libraries,
 or require knowledge of established architectural patterns—it is not.
 
+\section{Introduction and Problem Statement}
+
+
 \subsection{The Problem}
 
-Modern software is organized around distributed, multi-repository systems.
-A typical enterprise product may comprise dozens of independently versioned
-services, each exposing interfaces consumed by others.
-Developers navigating this environment carry substantial implicit knowledge: they
-know which endpoints are stable versus unstable, which patterns are idiomatic in
-the organization's codebase, and which decisions were made for historical reasons
-that are no longer obvious from the code alone.
-An AI coding agent starting a new session has none of this knowledge.\\
+AI coding agents—tools such as GitHub Copilot, Cursor, and Claude Code—have
+become central to modern software development, but they remain constrained by
+the context available in a single session.
+That limitation is manageable for isolated edits, but it breaks down for
+real-world engineering tasks that span repositories, depend on internal service
+contracts, or rely on organization-specific architectural patterns. \\
 
-This produces a concrete and common class of agent failure.
-When an agent is asked to implement a new feature that calls an internal service,
-it may hallucinate an API endpoint that does not exist, use a deprecated calling
-convention, or miss a required authentication header that every other caller in
-the codebase includes.
-When asked to add a new module, it may duplicate infrastructure that already
-exists two repositories away.
-When asked to refactor a shared utility, it cannot reason about downstream
-consumers it has never seen.
-In each case, the agent's output is syntactically plausible but semantically
-wrong—and the error is invisible until it propagates to testing or review.\\
-
-The root cause is not a deficiency in the agent's reasoning capability; it is a
-deficiency in the information available to it.
-The agent is not failing to reason well about the context it has—it is failing
-because the relevant context was never provided.
+As a result, agents often make plausible but incorrect changes: they call
+nonexistent or outdated endpoints, omit required conventions such as
+authentication or wiring patterns, duplicate infrastructure that already exists,
+or miss downstream dependencies during refactors.
+The issue is not weak reasoning, but missing context.
 
 \subsection{Why Existing Tools Fall Short}
 
-Existing tools address adjacent problems but not this one.
-IDE-integrated autocomplete systems (GitHub Copilot, Tabnine) improve
-single-file productivity but do not index non-local repositories or expose
-retrieved context programmatically to agents.
-Code search platforms (Sourcegraph, Glean) are optimized for human developers
-querying a search interface; they are not designed to be called by agents during
-active reasoning, and they do not provide a standardized protocol for agents to
-retrieve structured context on demand.
-General-purpose RAG frameworks exist but require per-codebase configuration,
-lack the incremental indexing needed to stay current with a live codebase, and
-offer no code-aware chunking or retrieval logic.
-None of these solutions address the full problem: an always-current,
-semantically-indexed, agent-native context retrieval layer that spans an
-organization's entire codebase.
+Existing tools solve adjacent problems, but not agent-native context retrieval
+across an organization's codebase.
+IDE autocomplete tools improve local productivity, but they do not index
+non-local repositories or expose retrieved context programmatically to agents.
+Code search platforms are built for humans, not for agents that need structured
+context during active reasoning, while general-purpose RAG frameworks typically
+require custom setup and lack code-aware, continuously updated indexing. It is worth noting that much of the industry is realizing this is a problem and are moving toward MCP and indexing multiple repositories for context.
 
 \subsection{Lighthouse: A Context Layer for Coding Agents}
 
@@ -276,19 +254,8 @@ We make the following contributions:
   \item An \textbf{agent-native MCP interface} that exposes code and wiki search
     as first-class tools consumable by AI coding agents with no custom
     integration.
-  \item A \textbf{reproducible evaluation framework} integrating SWE-bench and
-    synthetic API-contract benchmarks to measure the impact of Lighthouse on
-    agent task completion.
+  \item A \textbf{reproducible evaluation framework} integrating synthetic API-contract benchmarks to measure the impact of Lighthouse on agent task completion.
 \end{enumerate}
-
-The remainder of this report is structured as follows.
-Section~\ref{sec:related} surveys related academic and industry work.
-Section~\ref{sec:approach} describes the technical design of Lighthouse in
-detail.
-Section~\ref{sec:experiments} presents our experimental setup and results.
-Section~\ref{sec:future} discusses future work, and
-Section~\ref{sec:reflection} offers a team reflection connecting the project to
-course material.
 
 % ================================================================================
 \section{Related Work}
@@ -842,6 +809,7 @@ query and the remaining token budget: broad exploratory questions may benefit
 from retrieving more context, while highly specific queries or tight context
 windows may require a smaller, more selective result set.\\
 
+
 \textbf{Indexing beyond source code.}
 We currently index source files and LLM-generated wiki pages.
 Extending the index to external documentation (library API docs, changelogs,
@@ -891,6 +859,7 @@ Looking back, the most valuable decision we made early was to treat Lighthouse s
 
 
 % ================================================================================
+\newpage
 \begin{thebibliography}{9}
 
 \bibitem{lewis2020rag}
