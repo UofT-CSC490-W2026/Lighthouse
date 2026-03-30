@@ -14,31 +14,38 @@ Better context for coding agents.
 ## Repo Structure
 
 ```
-monorepo/
+lighthouse/
 ├── services/
 │   ├── ingestion/          # Data ingestion service
 │   ├── search/             # Search layer service
 │   ├── mcp_server/         # MCP server (agent-facing API)
-│   └── web/                # Web service
-│
-├── evaluation/             # Evaluation framework for baseline/augmented runs
+│   └── web/                # Web frontend
 │
 ├── packages/               # Shared internal libraries
 │   ├── db/                 # Relational DB models & migrations
-│   ├── vectordb/           # Vector DB client & helpers
-│   └── shared/             # Common utilities (logging, config, auth)
+│   ├── embedding/          # Embedding providers
+│   ├── eval/               # Evaluation framework (SWE-bench, synthetic benchmarks)
+│   ├── llm/                # LLM provider clients
+│   ├── shared/             # Common utilities (logging, config, auth)
+│   ├── testing/            # Shared test fixtures and helpers
+│   └── vectordb/           # Vector DB client & helpers
 │
 ├── docs/                   # Architecture and operational documentation
+│
+├── docker/                 # Docker images for local dev (e.g. Postgres)
 │
 ├── infra/                  # Infrastructure as code
 │
 ├── scripts/                # Dev tooling scripts
 │
-├── .github/
-│   └── workflows/          # CI per service (path filters)
+├── assignments/            # Course materials (not product code)
 │
-├── pyproject.toml          # Root: dev tools only (ruff, mypy, pytest)
-└── uv.lock                 # Single lockfile for the whole repo
+├── .github/
+│   └── workflows/          # CI (path filters)
+│
+├── docker-compose.yml      # Local stack orchestration
+├── pyproject.toml          # Workspace manifest & dev tooling (pytest, ruff, ty)
+└── uv.lock                 # Lockfile for Python dependencies
 ```
 
 ## Setup Instructions
@@ -48,10 +55,10 @@ monorepo/
 - [Docker Desktop](https://docs.docker.com/desktop/) for containerization.
 - [`uv`](https://docs.astral.sh/uv/getting-started/installation/) for Python package management.
 - [`bun`](https://bun.sh/docs/installation) for JavaScript package management.
-- [`Terraform`](https://developer.hashicorp.com/terraform/tutorials/aws-get-started/install-cli) for infrastructure as code.
+- `Terraform`(https://developer.hashicorp.com/terraform/tutorials/aws-get-started/install-cli) for infrastructure as code.
 - [`ngrok`](https://ngrok.com/download) for local tunneling. Install this if you want to use the `/webhook` endpoint of the ingestion service.
 
-### Setup
+### Setting Up the Local Environment
 
 1. Run `uv sync --all-packages --dev` to install dependencies for the entire monorepo.
 2. Run `cd services/web && bun install` to install dependencies for the web service.
