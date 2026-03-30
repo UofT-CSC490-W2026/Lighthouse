@@ -42,12 +42,15 @@ jobs:
       - name: Build coverage summary
         run: |
           python <<'PY'
+          import os
           import pathlib
           import xml.etree.ElementTree as ET
 
           root = ET.parse("coverage.xml").getroot()
           coverage = float(root.attrib["line-rate"]) * 100
           percent = f"{coverage:.2f}%"
+          repository = os.environ.get("GITHUB_REPOSITORY", "UofT-CSC490-W2026/Lighthouse")
+          workflow_path = "actions/workflows/tests.yml"
 
           color = "red"
           if coverage >= 90:
@@ -57,7 +60,15 @@ jobs:
           elif coverage >= 70:
               color = "orange"
 
-          readme_block = f"![Test Coverage](https://img.shields.io/badge/test%20coverage-{percent.replace('%', '%25')}-{color})"
+          tests_badge = (
+              f"[![Tests](https://github.com/{repository}/{workflow_path}/badge.svg?branch=main)]"
+              f"(https://github.com/{repository}/{workflow_path})"
+          )
+          coverage_badge = (
+              f"![Test Coverage]"
+              f"(https://img.shields.io/badge/test%20coverage-{percent.replace('%', '%25')}-{color})"
+          )
+          readme_block = "\n".join([tests_badge, coverage_badge])
 
           pr_body = "\n".join(
               [
