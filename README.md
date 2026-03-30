@@ -1,10 +1,8 @@
 # Lighthouse
 
 <!-- coverage:start -->
-
 [![Tests](https://github.com/UofT-CSC490-W2026/Lighthouse/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/UofT-CSC490-W2026/Lighthouse/actions/workflows/tests.yml)
-![Test Coverage](https://img.shields.io/badge/test%20coverage-97.27%25-brightgreen)
-
+![Test Coverage](https://img.shields.io/badge/test%20coverage-97.18%25-brightgreen)
 <!-- coverage:end -->
 
 Better context for coding agents.
