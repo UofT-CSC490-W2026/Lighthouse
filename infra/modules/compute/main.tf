@@ -661,7 +661,7 @@ locals {
     set -euxo pipefail
 
     dnf update -y
-    dnf install -y docker curl
+    dnf install -y docker
     systemctl enable amazon-ssm-agent
     systemctl start amazon-ssm-agent
     systemctl enable docker
