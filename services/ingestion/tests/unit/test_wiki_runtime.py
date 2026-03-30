@@ -3,7 +3,11 @@ from __future__ import annotations
 from botocore.exceptions import ClientError
 import pytest
 
-from ingestion.temporal.activities.wiki import _is_non_retryable_wiki_error
+from ingestion.llm import LLMStrategy
+from ingestion.temporal.activities.wiki import (
+    _build_llm_request_kwargs,
+    _is_non_retryable_wiki_error,
+)
 from ingestion.utilities.config import IngestionSettings
 from llm import BedrockLLMProvider
 
@@ -36,6 +40,38 @@ def test_ingestion_settings_default_wiki_llm_strategy_is_bedrock() -> None:
 
     assert settings.resolved_llm_strategy() == "bedrock"
     assert settings.resolved_llm_model() == "us.amazon.nova-lite-v1:0"
+    assert settings.resolved_llm_reasoning_effort() == ""
+
+
+@pytest.mark.unit
+def test_ingestion_settings_openai_reasoning_defaults_to_shared_value() -> None:
+    settings = IngestionSettings(llm_strategy="openai")
+
+    assert settings.resolved_llm_model() == "gpt-5.4-mini"
+    assert settings.resolved_llm_reasoning_effort() == "low"
+
+
+@pytest.mark.unit
+def test_ingestion_settings_reasoning_effort_prefers_explicit_override() -> None:
+    settings = IngestionSettings(llm_strategy="openai", llm_reasoning_effort="medium")
+
+    assert settings.resolved_llm_reasoning_effort() == "medium"
+
+
+@pytest.mark.unit
+def test_build_llm_request_kwargs_includes_reasoning_for_openai() -> None:
+    settings = IngestionSettings(llm_strategy="openai")
+
+    assert _build_llm_request_kwargs(settings, LLMStrategy.OPENAI) == {
+        "reasoning_effort": "low"
+    }
+
+
+@pytest.mark.unit
+def test_build_llm_request_kwargs_omits_reasoning_for_bedrock() -> None:
+    settings = IngestionSettings(llm_strategy="bedrock")
+
+    assert _build_llm_request_kwargs(settings, LLMStrategy.BEDROCK) == {}
 
 
 @pytest.mark.unit
