@@ -1,8 +1,10 @@
 # Lighthouse
 
 <!-- coverage:start -->
+
 [![Tests](https://github.com/UofT-CSC490-W2026/Lighthouse/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/UofT-CSC490-W2026/Lighthouse/actions/workflows/tests.yml)
 ![Test Coverage](https://img.shields.io/badge/test%20coverage-97.27%25-brightgreen)
+
 <!-- coverage:end -->
 
 Better context for coding agents.
@@ -12,31 +14,38 @@ Better context for coding agents.
 ## Repo Structure
 
 ```
-monorepo/
+lighthouse/
 ├── services/
 │   ├── ingestion/          # Data ingestion service
 │   ├── search/             # Search layer service
 │   ├── mcp_server/         # MCP server (agent-facing API)
-│   └── web/                # Web service
-│
-├── evaluation/             # Evaluation framework for baseline/augmented runs
+│   └── web/                # Web frontend
 │
 ├── packages/               # Shared internal libraries
 │   ├── db/                 # Relational DB models & migrations
-│   ├── vectordb/           # Vector DB client & helpers
-│   └── shared/             # Common utilities (logging, config, auth)
+│   ├── embedding/          # Embedding providers
+│   ├── eval/               # Evaluation framework (SWE-bench, synthetic benchmarks)
+│   ├── llm/                # LLM provider clients
+│   ├── shared/             # Common utilities (logging, config, auth)
+│   ├── testing/            # Shared test fixtures and helpers
+│   └── vectordb/           # Vector DB client & helpers
 │
 ├── docs/                   # Architecture and operational documentation
+│
+├── docker/                 # Docker images for local dev (e.g. Postgres)
 │
 ├── infra/                  # Infrastructure as code
 │
 ├── scripts/                # Dev tooling scripts
 │
-├── .github/
-│   └── workflows/          # CI per service (path filters)
+├── assignments/            # Course materials (not product code)
 │
-├── pyproject.toml          # Root: dev tools only (ruff, mypy, pytest)
-└── uv.lock                 # Single lockfile for the whole repo
+├── .github/
+│   └── workflows/          # CI (path filters)
+│
+├── docker-compose.yml      # Local stack orchestration
+├── pyproject.toml          # Workspace manifest & dev tooling (pytest, ruff, ty)
+└── uv.lock                 # Lockfile for Python dependencies
 ```
 
 ## Setup Instructions
