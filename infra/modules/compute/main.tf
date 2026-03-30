@@ -544,7 +544,6 @@ resource "aws_ecs_service" "search" {
   service_registries {
     registry_arn   = aws_service_discovery_service.search.arn
     container_name = "search"
-    container_port = 8002
   }
 }
 
@@ -570,7 +569,6 @@ resource "aws_ecs_service" "ingestion" {
   service_registries {
     registry_arn   = aws_service_discovery_service.ingestion.arn
     container_name = "ingestion"
-    container_port = 8001
   }
 
   depends_on = [aws_lb_listener_rule.ingestion_webhook]
