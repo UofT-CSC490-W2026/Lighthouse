@@ -1,8 +1,10 @@
 # Lighthouse
 
 <!-- coverage:start -->
+
 [![Tests](https://github.com/UofT-CSC490-W2026/Lighthouse/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/UofT-CSC490-W2026/Lighthouse/actions/workflows/tests.yml)
 ![Test Coverage](https://img.shields.io/badge/test%20coverage-97.27%25-brightgreen)
+
 <!-- coverage:end -->
 
 Better context for coding agents.
@@ -92,15 +94,16 @@ Run `docker compose up -d` to start all services (see `docker-compose.yml` for m
 
 You can find documentation in the `docs/` directory. For the most part, it mirrors the structure of the repository. For example, the documentation for each package is in the `docs/packages/<package>/` directory.
 
-Below are some key documentation:
+**Below are some key documentation**:
 
-- [AWS Deployment Flow](docs/deployment.md)
+- [Architecture](docs/architecture.md)
 - [Search Service](docs/services/search.md)
 - [Ingestion Service](docs/services/ingestion.md)
 - [MCP Server](docs/services/mcp_server.md)
 - [Web Service](docs/services/web.md)
 - [Evaluation Framework](docs/evaluation.md)
 - [Testing Guide](docs/testing.md)
+- [AWS Deployment Flow](docs/deployment.md)
 
 ## Running Tests
 

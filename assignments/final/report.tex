@@ -832,6 +832,16 @@ This is especially valuable for complex tasks where the relevant context is
 spread across multiple files or repositories and cannot be captured in a single
 query.\\
 
+\textbf{Top-$k$ tuning and budget-aware retrieval.}
+The current retriever uses a fixed number of returned results, but the optimal
+$k$ likely varies by task and query type.
+Future work should tune this parameter empirically, measuring how retrieval
+quality and downstream answer quality change as $k$ increases.
+Beyond static tuning, Lighthouse could choose $k$ dynamically based on the
+query and the remaining token budget: broad exploratory questions may benefit
+from retrieving more context, while highly specific queries or tight context
+windows may require a smaller, more selective result set.\\
+
 \textbf{Indexing beyond source code.}
 We currently index source files and LLM-generated wiki pages.
 Extending the index to external documentation (library API docs, changelogs,
