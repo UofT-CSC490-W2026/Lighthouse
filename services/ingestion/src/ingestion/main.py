@@ -149,6 +149,8 @@ async def index_repos(request: IndexRequest):
                         full_name=full_name,
                         branch=branch,
                         github_token=repo.github_token,
+                        chunker_strategy=repo.chunker_strategy
+                        or settings.chunker_strategy,
                         embedding_strategy=settings.embedding_strategy,
                     ),
                     id=workflow_id,
