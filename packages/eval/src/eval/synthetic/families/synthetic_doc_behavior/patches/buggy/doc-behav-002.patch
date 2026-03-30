@@ -7,6 +7,8 @@ diff --git a/consumer_app/formatting.py b/consumer_app/formatting.py
      """Return a preview snippet of the article body."""
 -    return truncate_words(body, max_words)
 +    words = body.split()
++    if max_words <= 0:
++        return body
 +    if len(words) <= max_words:
 +        return body
 +    return " ".join(words[:max_words]) + "..."
