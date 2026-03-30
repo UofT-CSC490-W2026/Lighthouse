@@ -1,13 +1,25 @@
 output "alb_dns_name" {
-  value = aws_lb.mcp.dns_name
+  value = aws_lb.public.dns_name
 }
 
-output "ecs_tasks_sg_id" {
-  value = aws_security_group.mcp_tasks.id
+output "app_tasks_sg_id" {
+  value = aws_security_group.app_tasks.id
 }
 
-output "worker_tasks_sg_id" {
-  value = aws_security_group.worker_tasks.id
+output "web_url" {
+  value = "http://${aws_lb.public.dns_name}"
+}
+
+output "mcp_base_url" {
+  value = "http://${aws_lb.public.dns_name}"
+}
+
+output "webhook_url" {
+  value = "http://${aws_lb.public.dns_name}/webhook"
+}
+
+output "db_migrate_task_definition_arn" {
+  value = aws_ecs_task_definition.db_migrate.arn
 }
 
 output "temporal_private_ip" {

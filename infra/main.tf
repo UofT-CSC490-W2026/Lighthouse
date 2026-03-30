@@ -4,11 +4,8 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
-    null = {
-      source  = "hashicorp/null"
-      version = "~> 3.0"
-    }
   }
+
   required_version = ">= 1.5.0"
 }
 
@@ -28,19 +25,38 @@ module "networking" {
 
   enable_nat_gateway   = true
   enable_vpc_endpoints = true
-
-  # for SSH to EC2 (Temporal/Milvus)
-  admin_ssh_cidr = var.admin_ssh_cidr
+  admin_ssh_cidr       = var.admin_ssh_cidr
 }
 
-module "storage" {
-  source = "./modules/storage"
+module "compute" {
+  source = "./modules/compute"
+
+  vpc_id             = module.networking.vpc_id
+  vpc_cidr           = var.vpc_cidr
+  public_subnet_ids  = module.networking.public_subnet_ids
+  private_subnet_ids = module.networking.private_subnet_ids
 
   project_name = var.project_name
   environment  = var.environment
 
-  # var.environment != "prod" in reality but for now true for demo purposes
-  force_destroy = true
+  web_image       = var.web_image
+  mcp_image       = var.mcp_image
+  search_image    = var.search_image
+  ingestion_image = var.ingestion_image
+
+  mcp_server_settings_ssm_parameter_name = var.mcp_server_settings_ssm_parameter_name
+  mcp_server_settings_ssm_parameter_arn  = var.mcp_server_settings_ssm_parameter_arn
+  search_settings_ssm_parameter_name     = var.search_settings_ssm_parameter_name
+  search_settings_ssm_parameter_arn      = var.search_settings_ssm_parameter_arn
+  ingestion_settings_ssm_parameter_name  = var.ingestion_settings_ssm_parameter_name
+  ingestion_settings_ssm_parameter_arn   = var.ingestion_settings_ssm_parameter_arn
+  ssm_kms_key_arns                       = var.ssm_kms_key_arns
+  private_dns_namespace_name             = var.private_dns_namespace_name
+
+  temporal_instance_type = var.temporal_instance_type
+  milvus_instance_type   = var.milvus_instance_type
+  ec2_key_name           = var.ec2_key_name
+  admin_ssh_cidr         = var.admin_ssh_cidr
 }
 
 module "database" {
@@ -57,35 +73,5 @@ module "database" {
   db_password         = var.db_password
   deletion_protection = var.db_deletion_protection
 
-  # Only allow DB access from ECS tasks SGs (created in compute)
-  allowed_security_group_ids = [module.compute.ecs_tasks_sg_id, module.compute.worker_tasks_sg_id]
-}
-
-module "compute" {
-  source = "./modules/compute"
-
-  vpc_id             = module.networking.vpc_id
-  vpc_cidr           = var.vpc_cidr
-  public_subnet_ids  = module.networking.public_subnet_ids
-  private_subnet_ids = module.networking.private_subnet_ids
-
-  project_name = var.project_name
-  environment  = var.environment
-
-  # App config
-  db_endpoint    = module.database.db_endpoint
-  db_name        = var.db_name
-  db_username    = var.db_username
-  db_password    = var.db_password
-  s3_bucket_name = module.storage.bucket_name
-
-  mcp_container_port = var.mcp_container_port
-
-  # EC2 for Temporal/Milvus (separate instances)
-  temporal_instance_type = var.temporal_instance_type
-  milvus_instance_type   = var.milvus_instance_type
-  ec2_key_name           = var.ec2_key_name
-
-  # Networking/SSH
-  admin_ssh_cidr = var.admin_ssh_cidr
+  allowed_security_group_ids = [module.compute.app_tasks_sg_id]
 }

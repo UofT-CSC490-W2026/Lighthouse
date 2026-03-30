@@ -10,16 +10,28 @@ output "private_subnet_ids" {
   value = module.networking.private_subnet_ids
 }
 
-output "s3_bucket_name" {
-  value = module.storage.bucket_name
-}
-
 output "db_endpoint" {
   value = module.database.db_endpoint
 }
 
 output "alb_dns_name" {
   value = module.compute.alb_dns_name
+}
+
+output "web_url" {
+  value = module.compute.web_url
+}
+
+output "mcp_base_url" {
+  value = module.compute.mcp_base_url
+}
+
+output "ingestion_webhook_url" {
+  value = module.compute.webhook_url
+}
+
+output "db_migrate_task_definition_arn" {
+  value = module.compute.db_migrate_task_definition_arn
 }
 
 output "temporal_private_ip" {

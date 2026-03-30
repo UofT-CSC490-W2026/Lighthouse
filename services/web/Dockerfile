@@ -13,10 +13,14 @@ FROM nginx:alpine
 
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# SPA fallback + reverse proxy to mcp_server
+# Support both local Docker Compose and AWS ALB path routing.
+# In AWS, /v1 and /mcp should be intercepted by the ALB before reaching this container.
 RUN printf 'server {\n\
     listen 80;\n\
     location /v1 {\n\
+        proxy_pass http://mcp_server:8000;\n\
+    }\n\
+    location /mcp {\n\
         proxy_pass http://mcp_server:8000;\n\
     }\n\
     location / {\n\
