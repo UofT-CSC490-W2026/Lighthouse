@@ -14,16 +14,16 @@ The intended focus is repository-aware code retrieval for tasks such as:
 - narrowing context before an agent makes a code change
 
 Today, the primary entrypoint is `POST /search`. The service combines vector
-search and PostgreSQL full-text search into one ranked result set. The endpoint
-currently accepts a list of typed search requests and supports the `hybrid`
-search method.
+search and PostgreSQL full-text search into one ranked result set. The endpoint accepts typed search requests; code search uses a hybrid
+(vector + keyword) pipeline.
 
 ## Current State
 
 The service is currently built around:
 
 - a FastAPI app with a lifespan-based dependency setup
-- a strategy registry with `hybrid` as the only implemented search method today
+- code and wiki search strategies wired on `app.state` (`HybridSearchStrategy`,
+  `HybridWikiSearchStrategy`)
 - PostgreSQL as the source of chunk content and repository metadata
 - Milvus as the vector index
 - a configurable embedding provider for query embedding generation
@@ -73,7 +73,8 @@ At startup it:
 2. connects a `DatabaseManager`
 3. creates a `MilvusClient`
 4. creates the configured embedding provider
-5. registers the available search strategies on `app.state.registry`
+5. constructs `HybridSearchStrategy` and `HybridWikiSearchStrategy` on
+   `app.state.strategy` and `app.state.wiki_strategy`
 
 At shutdown it:
 
@@ -82,9 +83,9 @@ At shutdown it:
 
 ### Search Strategy
 
-`services/search/src/search/strategies/hybrid_strategy.py` contains the current
-retrieval logic, and `services/search/src/search/registry.py` dispatches typed
-requests to the registered strategy implementations.
+`services/search/src/search/strategies/hybrid_strategy.py` contains the code
+retrieval logic; `main.py` routes requests by context source (code, wiki, or
+combined) to the appropriate strategy.
 
 `HybridSearchStrategy` receives:
 
