@@ -22,6 +22,10 @@ DEFAULT_SYNTHETIC_TASK_TYPE = "api_contract_mismatch"
 SUPPORTED_SYNTHETIC_TASK_TYPES = frozenset({DEFAULT_SYNTHETIC_TASK_TYPE})
 DEFAULT_SYNTHETIC_BRANCH = "main"
 DEFAULT_SYNTHETIC_CONTAINER_PROJECT_ROOT = Path("/workspace")
+DEFAULT_AST_CHUNKER_STRATEGY = "ast_code"
+DEFAULT_BASE_CHUNKER_STRATEGY = "sliding_window"
+_AST_REPO_ID_OFFSET = 100_000_000
+_AST_REPO_NAME_SUFFIX = "-ast"
 _FAMILY_CONFIG_FILENAME = "family.json"
 _TASK_MANIFEST_FILENAME = "tasks.json"
 
@@ -85,6 +89,15 @@ class PreparedSyntheticWorkspace:
     validation_report_path: Path
     tasks: tuple[PreparedSyntheticTask, ...]
     seed: int
+
+
+@dataclass(frozen=True)
+class SyntheticSearchRepository:
+    full_name: str
+    github_repo_id: int
+    repo_url: str
+    branch: str
+    chunker_strategy: str | None = None
 
 
 def load_synthetic_family(
@@ -276,22 +289,88 @@ def shared_resolved_repository(workspace: PreparedSyntheticWorkspace) -> Resolve
     )
 
 
+def ast_repo_entry(workspace: PreparedSyntheticWorkspace) -> RepoRegistryEntry:
+    shared_task = _shared_task(workspace.tasks)
+    return RepoRegistryEntry(
+        github_repo_id=_ast_repo_id(shared_task.task.repo_b_id),
+        branch=shared_task.task.branch,
+    )
+
+
+def ast_resolved_repository(workspace: PreparedSyntheticWorkspace) -> ResolvedRepository:
+    shared_task = _shared_task(workspace.tasks)
+    return ResolvedRepository(
+        full_name=_ast_repo_name(shared_task.task.repo_b_name.lower()),
+        github_repo_id=_ast_repo_id(shared_task.task.repo_b_id),
+        repo_url=str(workspace.repo_b_path.resolve()),
+        branch=shared_task.task.branch,
+    )
+
+
+def synthetic_search_repositories(
+    workspace: PreparedSyntheticWorkspace,
+    *,
+    include_ast: bool = False,
+) -> tuple[SyntheticSearchRepository, ...]:
+    shared_repo = shared_resolved_repository(workspace)
+    repositories = [
+        SyntheticSearchRepository(
+            full_name=shared_repo.full_name,
+            github_repo_id=shared_repo.github_repo_id,
+            repo_url=shared_repo.repo_url,
+            branch=shared_repo.branch,
+            chunker_strategy=DEFAULT_BASE_CHUNKER_STRATEGY,
+        )
+    ]
+    if include_ast:
+        ast_repo = ast_resolved_repository(workspace)
+        repositories.append(
+            SyntheticSearchRepository(
+                full_name=ast_repo.full_name,
+                github_repo_id=ast_repo.github_repo_id,
+                repo_url=ast_repo.repo_url,
+                branch=ast_repo.branch,
+                chunker_strategy=DEFAULT_AST_CHUNKER_STRATEGY,
+            )
+        )
+    return tuple(repositories)
+
+
 def build_synthetic_index_request(
     workspace: PreparedSyntheticWorkspace,
     *,
     github_token: str | None = None,
     repo_url_override: str | None = None,
+    include_ast: bool = False,
 ) -> IndexRequest:
-    shared_repo = shared_resolved_repository(workspace)
+    repositories = synthetic_search_repositories(
+        workspace,
+        include_ast=include_ast,
+    )
+    return build_synthetic_index_request_for_repositories(
+        repositories,
+        github_token=github_token,
+        repo_url_override=repo_url_override,
+    )
+
+
+def build_synthetic_index_request_for_repositories(
+    repositories: tuple[SyntheticSearchRepository, ...],
+    *,
+    github_token: str | None = None,
+    repo_url_override: str | None = None,
+) -> IndexRequest:
     return IndexRequest(
         repositories=[
             RepoIndexRequest(
-                github_repo_id=shared_repo.github_repo_id,
-                repo_url=repo_url_override or shared_repo.repo_url,
-                full_name=shared_repo.full_name,
-                branches=[shared_repo.branch],
+                github_repo_id=repo.github_repo_id,
+                repo_url=repo_url_override or repo.repo_url,
+                full_name=repo.full_name,
+                branches=[repo.branch],
                 github_token=github_token,
+                chunker_strategy=repo.chunker_strategy,
             )
+            for repo in repositories
         ]
     )
 
@@ -663,6 +742,14 @@ def _shared_task(tasks: tuple[PreparedSyntheticTask, ...]) -> PreparedSyntheticT
     if len(repo_names) != 1:
         raise ValueError("Synthetic v1 only supports one shared library repository.")
     return tasks[0]
+
+
+def _ast_repo_id(base_repo_id: int) -> int:
+    return base_repo_id + _AST_REPO_ID_OFFSET
+
+
+def _ast_repo_name(base_repo_name: str) -> str:
+    return f"{base_repo_name}{_AST_REPO_NAME_SUFFIX}"
 
 
 def _string_value(data: Mapping[str, object], key: str, default: str = "") -> str:

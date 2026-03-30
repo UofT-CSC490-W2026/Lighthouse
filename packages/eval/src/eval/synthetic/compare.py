@@ -282,13 +282,13 @@ def build_synthetic_score_rows(
     retrieval_runs: dict[str, SyntheticRunSummary],
 ) -> tuple[SyntheticScoreRow, ...]:
     rows = [_score_row("baseline", baseline)]
-    for label in ("code", "wiki", "code+wiki"):
+    for label in ("code", "wiki", "ast", "combined"):
         summary = retrieval_runs.get(label)
         if summary is None:
             continue
         rows.append(_score_row(label, summary))
     for label, summary in sorted(retrieval_runs.items()):
-        if label in {"code", "wiki", "code+wiki"}:
+        if label in {"code", "wiki", "ast", "combined"}:
             continue
         rows.append(_score_row(label, summary))
     return tuple(rows)
