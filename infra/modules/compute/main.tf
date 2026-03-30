@@ -364,7 +364,6 @@ resource "aws_ecs_task_definition" "mcp" {
       ]
       environment = [
         { name = "AWS_REGION", value = data.aws_region.current.name },
-        { name = "DEBUG", value = "false" },
         { name = "MCP_SERVER_SETTINGS_SSM_PARAMETER", value = var.mcp_server_settings_ssm_parameter_name },
         { name = "SEARCH_SERVICE_URL", value = local.search_service_url },
         { name = "INGESTION_SERVICE_URL", value = local.ingestion_service_url },
