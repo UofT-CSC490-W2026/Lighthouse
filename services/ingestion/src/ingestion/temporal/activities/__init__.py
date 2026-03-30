@@ -31,6 +31,7 @@ from .storage import (
 )
 from .wiki import (
     WIKI_EMBED_BATCH_SIZE,
+    WIKI_PAGE_GENERATION_BATCH_SIZE,
     CleanupStagingWikiInput,
     EmbedWikiPagesInput,
     GenerateWikiInput,
@@ -51,6 +52,7 @@ __all__ = [
     # Constants
     "EMBED_BATCH_SIZE",
     "WIKI_EMBED_BATCH_SIZE",
+    "WIKI_PAGE_GENERATION_BATCH_SIZE",
     # Input/Output dataclasses
     "CleanupInactiveChunksInput",
     "ChunkFilesInput",

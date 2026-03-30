@@ -29,6 +29,7 @@ from .helpers import get_settings, make_db, make_milvus, make_wiki_milvus
 logger = logging.getLogger(__name__)
 
 WIKI_EMBED_BATCH_SIZE = 512
+WIKI_PAGE_GENERATION_BATCH_SIZE = 8
 
 # Limits for the structure generation prompt
 MAX_FILE_PATHS = 500
