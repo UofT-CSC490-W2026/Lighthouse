@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from enum import Enum
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -58,6 +59,7 @@ class CodeSnippet(BaseModel):
 class SearchResult(BaseModel):
     """Response payload from the search service."""
 
+    type: Literal["code"] = "code"
     snippets: list[CodeSnippet] = Field(default_factory=list)
     query: str
     total_results: int = 0
@@ -82,6 +84,7 @@ class WikiSnippet(BaseModel):
 class WikiSearchResult(BaseModel):
     """Response payload from wiki search."""
 
+    type: Literal["wiki"] = "wiki"
     snippets: list[WikiSnippet] = Field(default_factory=list)
     query: str
     total_results: int = 0
@@ -105,6 +108,7 @@ class CombinedSnippet(BaseModel):
 class CombinedSearchResult(BaseModel):
     """Response payload when multiple retrieval corpora are fused together."""
 
+    type: Literal["combined"] = "combined"
     snippets: list[CombinedSnippet] = Field(default_factory=list)
     query: str
     total_results: int = 0

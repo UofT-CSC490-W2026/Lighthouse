@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, Union
 
 import httpx
 from fastapi import Body
-from pydantic import BaseModel, Field, ValidationError
-from shared.schemas.search import HybridRequest, SearchMethod, SearchResult
+from pydantic import BaseModel, Field, TypeAdapter, ValidationError
+from pydantic import Discriminator, Tag
+from shared.schemas.search import CombinedSearchResult, HybridRequest, SearchContextSource, SearchMethod, SearchResult, WikiSearchResult
 
 from db import Repository
 from ..utilities import AuthenticatedUser, RequestError, get_logger, httproute, toolcall
@@ -18,6 +19,80 @@ if TYPE_CHECKING:
 
 # Backward-compatible alias used by older tests and callers.
 SearchRequest = HybridRequest
+
+
+def _discriminate_result_type(data: object) -> str:
+    """Return the discriminator tag, inferring it when 'type' is absent."""
+    if not isinstance(data, dict):
+        return "code"
+    if "type" in data:
+        return data["type"]
+    # Fallback for search service responses that predate the type field.
+    snippets = data.get("snippets", [])
+    if snippets:
+        first = snippets[0]
+        if "context_source" in first:
+            return "combined"
+        if "content_snippet" in first:
+            return "wiki"
+    return "code"
+
+
+_SearchServiceResult = TypeAdapter(
+    Annotated[
+        Union[
+            Annotated[SearchResult, Tag("code")],
+            Annotated[WikiSearchResult, Tag("wiki")],
+            Annotated[CombinedSearchResult, Tag("combined")],
+        ],
+        Discriminator(_discriminate_result_type),
+    ]
+)
+
+
+def _extract_snippets(data: dict) -> list["CodeContextSnippet"]:
+    """Normalize search service response into CodeContextSnippets."""
+    parsed = _SearchServiceResult.validate_python(data)
+
+    if isinstance(parsed, CombinedSearchResult):
+        return [
+            CodeContextSnippet(
+                context_source=s.context_source,
+                file_path=s.file_path,
+                start_line=s.start_line,
+                end_line=s.end_line,
+                content=s.content,
+                reason=s.reason,
+                page_title=s.page_title,
+                slug=s.slug,
+                section_path=s.section_path,
+            )
+            for s in parsed.snippets
+        ]
+
+    if isinstance(parsed, WikiSearchResult):
+        return [
+            CodeContextSnippet(
+                context_source=SearchContextSource.wiki,
+                content=s.content_snippet,
+                page_title=s.page_title,
+                slug=s.slug,
+                section_path=s.section_path,
+            )
+            for s in parsed.snippets
+        ]
+
+    return [
+        CodeContextSnippet(
+            context_source=SearchContextSource.code,
+            file_path=s.file_path,
+            start_line=s.start_line,
+            end_line=s.end_line,
+            content=s.content,
+            reason=s.reason,
+        )
+        for s in parsed.snippets
+    ]
 
 
 class SearchEngine:
@@ -72,6 +147,7 @@ class SearchEngine:
                 branch=branch.strip() or "main",
                 file_path=normalized_file_path,
                 top_k=10,
+                context_sources=(SearchContextSource.code, SearchContextSource.wiki),
             )
         except ValidationError as exc:
             raise RequestError(str(exc), status_code=422) from exc
@@ -90,23 +166,13 @@ class SearchEngine:
                 resp = await client.post(
                     f"{search_url}/search",
                     json=search_request.model_dump(
+                        mode="json",
                         exclude_none=True,
-                        exclude={"method", "context_source", "context_sources"},
+                        exclude={"method", "context_source"},
                     ),
                 )
                 resp.raise_for_status()
-                result = SearchResult.model_validate(resp.json())
-
-                for s in result.snippets:
-                    snippets.append(
-                        CodeContextSnippet(
-                            file_path=s.file_path,
-                            start_line=s.start_line,
-                            end_line=s.end_line,
-                            content=s.content,
-                            reason=s.reason,
-                        )
-                    )
+                snippets = _extract_snippets(resp.json())
         except httpx.HTTPStatusError as exc:
             self.log.error("Search service returned %s: %s", exc.response.status_code, exc.response.text)
             status = "error"
@@ -145,11 +211,15 @@ class SearchEngine:
 class CodeContextSnippet(BaseModel):
     """Represent a retrieved snippet that may help with a coding task."""
 
-    file_path: str
+    context_source: SearchContextSource = SearchContextSource.code
+    file_path: str | None = None
     start_line: int | None = None
     end_line: int | None = None
     content: str
     reason: str | None = None
+    page_title: str | None = None
+    slug: str | None = None
+    section_path: str | None = None
 
 
 class CodeContextResponse(BaseModel):

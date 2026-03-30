@@ -24,7 +24,6 @@ from mcp_server.utilities.auth import (
     ManagedToken,
     RequestError,
 )
-from shared.schemas.search import CodeSnippet
 from mcp_server.utilities.config.env import reload_settings
 
 
@@ -362,13 +361,14 @@ async def test_search_and_user_engines_cover_error_paths(monkeypatch):
         lambda *args, **kwargs: _AsyncClient(
             post_response=_Response(
                 json_data={
+                    "type": "combined",
                     "snippets": [
                         {
+                            "context_source": "code",
                             "file_path": "a.py",
                             "start_line": 1,
                             "end_line": 2,
                             "content": "print('hi')",
-                            "language": "python",
                             "score": 0.9,
                             "reason": "relevant",
                         }
@@ -391,13 +391,14 @@ async def test_search_and_user_engines_cover_error_paths(monkeypatch):
         lambda *args, **kwargs: _CapturingAsyncClient(
             post_response=_Response(
                 json_data={
+                    "type": "combined",
                     "snippets": [
                         {
+                            "context_source": "code",
                             "file_path": "a.py",
                             "start_line": 1,
                             "end_line": 2,
                             "content": "print('hi')",
-                            "language": "python",
                             "score": 0.9,
                             "reason": "relevant",
                         }
@@ -421,6 +422,7 @@ async def test_search_and_user_engines_cover_error_paths(monkeypatch):
         "branch": "main",
         "file_path": "a.py",
         "top_k": 10,
+        "context_sources": ["code", "wiki"],
     }
     assert result.status == "ok"
     assert result.query == "fix bug"
