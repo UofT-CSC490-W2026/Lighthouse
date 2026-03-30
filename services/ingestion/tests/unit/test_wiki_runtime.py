@@ -48,7 +48,7 @@ def test_ingestion_settings_openai_reasoning_defaults_to_shared_value() -> None:
     settings = IngestionSettings(llm_strategy="openai")
 
     assert settings.resolved_llm_model() == "gpt-5.4-nano"
-    assert settings.resolved_llm_reasoning_effort() == "low"
+    assert settings.resolved_llm_reasoning_effort() == "none"
 
 
 @pytest.mark.unit
@@ -63,7 +63,7 @@ def test_build_llm_request_kwargs_includes_reasoning_for_openai() -> None:
     settings = IngestionSettings(llm_strategy="openai")
 
     assert _build_llm_request_kwargs(settings, LLMStrategy.OPENAI) == {
-        "reasoning_effort": "low"
+        "reasoning_effort": "none"
     }
 
 

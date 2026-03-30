@@ -39,7 +39,6 @@ class TestGitOperations:
             auth_url,
             tmp_path / "my-repo",
             branch="main",
-            depth=1,
         )
         assert result == tmp_path / "my-repo"
 
