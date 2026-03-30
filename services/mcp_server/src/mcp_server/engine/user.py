@@ -100,11 +100,17 @@ class UserEngine:
             normalized_full_name,
             user_id=auth.id,
         )
-        repo = await asyncio.to_thread(
+        repo, needs_ingestion = await asyncio.to_thread(
             self._upsert_user_repo_sync, github_repo, auth.id
         )
 
-        await self._trigger_ingestion(github_repo, auth.id)
+        if needs_ingestion:
+            await self._trigger_ingestion(github_repo, auth.id)
+        else:
+            self.log.info(
+                "Skipping ingestion for %s (repository unhidden for user)",
+                github_repo.full_name,
+            )
 
         return self._to_user_repo_response(repo, [])
 
@@ -199,13 +205,27 @@ class UserEngine:
         self,
         github_repo: GitHubRepository,
         user_id: str,
-    ) -> Repository:
-        """Insert or update a globally indexed repository row and clear any user hide."""
+    ) -> tuple[Repository, bool]:
+        """Insert or update a globally indexed repository row and clear any user hide.
+
+        Returns the saved ``Repository`` and whether ingestion should run. Ingestion is
+        skipped when the repository already existed and the only change was removing a
+        per-user hide (re-adding a previously removed repository).
+        """
         with self.engine.app.database.connection_context():
             repo = Repository.get_or_none(
                 Repository.github_repo_id == github_repo.github_repo_id
             )
             created = repo is None
+            unhide_only = False
+            if not created:
+                unhide_only = (
+                    UserHiddenRepository.get_or_none(
+                        (UserHiddenRepository.user == user_id)
+                        & (UserHiddenRepository.repository == repo)
+                    )
+                    is not None
+                )
             if repo is None:
                 repo = Repository(
                     github_repo_id=github_repo.github_repo_id,
@@ -234,7 +254,8 @@ class UserEngine:
                 )
                 .execute()
             )
-            return repo
+            needs_ingestion = created or not unhide_only
+            return repo, needs_ingestion
 
     def _list_user_repos_sync(
         self,
