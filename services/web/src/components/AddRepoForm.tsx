@@ -1,13 +1,15 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, type AddUserRepoRequest } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { parseBranchInput } from "@/lib/branches";
 
 export function AddRepoForm() {
   const navigate = useNavigate();
   const [repoUrl, setRepoUrl] = useState("");
+  const [branchInput, setBranchInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -17,9 +19,15 @@ export function AddRepoForm() {
     setError(null);
 
     try {
+      const branches = parseBranchInput(branchInput);
+      const body: AddUserRepoRequest = { repo_url: repoUrl };
+      if (branches.length > 0) {
+        body.branches = branches;
+      }
+
       await apiFetch("/v1/user/repos", {
         method: "POST",
-        body: { repo_url: repoUrl },
+        body,
       });
       navigate("/dashboard");
     } catch (err) {
@@ -30,24 +38,44 @@ export function AddRepoForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="space-y-1.5">
-        <Label htmlFor="repo-url">GitHub Repository</Label>
-        <Input
-          id="repo-url"
-          type="text"
-          value={repoUrl}
-          onChange={(e) => setRepoUrl(e.target.value)}
-          placeholder="https://github.com/owner/repo or owner/repo"
-          required
-        />
-      </div>
-
-      {error && (
-        <div className="border border-destructive/50 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-          {error}
-        </div>
-      )}
+    <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+      <FieldGroup>
+        <Field>
+          <FieldLabel htmlFor="repo-url">GitHub Repository</FieldLabel>
+          <Input
+            id="repo-url"
+            type="text"
+            value={repoUrl}
+            onChange={(e) => {
+              setRepoUrl(e.target.value);
+              if (error) {
+                setError(null);
+              }
+            }}
+            placeholder="https://github.com/owner/repo or owner/repo"
+            required
+          />
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="repo-branches">Extra Branches</FieldLabel>
+          <Input
+            id="repo-branches"
+            type="text"
+            value={branchInput}
+            onChange={(e) => {
+              setBranchInput(e.target.value);
+              if (error) {
+                setError(null);
+              }
+            }}
+            placeholder="feature/auth, release/next"
+          />
+          <FieldDescription>
+            The default branch is always indexed. Add more branches as a comma-separated list.
+          </FieldDescription>
+        </Field>
+        {error && <FieldError>{error}</FieldError>}
+      </FieldGroup>
 
       <div className="flex gap-3">
         <Button type="submit" disabled={loading || !repoUrl.trim()}>

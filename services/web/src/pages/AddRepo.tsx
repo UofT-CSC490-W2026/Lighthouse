@@ -15,9 +15,9 @@ export default function AddRepo() {
         <div className="space-y-1">
           <h1 className="text-xl font-semibold text-foreground">Add Repository</h1>
           <p className="text-sm text-muted-foreground">
-            Provide a GitHub repository URL to index. Lighthouse will resolve the
-            default branch automatically and process the repository so your AI
-            coding agent can search it for context.
+            Provide a GitHub repository URL to index. Lighthouse always includes the
+            default branch, and you can add more branches here or later from the
+            dashboard if you need extra indexed context.
           </p>
         </div>
         <Card>

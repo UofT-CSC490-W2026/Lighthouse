@@ -91,6 +91,15 @@ export interface UserRepo {
   branches: BranchInfo[];
 }
 
+export interface AddUserRepoRequest {
+  repo_url: string;
+  branches?: string[];
+}
+
+export interface AddRepoBranchesRequest {
+  branches: string[];
+}
+
 export interface MCPTokenState {
   token: string | null;
   issued_at: string | null;

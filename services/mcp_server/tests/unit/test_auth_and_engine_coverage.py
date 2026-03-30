@@ -13,7 +13,7 @@ from fastapi import Request
 from db import IndexedBranch, Repository, Session, User
 from mcp_server.engine.auth import AuthEngine
 from mcp_server.engine.search import SearchEngine
-from mcp_server.engine.user import UserEngine
+from mcp_server.engine.user import AddRepoBranchesRequest, AddUserRepoRequest, UserEngine
 from mcp_server.main import App
 from mcp_server.utilities.auth import (
     AuthenticatedUser,
@@ -441,13 +441,79 @@ async def test_search_and_user_engines_cover_error_paths(monkeypatch):
     monkeypatch.setattr(user_engine, "_upsert_user_repo_sync", upsert_mock)
     trigger_mock = AsyncMock()
     monkeypatch.setattr(user_engine, "_trigger_ingestion", trigger_mock)
-    assert (await user_engine.add_user_repo(auth, "https://github.com/Owner/Repo.git")).full_name == "owner/repo"
+    assert (
+        await user_engine.add_user_repo(
+            auth,
+            AddUserRepoRequest(
+                repo_url="https://github.com/Owner/Repo.git",
+                branches=[" release ", "main", "", "release"],
+            ),
+        )
+    ).full_name == "owner/repo"
     trigger_mock.assert_awaited_once()
+    trigger_mock.assert_awaited_with(
+        user_engine.engine.app.authenticator.fetch_github_repository.return_value,
+        "user-1",
+        ["main", "release"],
+    )
 
     upsert_mock.return_value = (created_repo, False)
     trigger_mock.reset_mock()
-    assert (await user_engine.add_user_repo(auth, "https://github.com/Owner/Repo.git")).full_name == "owner/repo"
+    assert (
+        await user_engine.add_user_repo(
+            auth,
+            AddUserRepoRequest(repo_url="https://github.com/Owner/Repo.git"),
+        )
+    ).full_name == "owner/repo"
     trigger_mock.assert_not_called()
+
+    indexed_branches = [
+        SimpleNamespace(branch_name="main", status="indexed"),
+        SimpleNamespace(branch_name="dev", status="indexed"),
+    ]
+    monkeypatch.setattr(
+        user_engine.engine.app.authenticator,
+        "list_visible_private_repository_ids",
+        AsyncMock(return_value=set()),
+    )
+    trigger_mock.reset_mock()
+    refreshed_repo = SimpleNamespace(**created_repo.__dict__)
+    monkeypatch.setattr(
+        user_engine,
+        "_get_visible_user_repo_sync",
+        MagicMock(side_effect=[(created_repo, indexed_branches), (refreshed_repo, indexed_branches)]),
+    )
+    assert (
+        await user_engine.add_user_repo_branches(
+            auth,
+            "owner/repo",
+            AddRepoBranchesRequest(branches=[" dev ", "release", "", "release"]),
+        )
+    ).full_name == "owner/repo"
+    trigger_mock.assert_awaited_with(
+        user_engine.engine.app.authenticator.fetch_github_repository.return_value,
+        "user-1",
+        ["release"],
+    )
+    monkeypatch.setattr(
+        user_engine,
+        "_get_visible_user_repo_sync",
+        MagicMock(return_value=(created_repo, indexed_branches)),
+    )
+
+    with pytest.raises(RequestError, match="At least one branch is required"):
+        await user_engine.add_user_repo_branches(
+            auth,
+            "owner/repo",
+            AddRepoBranchesRequest(branches=[" ", ""]),
+        )
+
+    with pytest.raises(RequestError, match="already indexed"):
+        await user_engine.add_user_repo_branches(
+            auth,
+            "owner/repo",
+            AddRepoBranchesRequest(branches=["main", "dev", "main"]),
+        )
 
     monkeypatch.setattr(user_engine, "_hide_user_repo_sync", MagicMock(return_value=False))
     assert (await user_engine.remove_user_repo(auth, "owner/repo")).hidden is False
@@ -489,14 +555,14 @@ async def test_user_engine_trigger_ingestion_service_errors():
     monkeypatch = pytest.MonkeyPatch()
     monkeypatch.setattr("mcp_server.engine.user.httpx.AsyncClient", lambda *args, **kwargs: _AsyncClient(post_error=status_error))
     with pytest.raises(RequestError, match="Ingestion service error: 502"):
-        await engine._trigger_ingestion(repo, "user-1")
+        await engine._trigger_ingestion(repo, "user-1", ["main"])
 
     monkeypatch.setattr(
         "mcp_server.engine.user.httpx.AsyncClient",
         lambda *args, **kwargs: _AsyncClient(post_error=httpx.RequestError("down", request=httpx.Request("POST", "http://ingest"))),
     )
     with pytest.raises(RequestError, match="Ingestion service unavailable"):
-        await engine._trigger_ingestion(repo, "user-1")
+        await engine._trigger_ingestion(repo, "user-1", ["main"])
     monkeypatch.undo()
 
 
@@ -523,7 +589,7 @@ async def test_user_engine_trigger_ingestion_success_and_search_resolve_none(db_
         "mcp_server.engine.user.httpx.AsyncClient",
         lambda *args, **kwargs: _AsyncClient(post_response=_Response(json_data={"status": "accepted", "workflow_ids": ["wf-1"]})),
     )
-    result = await user_engine._trigger_ingestion(repo, "user-1")
+    result = await user_engine._trigger_ingestion(repo, "user-1", ["main", "release"])
     assert result.workflow_ids == ["wf-1"]
 
     search_engine = SearchEngine(SimpleNamespace(app=SimpleNamespace(database=db_manager)))
@@ -584,6 +650,12 @@ def test_search_and_user_engine_sync_db_paths(db_manager):
     assert len(visible) == 1
     repo_obj, branches = visible[0]
     assert user_engine._to_user_repo_response(repo_obj, branches).index_status is None
+    found_repo, found_branches = user_engine._get_visible_user_repo_sync("user-1", "owner/repo", {55})
+    assert found_repo is not None
+    assert found_branches == []
+    missing_repo, missing_branches = user_engine._get_visible_user_repo_sync("user-1", "missing/repo", {55})
+    assert missing_repo is None
+    assert missing_branches == []
 
     # Add indexed branches and verify they are returned and status is computed correctly
     with db_manager.connection_context():
@@ -606,6 +678,8 @@ def test_search_and_user_engine_sync_db_paths(db_manager):
         user_engine._normalize_full_name("owner/   ")
     with pytest.raises(RequestError, match="owner/repo form"):
         user_engine._normalize_full_name("owner/.git")
+    assert user_engine._normalize_branch_names([" main ", "", "release", "main"]) == ["main", "release"]
+    assert user_engine._merge_default_branch("main", ["release", "main", "dev"]) == ["main", "release", "dev"]
 
 
 @pytest.mark.unit

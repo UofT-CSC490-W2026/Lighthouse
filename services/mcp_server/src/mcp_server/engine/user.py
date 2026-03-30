@@ -2,12 +2,11 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime
-from typing import TYPE_CHECKING, Annotated, Literal, cast
+from typing import TYPE_CHECKING, Literal, cast
 from urllib.parse import urlparse
 
 import httpx
-from fastapi import Body
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from shared.schemas.ingestion import IndexAcceptedResponse, IndexRequest, RepoIndexRequest
 
 from db import IndexedBranch, Repository, UserHiddenRepository
@@ -92,20 +91,25 @@ class UserEngine:
     async def add_user_repo(
         self,
         auth: AuthenticatedUser,
-        repo_url: Annotated[str, Body(..., embed=True)],
+        request: "AddUserRepoRequest",
     ) -> "UserRepoResponse":
         """Validate and create or unhide an indexed repository for the current user."""
-        normalized_full_name = self._normalize_full_name(repo_url)
+        normalized_full_name = self._normalize_full_name(request.repo_url)
         github_repo = await self.engine.app.authenticator.fetch_github_repository(
             normalized_full_name,
             user_id=auth.id,
         )
+        requested_branches = self._normalize_branch_names(request.branches)
         repo, needs_ingestion = await asyncio.to_thread(
             self._upsert_user_repo_sync, github_repo, auth.id
         )
 
         if needs_ingestion:
-            await self._trigger_ingestion(github_repo, auth.id)
+            branches = self._merge_default_branch(
+                github_repo.default_branch,
+                requested_branches,
+            )
+            await self._trigger_ingestion(github_repo, auth.id, branches)
         else:
             self.log.info(
                 "Skipping ingestion for %s (repository unhidden for user)",
@@ -113,6 +117,70 @@ class UserEngine:
             )
 
         return self._to_user_repo_response(repo, [])
+
+    @httproute(
+        "POST",
+        "/v1/user/repos/{full_name:path}/branches",
+        name="add_user_repo_branches",
+        description="Add branches to an existing indexed repository for the current user.",
+    )
+    @toolcall(
+        "add_user_repo_branches",
+        description="Add branches to an existing indexed repository for the current user.",
+    )
+    async def add_user_repo_branches(
+        self,
+        auth: AuthenticatedUser,
+        full_name: str,
+        request: "AddRepoBranchesRequest",
+    ) -> "UserRepoResponse":
+        """Trigger indexing for new branches on an existing visible repository."""
+        normalized_full_name = self._normalize_full_name(full_name)
+        requested_branches = self._normalize_branch_names(request.branches)
+        if not requested_branches:
+            raise RequestError("At least one branch is required.", status_code=422)
+
+        visible_private_repo_ids = (
+            await self.engine.app.authenticator.list_visible_private_repository_ids(
+                auth.id
+            )
+        )
+        repo, indexed_branches = await asyncio.to_thread(
+            self._get_visible_user_repo_sync,
+            auth.id,
+            normalized_full_name,
+            visible_private_repo_ids,
+        )
+        if repo is None:
+            raise RequestError(
+                "Repository does not exist or you do not currently have access to it.",
+                status_code=404,
+            )
+
+        existing_branch_names = {branch.branch_name for branch in indexed_branches}
+        new_branches = [
+            branch for branch in requested_branches if branch not in existing_branch_names
+        ]
+        if not new_branches:
+            raise RequestError(
+                "All requested branches are already indexed for this repository.",
+                status_code=409,
+            )
+
+        github_repo = await self.engine.app.authenticator.fetch_github_repository(
+            normalized_full_name,
+            user_id=auth.id,
+        )
+        await self._trigger_ingestion(github_repo, auth.id, new_branches)
+
+        refreshed_repo, refreshed_branches = await asyncio.to_thread(
+            self._get_visible_user_repo_sync,
+            auth.id,
+            normalized_full_name,
+            visible_private_repo_ids,
+        )
+        assert refreshed_repo is not None
+        return self._to_user_repo_response(refreshed_repo, refreshed_branches)
 
     @httproute(
         "DELETE",
@@ -142,6 +210,7 @@ class UserEngine:
         self,
         github_repo: GitHubRepository,
         user_id: str,
+        branches: list[str],
     ) -> IndexAcceptedResponse:
         """Call the ingestion service to start indexing. Raises on failure."""
         ingestion_url = self.engine.app.settings.ingestion_service_url
@@ -156,7 +225,7 @@ class UserEngine:
                     github_repo_id=github_repo.github_repo_id,
                     repo_url=github_repo.repo_url,
                     full_name=github_repo.full_name,
-                    branches=[github_repo.default_branch],
+                    branches=branches,
                     github_token=github_token,
                 )
             ]
@@ -293,6 +362,39 @@ class UserEngine:
                 result.append((repo, branches))
             return result
 
+    def _get_visible_user_repo_sync(
+        self,
+        user_id: str,
+        full_name: str,
+        visible_private_repo_ids: set[int],
+    ) -> tuple[Repository | None, list[IndexedBranch]]:
+        """Load one visible repository plus its indexed branches for the user."""
+        with self.engine.app.database.connection_context():
+            visibility_clause = ~Repository.is_private
+            if visible_private_repo_ids:
+                visibility_clause = (
+                    visibility_clause
+                    | Repository.github_repo_id.in_(sorted(visible_private_repo_ids))
+                )
+
+            hidden_repository_ids = UserHiddenRepository.select(
+                UserHiddenRepository.repository
+            ).where(UserHiddenRepository.user == user_id)
+            repo = Repository.get_or_none(
+                (Repository.full_name == full_name)
+                & visibility_clause
+                & ~(Repository.id.in_(hidden_repository_ids))
+            )
+            if repo is None:
+                return None, []
+
+            branches = list(
+                IndexedBranch.select()
+                .where(IndexedBranch.repository == repo)
+                .order_by(IndexedBranch.branch_name)
+            )
+            return repo, branches
+
     def _hide_user_repo_sync(self, user_id: str, full_name: str) -> bool:
         """Hide an existing repository for a single user without deleting it globally."""
         with self.engine.app.database.connection_context():
@@ -343,6 +445,30 @@ class UserEngine:
 
         return f"{owner.lower()}/{repo_name.lower()}"
 
+    def _normalize_branch_names(self, branches: list[str]) -> list[str]:
+        """Trim, de-duplicate, and preserve branch order."""
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for branch in branches:
+            candidate = branch.strip()
+            if not candidate or candidate in seen:
+                continue
+            normalized.append(candidate)
+            seen.add(candidate)
+        return normalized
+
+    def _merge_default_branch(
+        self,
+        default_branch: str,
+        requested_branches: list[str],
+    ) -> list[str]:
+        """Ensure the default branch is indexed first on initial repo add."""
+        merged = [default_branch]
+        for branch in requested_branches:
+            if branch != default_branch:
+                merged.append(branch)
+        return merged
+
     def _to_user_repo_response(self, repo: Repository, branches: list[IndexedBranch]) -> "UserRepoResponse":
         """Convert a repository model into the API response shape."""
         branch_infos = [
@@ -390,6 +516,19 @@ class BranchInfo(BaseModel):
 
     branch_name: str
     status: BranchStatus
+
+
+class AddUserRepoRequest(BaseModel):
+    """Deserialize a repository add request."""
+
+    repo_url: str
+    branches: list[str] = Field(default_factory=list)
+
+
+class AddRepoBranchesRequest(BaseModel):
+    """Deserialize a request to index additional branches."""
+
+    branches: list[str]
 
 
 class UserRepoResponse(BaseModel):

@@ -57,6 +57,7 @@ export function RepoList() {
           addedAt={repo.added_at}
           branches={repo.branches}
           onRemove={handleRemove}
+          onBranchesUpdated={() => mutate()}
         />
       ))}
     </div>
