@@ -22,6 +22,7 @@ def test_run_synthetic_experiment_writes_comparison_and_report(
     def fake_index_synthetic_repository(**kwargs: object) -> Path:
         workspace = kwargs["workspace"]
         assert isinstance(workspace, PreparedSyntheticWorkspace)
+        assert kwargs["include_ast"] is False
         return workspace.repo_registry_path
 
     def fake_prepare_synthetic_wiki(**kwargs: object) -> None:
@@ -141,6 +142,7 @@ def test_run_synthetic_experiment_suite_writes_score_table_and_reports(
     def fake_index_synthetic_repository(**kwargs: object) -> Path:
         workspace = kwargs["workspace"]
         assert isinstance(workspace, PreparedSyntheticWorkspace)
+        assert kwargs["include_ast"] is True
         return workspace.repo_registry_path
 
     def fake_prepare_synthetic_wiki(**kwargs: object) -> None:
@@ -243,16 +245,19 @@ def test_run_synthetic_experiment_suite_writes_score_table_and_reports(
     assert result.baseline_summary.resolved_instances == 1
     assert result.lighthouse_summaries["code"].resolved_instances == 1
     assert result.lighthouse_summaries["wiki"].resolved_instances == 1
-    assert result.lighthouse_summaries["code+wiki"].resolved_instances == 1
+    assert result.lighthouse_summaries["ast"].resolved_instances == 1
+    assert result.lighthouse_summaries["combined"].resolved_instances == 1
     assert [row.label for row in result.score_rows] == [
         "baseline",
         "code",
         "wiki",
-        "code+wiki",
+        "ast",
+        "combined",
     ]
     assert result.score_text_path.is_file()
     assert result.score_json_path.is_file()
     assert result.comparison_text_paths["code"].is_file()
     assert result.comparison_text_paths["wiki"].is_file()
-    assert result.comparison_text_paths["code+wiki"].is_file()
+    assert result.comparison_text_paths["ast"].is_file()
+    assert result.comparison_text_paths["combined"].is_file()
     assert result.report_path.is_file()

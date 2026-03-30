@@ -112,6 +112,49 @@ def build_synthetic_wiki_lighthouse_user_message(
     return "\n".join(parts)
 
 
+def build_synthetic_ast_lighthouse_user_message(
+    prepared_task: PreparedSyntheticTask,
+    snippets: list[CodeSnippet],
+) -> str:
+    task = prepared_task.task
+    parts = _base_prompt_parts(task)
+    parts.extend(_consumer_context_parts(prepared_task))
+    parts.extend(
+        [
+            "Retrieved provider-library AST-chunked code context from Lighthouse:",
+        ]
+    )
+
+    if not snippets:
+        parts.extend(
+            [
+                "- No provider-library AST snippets were retrieved for this task.",
+                "",
+            ]
+        )
+    else:
+        for index, snippet in enumerate(snippets, start=1):
+            parts.extend(
+                [
+                    f"AST snippet {index}:",
+                    f"- File: {snippet.file_path}",
+                    f"- Lines: {snippet.start_line}-{snippet.end_line}",
+                ]
+            )
+            if snippet.reason:
+                parts.append(f"- Reason: {snippet.reason}")
+            parts.extend(
+                [
+                    "",
+                    snippet.content.rstrip(),
+                    "",
+                ]
+            )
+
+    parts.extend(_output_requirements())
+    return "\n".join(parts)
+
+
 def build_synthetic_combined_lighthouse_user_message(
     prepared_task: PreparedSyntheticTask,
     snippets: list[CombinedSnippet],
@@ -121,7 +164,7 @@ def build_synthetic_combined_lighthouse_user_message(
     parts.extend(_consumer_context_parts(prepared_task))
     parts.extend(
         [
-            "Retrieved fused provider-library context from Lighthouse (code + wiki):",
+            "Retrieved fused provider-library context from Lighthouse:",
         ]
     )
 
@@ -138,6 +181,16 @@ def build_synthetic_combined_lighthouse_user_message(
                 parts.extend(
                     [
                         f"Combined snippet {index} [code]:",
+                        f"- File: {snippet.file_path or 'unknown'}",
+                        f"- Lines: {snippet.start_line or 0}-{snippet.end_line or 0}",
+                    ]
+                )
+                if snippet.reason:
+                    parts.append(f"- Reason: {snippet.reason}")
+            elif snippet.context_source is SearchContextSource.ast:
+                parts.extend(
+                    [
+                        f"Combined snippet {index} [ast]:",
                         f"- File: {snippet.file_path or 'unknown'}",
                         f"- Lines: {snippet.start_line or 0}-{snippet.end_line or 0}",
                     ]

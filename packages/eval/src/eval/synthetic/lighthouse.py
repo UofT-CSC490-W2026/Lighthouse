@@ -8,6 +8,7 @@ from pydantic import ValidationError
 from shared.schemas.ingestion import IndexAcceptedResponse
 from shared.schemas.search import (
     CombinedSearchResult,
+    CombinedSnippet,
     SearchRequest,
     SearchContextSource,
     SearchResult,
@@ -22,6 +23,7 @@ from eval.indexing import (
     DEFAULT_STATUS_TIMEOUT_SECONDS,
     ACTIVE_INDEX_STATUSES,
     IngestionWorkerLogStreamer,
+    ResolvedRepository,
     branch_status_for,
     find_compose_project_root,
     get_index_status,
@@ -41,6 +43,7 @@ from eval.wiki import (
     wait_for_wiki_generation,
 )
 from .prompts import (
+    build_synthetic_ast_lighthouse_user_message,
     build_synthetic_combined_lighthouse_user_message,
     build_synthetic_code_lighthouse_user_message,
     build_synthetic_search_query,
@@ -48,11 +51,14 @@ from .prompts import (
 )
 from .workspace import (
     PreparedSyntheticWorkspace,
+    SyntheticSearchRepository,
     SyntheticTask,
-    build_synthetic_index_request,
+    ast_resolved_repository,
+    build_synthetic_index_request_for_repositories,
     build_synthetic_wiki_request,
     shared_repo_entry,
     shared_resolved_repository,
+    synthetic_search_repositories,
     synthetic_repo_url_for_container,
 )
 
@@ -69,6 +75,7 @@ def index_synthetic_repository(
     poll_interval_seconds: float = DEFAULT_STATUS_POLL_INTERVAL_SECONDS,
     progress_heartbeat_seconds: float = DEFAULT_PROGRESS_HEARTBEAT_SECONDS,
     timeout_seconds: float = DEFAULT_STATUS_TIMEOUT_SECONDS,
+    include_ast: bool = False,
 ) -> Path:
     if not ingestion_url.strip():
         raise ValueError("ingestion_url must not be empty.")
@@ -79,7 +86,7 @@ def index_synthetic_repository(
     if timeout_seconds <= 0:
         raise ValueError("timeout_seconds must be greater than 0.")
 
-    repo = shared_resolved_repository(workspace)
+    repositories = synthetic_search_repositories(workspace, include_ast=include_ast)
     normalized_ingestion_url = ingestion_url.rstrip("/")
     compose_root = find_compose_project_root(Path.cwd())
     should_stream_logs = resolve_stream_worker_logs_setting(
@@ -94,37 +101,30 @@ def index_synthetic_repository(
         with httpx.Client(
             timeout=30.0, headers=_build_internal_service_headers()
         ) as client:
-            status = get_index_status(
-                client=client,
-                ingestion_url=normalized_ingestion_url,
-                github_repo_id=repo.github_repo_id,
-            )
-            branch_status = normalize_branch_status(
-                branch_status_for(status, repo.branch) if status is not None else None
-            )
-            initial_statuses = {repo.full_name: branch_status}
-
-            if branch_status == "indexed":
-                print(f"Already indexed: {repo.full_name}@{repo.branch}")
-                return workspace.repo_registry_path.resolve()
-
-            if branch_status in ACTIVE_INDEX_STATUSES:
-                print(f"Already indexing: {repo.full_name}@{repo.branch}")
-                wait_for_indexing(
+            initial_statuses: dict[str, str | None] = {}
+            to_wait = []
+            to_submit = []
+            for repo in repositories:
+                status = get_index_status(
                     client=client,
                     ingestion_url=normalized_ingestion_url,
-                    repos=[repo],
-                    initial_statuses=initial_statuses,
-                    allow_stale_terminal_statuses=set(),
-                    poll_interval_seconds=poll_interval_seconds,
-                    progress_heartbeat_seconds=progress_heartbeat_seconds,
-                    timeout_seconds=timeout_seconds,
+                    github_repo_id=repo.github_repo_id,
                 )
+                branch_status = normalize_branch_status(
+                    branch_status_for(status, repo.branch) if status is not None else None
+                )
+                initial_statuses[repo.full_name] = branch_status
+                if branch_status == "indexed":
+                    print(f"Already indexed: {repo.full_name}@{repo.branch}")
+                elif branch_status in ACTIVE_INDEX_STATUSES:
+                    print(f"Already indexing: {repo.full_name}@{repo.branch}")
+                    to_wait.append(repo)
+                else:
+                    to_submit.append(repo)
+
+            if not to_submit and not to_wait:
                 return workspace.repo_registry_path.resolve()
 
-            print(
-                f"Submitting synthetic indexing request for {repo.full_name}@{repo.branch}"
-            )
             repo_url_override: str | None = None
             if compose_root is not None and _is_local_service_url(
                 normalized_ingestion_url
@@ -134,26 +134,33 @@ def index_synthetic_repository(
                     compose_root=compose_root,
                 )
                 print(f"Using container-visible repo path: {repo_url_override}")
-            request = build_synthetic_index_request(
-                workspace,
-                github_token=github_token,
-                repo_url_override=repo_url_override,
-            )
-            response = client.post(
-                f"{normalized_ingestion_url}/index",
-                json=request.model_dump(mode="json", exclude_none=True),
-            )
-            response.raise_for_status()
-            accepted = IndexAcceptedResponse.model_validate(response.json())
-            if accepted.workflow_ids:
-                print(f"Accepted workflows: {', '.join(accepted.workflow_ids)}")
+            if to_submit:
+                display = ", ".join(
+                    f"{repo.full_name}@{repo.branch}" for repo in to_submit
+                )
+                print(f"Submitting synthetic indexing request for {display}")
+                request = build_synthetic_index_request_for_repositories(
+                    tuple(to_submit),
+                    github_token=github_token,
+                    repo_url_override=repo_url_override,
+                )
+                response = client.post(
+                    f"{normalized_ingestion_url}/index",
+                    json=request.model_dump(mode="json", exclude_none=True),
+                )
+                response.raise_for_status()
+                accepted = IndexAcceptedResponse.model_validate(response.json())
+                if accepted.workflow_ids:
+                    print(f"Accepted workflows: {', '.join(accepted.workflow_ids)}")
 
             wait_for_indexing(
                 client=client,
                 ingestion_url=normalized_ingestion_url,
-                repos=[repo],
+                repos=[
+                    _as_resolved_repository(repo) for repo in [*to_wait, *to_submit]
+                ],
                 initial_statuses=initial_statuses,
-                allow_stale_terminal_statuses={repo.full_name},
+                allow_stale_terminal_statuses={repo.full_name for repo in to_submit},
                 poll_interval_seconds=poll_interval_seconds,
                 progress_heartbeat_seconds=progress_heartbeat_seconds,
                 timeout_seconds=timeout_seconds,
@@ -237,8 +244,10 @@ def build_synthetic_lighthouse_messages(
 ) -> dict[str, str]:
     if top_k < 1:
         raise ValueError("top_k must be at least 1.")
-    if context_source not in {"code", "wiki", "code+wiki"}:
-        raise ValueError("context_source must be 'code', 'wiki', or 'code+wiki'.")
+    if context_source not in {"code", "wiki", "ast", "combined", "code+wiki"}:
+        raise ValueError(
+            "context_source must be 'code', 'wiki', 'ast', 'combined', or 'code+wiki'."
+        )
     if not search_service_url.strip():
         raise ValueError("search_service_url must not be empty.")
 
@@ -278,8 +287,32 @@ def build_synthetic_lighthouse_messages(
                 messages[task.task_id] = build_synthetic_wiki_lighthouse_user_message(
                     prepared, result.snippets
                 )
-            else:
+            elif context_source == "ast":
+                result = search_synthetic_ast(
+                    client=client,
+                    search_service_url=normalized_search_url,
+                    workspace=workspace,
+                    task=task,
+                    top_k=top_k,
+                )
+                print(f"    retrieved {len(result.snippets)} ast snippet(s)")
+                messages[task.task_id] = build_synthetic_ast_lighthouse_user_message(
+                    prepared, result.snippets
+                )
+            elif context_source == "code+wiki":
                 result = search_synthetic_code_and_wiki(
+                    client=client,
+                    search_service_url=normalized_search_url,
+                    workspace=workspace,
+                    task=task,
+                    top_k=top_k,
+                )
+                print(f"    retrieved {len(result.snippets)} fused snippet(s)")
+                messages[task.task_id] = build_synthetic_combined_lighthouse_user_message(
+                    prepared, result.snippets
+                )
+            else:
+                result = search_synthetic_combined(
                     client=client,
                     search_service_url=normalized_search_url,
                     workspace=workspace,
@@ -345,6 +378,29 @@ def search_synthetic_wiki(
     return WikiSearchResult.model_validate(response.json())
 
 
+def search_synthetic_ast(
+    *,
+    client: httpx.Client,
+    search_service_url: str,
+    workspace: PreparedSyntheticWorkspace,
+    task: SyntheticTask,
+    top_k: int,
+) -> SearchResult:
+    repo = ast_resolved_repository(workspace)
+    request = SearchRequest(
+        query=build_synthetic_search_query(task),
+        github_repo_id=repo.github_repo_id,
+        branch=repo.branch,
+        top_k=top_k,
+    )
+    response = client.post(
+        f"{search_service_url}/search",
+        json=request.model_dump(mode="json", exclude_none=True),
+    )
+    _raise_for_search_response(response, context_label="synthetic ast")
+    return SearchResult.model_validate(response.json())
+
+
 def search_synthetic_code_and_wiki(
     *,
     client: httpx.Client,
@@ -384,6 +440,122 @@ def search_synthetic_code_and_wiki(
                     "so /search can return fused code+wiki results."
                 ) from exc
         raise
+
+
+def search_synthetic_combined(
+    *,
+    client: httpx.Client,
+    search_service_url: str,
+    workspace: PreparedSyntheticWorkspace,
+    task: SyntheticTask,
+    top_k: int,
+) -> CombinedSearchResult:
+    code_result = search_synthetic_code(
+        client=client,
+        search_service_url=search_service_url,
+        workspace=workspace,
+        task=task,
+        top_k=top_k,
+    )
+    wiki_result = search_synthetic_wiki(
+        client=client,
+        search_service_url=search_service_url,
+        workspace=workspace,
+        task=task,
+        top_k=top_k,
+    )
+    ast_result = search_synthetic_ast(
+        client=client,
+        search_service_url=search_service_url,
+        workspace=workspace,
+        task=task,
+        top_k=top_k,
+    )
+    fused = _rrf_fuse_combined(
+        [
+            _normalize_code_result(code_result, SearchContextSource.code),
+            _normalize_wiki_result(wiki_result),
+            _normalize_code_result(ast_result, SearchContextSource.ast),
+        ]
+    )
+    return CombinedSearchResult(
+        snippets=fused[:top_k],
+        query=build_synthetic_search_query(task),
+        total_results=len(fused),
+    )
+
+
+def _normalize_code_result(
+    result: SearchResult,
+    context_source: SearchContextSource,
+) -> list[CombinedSnippet]:
+    return [
+        CombinedSnippet(
+            context_source=context_source,
+            content=snippet.content,
+            score=snippet.score,
+            file_path=snippet.file_path,
+            start_line=snippet.start_line,
+            end_line=snippet.end_line,
+            reason=snippet.reason,
+        )
+        for snippet in result.snippets
+    ]
+
+
+def _normalize_wiki_result(result: WikiSearchResult) -> list[CombinedSnippet]:
+    return [
+        CombinedSnippet(
+            context_source=SearchContextSource.wiki,
+            content=snippet.content_snippet,
+            score=snippet.score,
+            page_title=snippet.page_title,
+            slug=snippet.slug,
+            section_path=snippet.section_path,
+        )
+        for snippet in result.snippets
+    ]
+
+
+def _rrf_fuse_combined(
+    ranked_lists: list[list[CombinedSnippet]],
+    *,
+    k: int = 60,
+) -> list[CombinedSnippet]:
+    scores: dict[str, float] = {}
+    snippet_map: dict[str, CombinedSnippet] = {}
+
+    for ranked in ranked_lists:
+        for rank, snippet in enumerate(ranked):
+            key = _combined_snippet_key(snippet)
+            scores[key] = scores.get(key, 0.0) + 1.0 / (k + rank + 1)
+            snippet_map.setdefault(key, snippet)
+
+    return [
+        snippet_map[key].model_copy(update={"score": scores[key]})
+        for key in sorted(scores, key=lambda item: scores[item], reverse=True)
+    ]
+
+
+def _combined_snippet_key(snippet: CombinedSnippet) -> str:
+    if snippet.context_source in {SearchContextSource.code, SearchContextSource.ast}:
+        return (
+            f"{snippet.context_source.value}:{snippet.file_path or ''}:"
+            f"{snippet.start_line or 0}:{snippet.end_line or 0}"
+        )
+    return (
+        f"wiki:{snippet.slug or ''}:"
+        f"{snippet.section_path or ''}:{snippet.page_title or ''}"
+    )
+
+
+def _as_resolved_repository(repo: SyntheticSearchRepository) -> ResolvedRepository:
+    return ResolvedRepository(
+        full_name=repo.full_name,
+        github_repo_id=repo.github_repo_id,
+        repo_url=repo.repo_url,
+        branch=repo.branch,
+    )
 
 
 def _build_internal_service_headers() -> dict[str, str]:

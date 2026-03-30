@@ -12,6 +12,7 @@ class SearchMethod(str, Enum):
 class SearchContextSource(str, Enum):
     code = "code"
     wiki = "wiki"
+    ast = "ast"
 
 
 class SearchRequest(BaseModel):
