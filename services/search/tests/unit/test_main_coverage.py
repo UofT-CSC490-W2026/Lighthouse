@@ -22,7 +22,7 @@ from shared.schemas.search import (
 )
 from search.config import SearchSettings
 from search.main import _build_embedder, create_app, health, search
-from search.strategies.hybrid_strategy import HybridSearchStrategy
+from search.strategies.hybrid_strategy import BranchNotIndexedError, HybridSearchStrategy
 from vectordb import MilvusClient
 
 
