@@ -108,9 +108,9 @@ data "aws_iam_policy_document" "ecs_task_policy" {
       "bedrock:ConverseStream",
     ]
     resources = [
-      "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.name}::foundation-model/*",
-      "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.name}:*:inference-profile/*",
-      "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.name}:*:application-inference-profile/*",
+      "arn:${data.aws_partition.current.partition}:bedrock:*::foundation-model/*",
+      "arn:${data.aws_partition.current.partition}:bedrock:*:*:inference-profile/*",
+      "arn:${data.aws_partition.current.partition}:bedrock:*:*:application-inference-profile/*",
     ]
   }
 }
