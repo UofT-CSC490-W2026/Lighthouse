@@ -115,15 +115,15 @@ class SearchEngine:
 
     @httproute(
         "POST",
-        "/v1/search/code-context",
-        name="get_code_context",
+        "/v1/search/search-code",
+        name="search_code",
         description="Request relevant code context for a coding task.",
     )
     @toolcall(
-        "get_code_context",
+        "search_code",
         description="Request relevant code context for a coding task.",
     )
-    async def get_code_context(
+    async def search_code(
         self,
         auth: AuthenticatedUser,
         repository_name: Annotated[str, Body(...)],
@@ -341,7 +341,7 @@ class CodeContextSnippet(BaseModel):
 
 
 class CodeContextResponse(BaseModel):
-    """Return the response shape for code-context requests."""
+    """Return the response shape for search-code requests."""
 
     status: str = Field(
         default="ok",
