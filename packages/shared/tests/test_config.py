@@ -42,7 +42,7 @@ def test_provider_specific_embedding_defaults():
 @pytest.mark.unit
 def test_provider_specific_llm_defaults():
     assert BEDROCK_LLM_MODEL == "us.amazon.nova-lite-v1:0"
-    assert OPENAI_LLM_MODEL == "gpt-4.1"
+    assert OPENAI_LLM_MODEL == "gpt-5.4-mini"
 
 
 @pytest.mark.unit
