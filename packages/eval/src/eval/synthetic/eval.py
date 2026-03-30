@@ -16,6 +16,12 @@ from .metadata import (
     empty_synthetic_experiment_metadata,
     synthetic_experiment_metadata_from_json,
 )
+from eval.efficiency import (
+    GenerationCallMetrics,
+    GenerationAggregateMetrics,
+    RunEfficiencySummary,
+    aggregate_generation_metrics,
+)
 from .predictions import SyntheticPredictionRecord, load_synthetic_predictions
 from .workspace import (
     DEFAULT_SYNTHETIC_RUNS_ROOT,
@@ -110,6 +116,7 @@ class SyntheticRunSummary:
     error_ids: tuple[str, ...]
     instances: tuple[SyntheticInstanceSummary, ...]
     results: tuple[SyntheticTaskEvaluationResult, ...]
+    efficiency: RunEfficiencySummary | None = None
 
     @property
     def total_tasks(self) -> int:
@@ -227,6 +234,7 @@ def evaluate_synthetic_predictions(
     (run_dir / "tasks").mkdir(parents=True, exist_ok=True)
 
     results: list[SyntheticTaskEvaluationResult] = []
+    generation_calls: list[GenerationCallMetrics] = []
     for prepared in workspace.tasks:
         task = prepared.task
         task_run_dir = run_dir / "tasks" / task.task_id
@@ -254,6 +262,20 @@ def evaluate_synthetic_predictions(
             )
         else:
             patch_exists = bool(prediction.model_patch.strip())
+            if (
+                prediction.generation_input_tokens is not None
+                and prediction.generation_output_tokens is not None
+                and prediction.generation_total_tokens is not None
+                and prediction.generation_latency_ms is not None
+            ):
+                generation_calls.append(
+                    GenerationCallMetrics(
+                        input_tokens=prediction.generation_input_tokens,
+                        output_tokens=prediction.generation_output_tokens,
+                        total_tokens=prediction.generation_total_tokens,
+                        latency_ms=prediction.generation_latency_ms,
+                    )
+                )
         if patch_exists:
             patch_applied, patch_apply_error = _apply_patch_text(
                 repo_a_path=repo_a_path,
@@ -297,6 +319,7 @@ def evaluate_synthetic_predictions(
         predictions_path=predictions_path.resolve(),
         experiment=experiment or empty_synthetic_experiment_metadata(),
         results=tuple(results),
+        generation_calls=tuple(generation_calls),
     )
     _write_summary_json(run_dir / "summary.json", summary)
     return summary
@@ -468,6 +491,7 @@ def _build_summary(
     predictions_path: Path,
     experiment: SyntheticExperimentMetadata,
     results: tuple[SyntheticTaskEvaluationResult, ...],
+    generation_calls: tuple[GenerationCallMetrics, ...] = (),
 ) -> SyntheticRunSummary:
     instances = tuple(_instance_summary_from_result(result) for result in results)
     total_instances = len(results)
@@ -484,6 +508,22 @@ def _build_summary(
         result.task_id
         for result in results
         if not result.prediction_present or (result.patch_exists and not result.patch_applied)
+    )
+    generation = aggregate_generation_metrics(
+        calls=generation_calls,
+        model_name=experiment.generation_model_name_or_path,
+        region_name=experiment.generation_region_name,
+    )
+    efficiency = RunEfficiencySummary(
+        generation=generation,
+        indexing_duration_seconds=0.0,
+        wiki_duration_seconds=0.0,
+        retrieval_duration_seconds=0.0,
+        generation_duration_seconds=0.0,
+        total_duration_seconds=0.0,
+        retrieval_request_count=0,
+        retrieval_query_tokens_estimate=None,
+        retrieval_query_cost_estimate_usd=None,
     )
     return SyntheticRunSummary(
         family_name=family_name,
@@ -507,6 +547,7 @@ def _build_summary(
         error_ids=error_ids,
         instances=instances,
         results=results,
+        efficiency=efficiency,
     )
 
 
@@ -611,6 +652,7 @@ def _write_summary_json(path: Path, summary: SyntheticRunSummary) -> None:
             }
             for result in summary.results
         ],
+        "efficiency": summary.efficiency.to_json() if summary.efficiency is not None else None,
     }
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
@@ -632,6 +674,7 @@ def _summary_from_json(raw: dict[str, object]) -> SyntheticRunSummary:
         experiment=experiment,
         results=results,
     )
+    efficiency = _efficiency_from_json(raw.get("efficiency"))
     raw_instances = raw.get("instances", [])
     if isinstance(raw_instances, list) and raw_instances:
         instances = tuple(
@@ -679,6 +722,7 @@ def _summary_from_json(raw: dict[str, object]) -> SyntheticRunSummary:
         error_ids=_string_tuple_value(raw, "error_ids") or computed.error_ids,
         instances=instances,
         results=results,
+        efficiency=efficiency or computed.efficiency,
     )
 
 
@@ -789,3 +833,43 @@ def _as_mapping(value: object) -> Mapping[str, object]:
     if not isinstance(value, Mapping):
         raise TypeError("Expected a mapping value.")
     return cast(Mapping[str, object], value)
+
+
+def _efficiency_from_json(value: object) -> RunEfficiencySummary | None:
+    if not isinstance(value, Mapping):
+        return None
+    generation_raw = value.get("generation")
+    if not isinstance(generation_raw, Mapping):
+        return None
+    generation = GenerationAggregateMetrics(
+        request_count=_int_value(generation_raw, "request_count", 0),
+        input_tokens=_int_value(generation_raw, "input_tokens", 0),
+        output_tokens=_int_value(generation_raw, "output_tokens", 0),
+        total_tokens=_int_value(generation_raw, "total_tokens", 0),
+        latency_ms_total=float(generation_raw.get("latency_ms_total", 0.0) or 0.0),
+        latency_ms_avg=float(generation_raw.get("latency_ms_avg", 0.0) or 0.0),
+        estimated_cost_usd=(
+            float(generation_raw.get("estimated_cost_usd"))
+            if generation_raw.get("estimated_cost_usd") is not None
+            else None
+        ),
+    )
+    return RunEfficiencySummary(
+        generation=generation,
+        indexing_duration_seconds=float(value.get("indexing_duration_seconds", 0.0) or 0.0),
+        wiki_duration_seconds=float(value.get("wiki_duration_seconds", 0.0) or 0.0),
+        retrieval_duration_seconds=float(value.get("retrieval_duration_seconds", 0.0) or 0.0),
+        generation_duration_seconds=float(value.get("generation_duration_seconds", 0.0) or 0.0),
+        total_duration_seconds=float(value.get("total_duration_seconds", 0.0) or 0.0),
+        retrieval_request_count=_int_value(value, "retrieval_request_count", 0),
+        retrieval_query_tokens_estimate=(
+            _int_value(value, "retrieval_query_tokens_estimate")
+            if value.get("retrieval_query_tokens_estimate") is not None
+            else None
+        ),
+        retrieval_query_cost_estimate_usd=(
+            float(value.get("retrieval_query_cost_estimate_usd"))
+            if value.get("retrieval_query_cost_estimate_usd") is not None
+            else None
+        ),
+    )

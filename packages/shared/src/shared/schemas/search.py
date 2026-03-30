@@ -57,12 +57,22 @@ class CodeSnippet(BaseModel):
     reason: str | None = None
 
 
+class RetrievalMetrics(BaseModel):
+    request_count: int | None = None
+    latency_ms_total: float | None = None
+    latency_ms_avg: float | None = None
+    query_embedding_tokens: int | None = None
+    query_embedding_cost_usd: float | None = None
+    by_source: dict[str, "RetrievalMetrics"] | None = None
+
+
 class SearchResult(BaseModel):
     """Response payload from the search service."""
 
     snippets: list[CodeSnippet] = Field(default_factory=list)
     query: str
     total_results: int = 0
+    metrics: RetrievalMetrics | None = None
 
 
 class WikiSearchRequest(SearchRequest):
@@ -87,6 +97,7 @@ class WikiSearchResult(BaseModel):
     snippets: list[WikiSnippet] = Field(default_factory=list)
     query: str
     total_results: int = 0
+    metrics: RetrievalMetrics | None = None
 
 
 class CombinedSnippet(BaseModel):
@@ -110,3 +121,4 @@ class CombinedSearchResult(BaseModel):
     snippets: list[CombinedSnippet] = Field(default_factory=list)
     query: str
     total_results: int = 0
+    metrics: RetrievalMetrics | None = None

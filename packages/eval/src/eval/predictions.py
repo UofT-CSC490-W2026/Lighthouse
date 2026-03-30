@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from eval.bedrock import BedrockPatchGenerator
+from eval.generator import PatchGenerator
 from eval.prompts import build_baseline_system_message, build_baseline_user_message
 from eval.slice import SWEBenchTask
 
@@ -24,6 +24,10 @@ class PredictionRecord:
     model_name_or_path: str
     model_patch: str
     full_output: str
+    generation_input_tokens: int | None = None
+    generation_output_tokens: int | None = None
+    generation_total_tokens: int | None = None
+    generation_latency_ms: float | None = None
 
 
 TaskPromptBuilder = Callable[[SWEBenchTask], str]
@@ -32,7 +36,7 @@ TaskPromptBuilder = Callable[[SWEBenchTask], str]
 def generate_baseline_predictions(
     *,
     tasks: list[SWEBenchTask],
-    generator: BedrockPatchGenerator,
+    generator: PatchGenerator,
     output_path: Path,
     overwrite: bool = False,
 ) -> list[PredictionRecord]:
@@ -49,7 +53,7 @@ def generate_baseline_predictions(
 def generate_predictions(
     *,
     tasks: list[SWEBenchTask],
-    generator: BedrockPatchGenerator,
+    generator: PatchGenerator,
     output_path: Path,
     overwrite: bool = False,
     build_user_message: TaskPromptBuilder,
@@ -74,10 +78,11 @@ def generate_predictions(
         with temp_output_path.open("w", encoding="utf-8") as handle:
             for index, task in enumerate(tasks, start=1):
                 print(f"[{index}/{len(tasks)}] {progress_label} {task.instance_id}")
-                raw_output = generator.generate_text(
+                generation = generator.generate(
                     system=system_message,
                     user=build_user_message(task),
                 )
+                raw_output = generation.text
                 model_patch = extract_model_patch(raw_output)
 
                 record = PredictionRecord(
@@ -85,6 +90,10 @@ def generate_predictions(
                     model_name_or_path=generator.model_name,
                     model_patch=model_patch,
                     full_output=raw_output,
+                    generation_input_tokens=generation.input_tokens,
+                    generation_output_tokens=generation.output_tokens,
+                    generation_total_tokens=generation.total_tokens,
+                    generation_latency_ms=generation.latency_ms,
                 )
                 handle.write(json.dumps(asdict(record)))
                 handle.write("\n")

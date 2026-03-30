@@ -79,6 +79,10 @@ from eval.synthetic.lighthouse import (
     index_synthetic_repository,
     prepare_synthetic_wiki,
 )
+from eval.synthetic.matrix import (
+    load_synthetic_matrix_config,
+    run_synthetic_matrix,
+)
 from eval.synthetic.metadata import resolve_synthetic_experiment_metadata
 from eval.synthetic.predictions import (
     generate_synthetic_baseline_predictions,
@@ -1102,6 +1106,157 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     _add_synthetic_metadata_arguments(run_synthetic_experiment)
 
+    run_synthetic_matrix_cmd = subparsers.add_parser(
+        "run-synthetic-matrix",
+        help="Run a synthetic eval matrix and render score/pass@k heatmaps",
+    )
+    run_synthetic_matrix_cmd.add_argument(
+        "--config",
+        required=True,
+        help="Path to synthetic matrix JSON config",
+    )
+    run_synthetic_matrix_cmd.add_argument(
+        "--run-prefix",
+        required=True,
+        help="Prefix used for all generated run ids",
+    )
+    run_synthetic_matrix_cmd.add_argument(
+        "--output-root",
+        default=str(DEFAULT_SYNTHETIC_EXPERIMENT_ARTIFACTS_ROOT / "matrix"),
+        help="Directory where matrix artifacts (tables/heatmaps) are written",
+    )
+    run_synthetic_matrix_cmd.add_argument(
+        "--workspace-root",
+        default=str(DEFAULT_SYNTHETIC_WORKSPACE_ROOT),
+        help="Root directory for materialized synthetic benchmark repos",
+    )
+    run_synthetic_matrix_cmd.add_argument(
+        "--predictions-root",
+        default=str(DEFAULT_SYNTHETIC_PREDICTIONS_ROOT),
+        help="Directory where generated synthetic prediction JSONL files are stored",
+    )
+    run_synthetic_matrix_cmd.add_argument(
+        "--runs-root",
+        default=str(DEFAULT_SYNTHETIC_RUNS_ROOT),
+        help="Directory where synthetic evaluation runs are stored",
+    )
+    run_synthetic_matrix_cmd.add_argument(
+        "--artifacts-root",
+        default=str(DEFAULT_SYNTHETIC_EXPERIMENT_ARTIFACTS_ROOT),
+        help="Directory where per-run experiment artifacts are written",
+    )
+    run_synthetic_matrix_cmd.add_argument(
+        "--ingestion-url",
+        default=DEFAULT_INGESTION_URL,
+        help="Base URL for the Lighthouse ingestion service",
+    )
+    run_synthetic_matrix_cmd.add_argument(
+        "--search-url",
+        default=DEFAULT_SEARCH_SERVICE_URL,
+        help="Base URL for the Lighthouse search service",
+    )
+    run_synthetic_matrix_cmd.add_argument(
+        "--github-token",
+        default=None,
+        help="Optional GitHub token to forward to the ingestion service",
+    )
+    run_synthetic_matrix_cmd.add_argument(
+        "--region-name",
+        default=DEFAULT_BASELINE_REGION,
+        help="AWS region used for Bedrock generation models",
+    )
+    run_synthetic_matrix_cmd.add_argument(
+        "--temperature",
+        type=float,
+        default=DEFAULT_TEMPERATURE,
+        help="Sampling temperature for generation",
+    )
+    run_synthetic_matrix_cmd.add_argument(
+        "--max-tokens",
+        type=int,
+        default=DEFAULT_MAX_TOKENS,
+        help="Maximum response tokens for generation",
+    )
+    run_synthetic_matrix_cmd.add_argument(
+        "--skip-index",
+        action="store_true",
+        help="Reuse existing synthetic index instead of re-indexing",
+    )
+    run_synthetic_matrix_cmd.add_argument(
+        "--skip-wiki-preparation",
+        action="store_true",
+        help="Reuse existing synthetic wiki instead of regenerating it",
+    )
+    run_synthetic_matrix_cmd.add_argument(
+        "--skip-validation",
+        action="store_true",
+        help="Skip synthetic task validity checks before running experiments",
+    )
+    run_synthetic_matrix_cmd.add_argument(
+        "--status-poll-interval",
+        type=float,
+        default=DEFAULT_STATUS_POLL_INTERVAL_SECONDS,
+        help="Seconds between indexing status polls",
+    )
+    run_synthetic_matrix_cmd.add_argument(
+        "--progress-heartbeat-seconds",
+        type=float,
+        default=DEFAULT_PROGRESS_HEARTBEAT_SECONDS,
+        help="Seconds between indexing progress heartbeat lines",
+    )
+    run_synthetic_matrix_cmd.add_argument(
+        "--status-timeout-seconds",
+        type=float,
+        default=DEFAULT_STATUS_TIMEOUT_SECONDS,
+        help="Maximum total wait time for indexing completion",
+    )
+    run_synthetic_matrix_cmd.add_argument(
+        "--wiki-poll-interval",
+        type=float,
+        default=DEFAULT_WIKI_POLL_INTERVAL_SECONDS,
+        help="Seconds between synthetic wiki status polls",
+    )
+    run_synthetic_matrix_cmd.add_argument(
+        "--wiki-progress-heartbeat-seconds",
+        type=float,
+        default=DEFAULT_WIKI_PROGRESS_HEARTBEAT_SECONDS,
+        help="Seconds between synthetic wiki progress heartbeat lines",
+    )
+    run_synthetic_matrix_cmd.add_argument(
+        "--wiki-timeout-seconds",
+        type=float,
+        default=DEFAULT_WIKI_TIMEOUT_SECONDS,
+        help="Maximum total wait time for synthetic wiki generation",
+    )
+    run_synthetic_matrix_cmd.add_argument(
+        "--stream-worker-logs",
+        dest="stream_worker_logs",
+        action="store_true",
+        help="Stream local ingestion-worker Docker logs while indexing",
+    )
+    run_synthetic_matrix_cmd.add_argument(
+        "--no-stream-worker-logs",
+        dest="stream_worker_logs",
+        action="store_false",
+        help="Disable local ingestion-worker Docker log streaming",
+    )
+    run_synthetic_matrix_cmd.set_defaults(stream_worker_logs=None)
+    run_synthetic_matrix_cmd.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Overwrite existing prediction, run, and artifact outputs",
+    )
+    run_synthetic_matrix_cmd.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Only expand and write matrix plan artifacts; do not execute runs",
+    )
+    run_synthetic_matrix_cmd.add_argument(
+        "--continue-on-error",
+        action="store_true",
+        help="Continue matrix execution when a cell fails",
+    )
+
     return parser
 
 
@@ -1677,6 +1832,58 @@ def _cmd_run_synthetic_experiment(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_run_synthetic_matrix(args: argparse.Namespace) -> int:
+    if args.max_tokens < 1:
+        raise ValueError("--max-tokens must be at least 1")
+    if args.temperature < 0:
+        raise ValueError("--temperature must be non-negative")
+    if args.progress_heartbeat_seconds < 1:
+        raise ValueError("--progress-heartbeat-seconds must be at least 1")
+    if args.wiki_progress_heartbeat_seconds < 1:
+        raise ValueError("--wiki-progress-heartbeat-seconds must be at least 1")
+
+    config = load_synthetic_matrix_config(Path(args.config))
+    result = run_synthetic_matrix(
+        config=config,
+        run_prefix=args.run_prefix,
+        output_root=Path(args.output_root),
+        workspace_root=Path(args.workspace_root),
+        predictions_root=Path(args.predictions_root),
+        runs_root=Path(args.runs_root),
+        artifacts_root=Path(args.artifacts_root),
+        overwrite=args.overwrite,
+        validate_workspace=not args.skip_validation,
+        skip_index=args.skip_index,
+        skip_wiki_preparation=args.skip_wiki_preparation,
+        ingestion_url=args.ingestion_url,
+        search_service_url=args.search_url,
+        github_token=args.github_token,
+        stream_worker_logs=args.stream_worker_logs,
+        index_poll_interval_seconds=args.status_poll_interval,
+        index_progress_heartbeat_seconds=args.progress_heartbeat_seconds,
+        index_timeout_seconds=args.status_timeout_seconds,
+        wiki_poll_interval_seconds=args.wiki_poll_interval,
+        wiki_progress_heartbeat_seconds=args.wiki_progress_heartbeat_seconds,
+        wiki_timeout_seconds=args.wiki_timeout_seconds,
+        region_name=args.region_name,
+        temperature=args.temperature,
+        max_tokens=args.max_tokens,
+        dry_run=args.dry_run,
+        continue_on_error=args.continue_on_error,
+    )
+    print(f"Matrix rows JSON: {result.rows_json_path.resolve()}")
+    print(f"Matrix rows table: {result.rows_markdown_path.resolve()}")
+    print(f"Matrix efficiency JSON: {result.efficiency_json_path.resolve()}")
+    print(f"Matrix efficiency table: {result.efficiency_text_path.resolve()}")
+    if result.heatmap_paths:
+        print("Heatmaps:")
+        for path in result.heatmap_paths:
+            print(f"  - {path.resolve()}")
+    else:
+        print("Heatmaps: none (dry-run or plotting dependencies unavailable)")
+    return 0
+
+
 def _prepare_selected_synthetic_workspace(
     args: argparse.Namespace,
 ) -> PreparedSyntheticWorkspace:
@@ -1929,6 +2136,8 @@ def main() -> int:
         return _cmd_pass_at_k_synthetic(args)
     if args.command == "run-synthetic-experiment":
         return _cmd_run_synthetic_experiment(args)
+    if args.command == "run-synthetic-matrix":
+        return _cmd_run_synthetic_matrix(args)
 
     parser.error(f"Unknown command: {args.command}")
     return 2

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
+from time import perf_counter
 
 from eval.bedrock import (
     DEFAULT_BASELINE_MODEL,
@@ -11,7 +12,10 @@ from eval.bedrock import (
     DEFAULT_TEMPERATURE,
     BedrockPatchGenerator,
 )
+from eval.generator import PatchGenerator
+from eval.efficiency import RunEfficiencySummary
 from eval.lighthouse import DEFAULT_SEARCH_TOP_K
+from eval.openai import OpenAIPatchGenerator
 from .compare import (
     SyntheticRunComparison,
     SyntheticScoreRow,
@@ -58,6 +62,8 @@ class SyntheticExperimentResult:
     comparison_text_path: Path
     comparison_json_path: Path
     report_path: Path
+    baseline_efficiency: RunEfficiencySummary
+    lighthouse_efficiency: RunEfficiencySummary
 
 
 @dataclass(frozen=True)
@@ -75,6 +81,8 @@ class SyntheticExperimentSuiteResult:
     comparison_text_paths: dict[str, Path]
     comparison_json_paths: dict[str, Path]
     report_path: Path
+    baseline_efficiency: RunEfficiencySummary
+    lighthouse_efficiencies: dict[str, RunEfficiencySummary]
 
 
 def run_synthetic_experiment(
@@ -114,6 +122,7 @@ def run_synthetic_experiment(
     indexing_embedding_model: str | None = None,
     query_embedding_strategy: str | None = None,
     query_embedding_model: str | None = None,
+    include_ast_index: bool | None = None,
 ) -> SyntheticExperimentResult:
     if not run_prefix.strip():
         raise ValueError("run_prefix must not be empty.")
@@ -121,6 +130,14 @@ def run_synthetic_experiment(
         raise ValueError(
             "context_source must be 'code', 'wiki', 'ast', 'combined', or 'code+wiki'."
         )
+
+    resolved_include_ast = (
+        context_source in {"ast", "combined"}
+        if include_ast_index is None
+        else include_ast_index
+    )
+    if context_source == "ast" and not resolved_include_ast:
+        raise ValueError("context_source='ast' requires include_ast_index=True.")
 
     workspace = prepare_synthetic_workspace(
         family_name=family_name,
@@ -137,7 +154,9 @@ def run_synthetic_experiment(
     ):
         validate_prepared_synthetic_workspace(workspace)
 
+    indexing_duration_seconds = 0.0
     if not skip_index:
+        indexing_started = perf_counter()
         index_synthetic_repository(
             workspace=workspace,
             ingestion_url=ingestion_url,
@@ -146,11 +165,14 @@ def run_synthetic_experiment(
             poll_interval_seconds=index_poll_interval_seconds,
             progress_heartbeat_seconds=index_progress_heartbeat_seconds,
             timeout_seconds=index_timeout_seconds,
-            include_ast=context_source in {"ast", "combined"},
+            include_ast=resolved_include_ast,
             embedding_strategy=indexing_embedding_strategy,
             embedding_model=indexing_embedding_model,
         )
+        indexing_duration_seconds = perf_counter() - indexing_started
+    wiki_duration_seconds = 0.0
     if not skip_wiki_preparation:
+        wiki_started = perf_counter()
         prepare_synthetic_wiki(
             workspace=workspace,
             ingestion_url=ingestion_url,
@@ -160,6 +182,7 @@ def run_synthetic_experiment(
             embedding_strategy=indexing_embedding_strategy,
             embedding_model=indexing_embedding_model,
         )
+        wiki_duration_seconds = perf_counter() - wiki_started
 
     predictions_root = predictions_root.resolve()
     baseline_predictions_path = predictions_root / f"{run_prefix}-baseline.jsonl"
@@ -169,19 +192,22 @@ def run_synthetic_experiment(
     baseline_run_id = f"{run_prefix}-baseline"
     lighthouse_run_id = f"{run_prefix}-{context_source}"
 
-    baseline_generator = BedrockPatchGenerator(
+    baseline_generator = _build_patch_generator(
         model_name=model_name,
         region_name=region_name,
         temperature=temperature,
         max_tokens=max_tokens,
     )
+    baseline_generation_started = perf_counter()
     generate_synthetic_baseline_predictions(
         tasks=workspace.tasks,
         generator=baseline_generator,
         output_path=baseline_predictions_path,
         overwrite=overwrite,
     )
+    baseline_generation_duration_seconds = perf_counter() - baseline_generation_started
 
+    retrieval_started = perf_counter()
     lighthouse_messages = build_synthetic_lighthouse_messages(
         workspace=workspace,
         search_service_url=search_service_url,
@@ -190,12 +216,14 @@ def run_synthetic_experiment(
         query_embedding_strategy=query_embedding_strategy,
         query_embedding_model=query_embedding_model,
     )
-    lighthouse_generator = BedrockPatchGenerator(
+    retrieval_duration_seconds = perf_counter() - retrieval_started
+    lighthouse_generator = _build_patch_generator(
         model_name=model_name,
         region_name=region_name,
         temperature=temperature,
         max_tokens=max_tokens,
     )
+    lighthouse_generation_started = perf_counter()
     generate_synthetic_predictions(
         tasks=workspace.tasks,
         generator=lighthouse_generator,
@@ -205,6 +233,7 @@ def run_synthetic_experiment(
         build_user_message=lambda prepared: lighthouse_messages[prepared.task.task_id],
         progress_label="Generating synthetic Lighthouse patch for",
     )
+    lighthouse_generation_duration_seconds = perf_counter() - lighthouse_generation_started
 
     baseline_experiment = resolve_synthetic_experiment_metadata(
         generation_model_name_or_path=model_name,
@@ -260,6 +289,22 @@ def run_synthetic_experiment(
     comparison_json_path = artifacts_root / f"{run_prefix}.comparison.json"
     report_path = artifacts_root / f"{run_prefix}.experiment.json"
 
+    baseline_efficiency = _merge_run_efficiency(
+        summary=baseline_summary,
+        indexing_duration_seconds=0.0,
+        wiki_duration_seconds=0.0,
+        retrieval_duration_seconds=0.0,
+        generation_duration_seconds=baseline_generation_duration_seconds,
+        retrieval_request_count=0,
+    )
+    lighthouse_efficiency = _merge_run_efficiency(
+        summary=lighthouse_summary,
+        indexing_duration_seconds=indexing_duration_seconds,
+        wiki_duration_seconds=wiki_duration_seconds,
+        retrieval_duration_seconds=retrieval_duration_seconds,
+        generation_duration_seconds=lighthouse_generation_duration_seconds,
+        retrieval_request_count=len(workspace.tasks),
+    )
     comparison_text = render_synthetic_comparison_tables(comparison)
     comparison_text_path.write_text(comparison_text + "\n", encoding="utf-8")
     comparison_json_path.write_text(
@@ -287,6 +332,8 @@ def run_synthetic_experiment(
                 "comparison_json_path": str(comparison_json_path.resolve()),
                 "baseline_experiment": baseline_summary.experiment.to_json(),
                 "lighthouse_experiment": lighthouse_summary.experiment.to_json(),
+                "baseline_efficiency": baseline_efficiency.to_json(),
+                "lighthouse_efficiency": lighthouse_efficiency.to_json(),
                 "comparison": _comparison_to_json(comparison),
             },
             indent=2,
@@ -307,6 +354,8 @@ def run_synthetic_experiment(
         comparison_text_path=comparison_text_path,
         comparison_json_path=comparison_json_path,
         report_path=report_path,
+        baseline_efficiency=baseline_efficiency,
+        lighthouse_efficiency=lighthouse_efficiency,
     )
 
 
@@ -346,9 +395,12 @@ def run_synthetic_experiment_suite(
     indexing_embedding_model: str | None = None,
     query_embedding_strategy: str | None = None,
     query_embedding_model: str | None = None,
+    include_ast_index: bool | None = None,
 ) -> SyntheticExperimentSuiteResult:
     if not run_prefix.strip():
         raise ValueError("run_prefix must not be empty.")
+
+    resolved_include_ast = True if include_ast_index is None else include_ast_index
 
     workspace = prepare_synthetic_workspace(
         family_name=family_name,
@@ -365,7 +417,9 @@ def run_synthetic_experiment_suite(
     ):
         validate_prepared_synthetic_workspace(workspace)
 
+    indexing_duration_seconds = 0.0
     if not skip_index:
+        indexing_started = perf_counter()
         index_synthetic_repository(
             workspace=workspace,
             ingestion_url=ingestion_url,
@@ -374,11 +428,14 @@ def run_synthetic_experiment_suite(
             poll_interval_seconds=index_poll_interval_seconds,
             progress_heartbeat_seconds=index_progress_heartbeat_seconds,
             timeout_seconds=index_timeout_seconds,
-            include_ast=True,
+            include_ast=resolved_include_ast,
             embedding_strategy=indexing_embedding_strategy,
             embedding_model=indexing_embedding_model,
         )
+        indexing_duration_seconds = perf_counter() - indexing_started
+    wiki_duration_seconds = 0.0
     if not skip_wiki_preparation:
+        wiki_started = perf_counter()
         prepare_synthetic_wiki(
             workspace=workspace,
             ingestion_url=ingestion_url,
@@ -388,23 +445,26 @@ def run_synthetic_experiment_suite(
             embedding_strategy=indexing_embedding_strategy,
             embedding_model=indexing_embedding_model,
         )
+        wiki_duration_seconds = perf_counter() - wiki_started
 
     predictions_root = predictions_root.resolve()
     baseline_predictions_path = predictions_root / f"{run_prefix}-baseline.jsonl"
     baseline_run_id = f"{run_prefix}-baseline"
 
-    baseline_generator = BedrockPatchGenerator(
+    baseline_generator = _build_patch_generator(
         model_name=model_name,
         region_name=region_name,
         temperature=temperature,
         max_tokens=max_tokens,
     )
+    baseline_generation_started = perf_counter()
     generate_synthetic_baseline_predictions(
         tasks=workspace.tasks,
         generator=baseline_generator,
         output_path=baseline_predictions_path,
         overwrite=overwrite,
     )
+    baseline_generation_duration_seconds = perf_counter() - baseline_generation_started
 
     baseline_experiment = resolve_synthetic_experiment_metadata(
         generation_model_name_or_path=model_name,
@@ -429,6 +489,7 @@ def run_synthetic_experiment_suite(
     lighthouse_predictions_paths: dict[str, Path] = {}
     lighthouse_summaries: dict[str, SyntheticRunSummary] = {}
     comparisons: dict[str, SyntheticRunComparison] = {}
+    lighthouse_efficiencies: dict[str, RunEfficiencySummary] = {}
 
     for context_source in ("code", "wiki", "ast", "combined"):
         lighthouse_predictions_path = (
@@ -436,6 +497,7 @@ def run_synthetic_experiment_suite(
         )
         lighthouse_run_id = f"{run_prefix}-{context_source}"
 
+        retrieval_started = perf_counter()
         lighthouse_messages = build_synthetic_lighthouse_messages(
             workspace=workspace,
             search_service_url=search_service_url,
@@ -444,12 +506,14 @@ def run_synthetic_experiment_suite(
             query_embedding_strategy=query_embedding_strategy,
             query_embedding_model=query_embedding_model,
         )
-        lighthouse_generator = BedrockPatchGenerator(
+        retrieval_duration_seconds = perf_counter() - retrieval_started
+        lighthouse_generator = _build_patch_generator(
             model_name=model_name,
             region_name=region_name,
             temperature=temperature,
             max_tokens=max_tokens,
         )
+        generation_started = perf_counter()
         generate_synthetic_predictions(
             tasks=workspace.tasks,
             generator=lighthouse_generator,
@@ -461,6 +525,7 @@ def run_synthetic_experiment_suite(
             ],
             progress_label="Generating synthetic Lighthouse patch for",
         )
+        generation_duration_seconds = perf_counter() - generation_started
 
         lighthouse_experiment = resolve_synthetic_experiment_metadata(
             generation_model_name_or_path=model_name,
@@ -492,6 +557,14 @@ def run_synthetic_experiment_suite(
         lighthouse_predictions_paths[context_source] = lighthouse_predictions_path
         lighthouse_summaries[context_source] = lighthouse_summary
         comparisons[context_source] = comparison
+        lighthouse_efficiencies[context_source] = _merge_run_efficiency(
+            summary=lighthouse_summary,
+            indexing_duration_seconds=indexing_duration_seconds,
+            wiki_duration_seconds=wiki_duration_seconds,
+            retrieval_duration_seconds=retrieval_duration_seconds,
+            generation_duration_seconds=generation_duration_seconds,
+            retrieval_request_count=len(workspace.tasks),
+        )
 
     score_rows = build_synthetic_score_rows(
         baseline=baseline_summary,
@@ -547,6 +620,14 @@ def run_synthetic_experiment_suite(
         )
 
     report_path = artifacts_root / f"{run_prefix}.experiment.json"
+    baseline_efficiency = _merge_run_efficiency(
+        summary=baseline_summary,
+        indexing_duration_seconds=0.0,
+        wiki_duration_seconds=0.0,
+        retrieval_duration_seconds=0.0,
+        generation_duration_seconds=baseline_generation_duration_seconds,
+        retrieval_request_count=0,
+    )
     report_path.write_text(
         json.dumps(
             {
@@ -578,9 +659,14 @@ def run_synthetic_experiment_suite(
                     for label, path in comparison_json_paths.items()
                 },
                 "baseline_experiment": baseline_summary.experiment.to_json(),
+                "baseline_efficiency": baseline_efficiency.to_json(),
                 "lighthouse_experiments": {
                     label: summary.experiment.to_json()
                     for label, summary in lighthouse_summaries.items()
+                },
+                "lighthouse_efficiencies": {
+                    label: summary.to_json()
+                    for label, summary in lighthouse_efficiencies.items()
                 },
                 "scores": [
                     {
@@ -619,6 +705,8 @@ def run_synthetic_experiment_suite(
         comparison_text_paths=comparison_text_paths,
         comparison_json_paths=comparison_json_paths,
         report_path=report_path,
+        baseline_efficiency=baseline_efficiency,
+        lighthouse_efficiencies=lighthouse_efficiencies,
     )
 
 
@@ -665,4 +753,57 @@ def _summary_to_json(summary: SyntheticRunSummary) -> dict[str, object]:
         "unresolved_instances": summary.unresolved_instances,
         "empty_patch_instances": summary.empty_patch_instances,
         "error_instances": summary.error_instances,
+        "efficiency": summary.efficiency.to_json() if summary.efficiency is not None else None,
     }
+
+
+def _build_patch_generator(
+    *,
+    model_name: str,
+    region_name: str,
+    temperature: float,
+    max_tokens: int,
+) -> PatchGenerator:
+    if model_name.lower().startswith("openai/"):
+        return OpenAIPatchGenerator(
+            model_name=model_name,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+    return BedrockPatchGenerator(
+        model_name=model_name,
+        region_name=region_name,
+        temperature=temperature,
+        max_tokens=max_tokens,
+    )
+
+
+def _merge_run_efficiency(
+    *,
+    summary: SyntheticRunSummary,
+    indexing_duration_seconds: float,
+    wiki_duration_seconds: float,
+    retrieval_duration_seconds: float,
+    generation_duration_seconds: float,
+    retrieval_request_count: int,
+) -> RunEfficiencySummary:
+    base = summary.efficiency
+    if base is None:
+        raise ValueError("Synthetic summary is missing efficiency metrics.")
+    total_duration_seconds = (
+        indexing_duration_seconds
+        + wiki_duration_seconds
+        + retrieval_duration_seconds
+        + generation_duration_seconds
+    )
+    return RunEfficiencySummary(
+        generation=base.generation,
+        indexing_duration_seconds=indexing_duration_seconds,
+        wiki_duration_seconds=wiki_duration_seconds,
+        retrieval_duration_seconds=retrieval_duration_seconds,
+        generation_duration_seconds=generation_duration_seconds,
+        total_duration_seconds=total_duration_seconds,
+        retrieval_request_count=retrieval_request_count,
+        retrieval_query_tokens_estimate=base.retrieval_query_tokens_estimate,
+        retrieval_query_cost_estimate_usd=base.retrieval_query_cost_estimate_usd,
+    )
