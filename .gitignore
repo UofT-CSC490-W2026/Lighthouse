@@ -65,6 +65,8 @@ dist/
 .claude/
 .conductor/
 .coverage
+.cache
+eval-package-plan.md
 .agents/
 
 # Profiling outputs

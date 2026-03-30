@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 
-EMBED_BATCH_SIZE = 512
+EMBED_BATCH_SIZE = 64
 
 
 # --- Activity-level input / output dataclasses ---
@@ -126,4 +126,6 @@ class IncrementalIndexInput:
     branch: str
     before_commit: str
     after_commit: str
+    embedding_strategy: str = "openai"
     chunker_strategy: str = "sliding_window"
+    embedding_strategy: str = "openai"

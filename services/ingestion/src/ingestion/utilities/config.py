@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
+from shared.config import DEFAULT_LLM_STRATEGY, default_llm_model
 from shared.ssm import ssm_settings_sources
-from shared.config import EMBEDDING_MODEL
 
 SSM_PARAMETER_ENV_VAR = "INGESTION_SETTINGS_SSM_PARAMETER"
 
@@ -20,10 +20,17 @@ class IngestionSettings(BaseSettings):
     temporal_task_queue: str = "ingestion"
     chunker_strategy: str = "sliding_window"
     embedding_strategy: str = "openai"
-    embedding_model: str = EMBEDDING_MODEL
+    embedding_model: str = ""
+    embedding_dimension: int = 0
+    llm_strategy: str = DEFAULT_LLM_STRATEGY
+    llm_model: str = ""
 
-    #model_config = {"env_prefix": "", "env_file": ".env", "extra": "ignore"}
-    model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8', env_prefix="", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        env_prefix="",
+        extra="ignore",
+    )
 
     @classmethod
     def settings_customise_sources(
@@ -42,3 +49,19 @@ class IngestionSettings(BaseSettings):
             dotenv_settings,
             file_secret_settings,
         )
+
+    def resolved_llm_strategy(self) -> str:
+        normalized = self.llm_strategy.strip().lower()
+        if normalized:
+            return normalized
+
+        fallback = self.embedding_strategy.strip().lower()
+        if fallback:
+            return fallback
+        return DEFAULT_LLM_STRATEGY
+
+    def resolved_llm_model(self) -> str:
+        configured = self.llm_model.strip()
+        if configured:
+            return configured
+        return default_llm_model(self.resolved_llm_strategy())

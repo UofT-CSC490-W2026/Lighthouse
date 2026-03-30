@@ -124,6 +124,9 @@ services:
       MILVUS_URI: http://milvus:19530
       TEMPORAL_ADDRESS: temporal:7233
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-}
+    volumes:
+      - .:/workspace:ro
+      - ${HOME}/.aws:/root/.aws:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -148,6 +151,9 @@ services:
       POSTGRES_DSN: postgresql://lighthouse:lighthouse@postgres:5432/lighthouse
       MILVUS_URI: http://milvus:19530
       TEMPORAL_ADDRESS: temporal:7233
+    volumes:
+      - .:/workspace:ro
+      - ${HOME}/.aws:/root/.aws:ro
     depends_on:
       postgres:
         condition: service_healthy

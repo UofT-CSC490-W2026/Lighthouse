@@ -1,0 +1,9 @@
+diff --git a/consumer_app/cache_keys.py b/consumer_app/cache_keys.py
+--- a/consumer_app/cache_keys.py
++++ b/consumer_app/cache_keys.py
+@@ -4,4 +4,4 @@
+ 
+ 
+ def session_cache_key(user_id: str) -> str:
+-    return f"session:{user_id}"
++    return build_cache_key("session", user_id)

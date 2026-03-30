@@ -14,6 +14,7 @@ from temporalio.client import WorkflowFailureError
 from temporalio.worker import UnsandboxedWorkflowRunner, Worker
 
 from ingestion.temporal.activities.inputs import (
+    EMBED_BATCH_SIZE,
     CleanupInactiveChunksInput,
     ChunkFilesInput,
     ChunkFilesOutput,
@@ -256,9 +257,9 @@ class TestIndexBranchWorkflow:
         embed_calls = [
             (name, inp) for name, inp in tracker.calls if name == "embed_chunk_batch"
         ]
-        assert len(embed_calls) == 2
+        assert len(embed_calls) == 1024 // EMBED_BATCH_SIZE
         offsets = sorted(inp.offset for _, inp in embed_calls)
-        assert offsets == [0, 512]
+        assert offsets == list(range(0, 1024, EMBED_BATCH_SIZE))
 
     async def test_failure_before_chunking(self, workflow_environment):
         tracker = ActivityTracker(fail_on="git_clone_or_fetch")

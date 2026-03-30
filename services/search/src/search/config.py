@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
+from shared.config import DEFAULT_EMBEDDING_STRATEGY
 from shared.ssm import ssm_settings_sources
 
 SSM_PARAMETER_ENV_VAR = "SEARCH_SETTINGS_SSM_PARAMETER"
@@ -12,6 +13,8 @@ class SearchSettings(BaseSettings):
 
     postgres_dsn: str = "postgresql://lighthouse:lighthouse@localhost:5432/lighthouse"
     milvus_uri: str = "http://localhost:19530"
+    embedding_strategy: str = DEFAULT_EMBEDDING_STRATEGY
+    embedding_model: str = ""
     openai_api_key: str = ""
     cohere_api_key: str = ""
     internal_service_token: str = ""

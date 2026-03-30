@@ -17,15 +17,22 @@ from .activities import (
     chunk_files,
     cleanup_inactive_chunks,
     cleanup_staging,
+    cleanup_staging_wiki,
     embed_chunk_batch,
+    embed_wiki_pages,
     ensure_repository_record,
+    generate_wiki_page,
+    generate_wiki_structure,
     get_changed_files,
     git_clone_or_fetch,
     publish_full_branch,
     publish_staged_chunks,
+    store_wiki_pages,
     update_branch_status,
+    update_wiki_status,
 )
 from .workflows import (
+    GenerateWikiWorkflow,
     IncrementalIndexWorkflow,
     IndexBranchWorkflow,
 )
@@ -50,6 +57,7 @@ async def main() -> None:
         workflows=[
             IndexBranchWorkflow,
             IncrementalIndexWorkflow,
+            GenerateWikiWorkflow,
         ],
         activities=[
             ensure_repository_record,
@@ -62,6 +70,12 @@ async def main() -> None:
             publish_staged_chunks,
             cleanup_inactive_chunks,
             cleanup_staging,
+            generate_wiki_structure,
+            generate_wiki_page,
+            embed_wiki_pages,
+            store_wiki_pages,
+            update_wiki_status,
+            cleanup_staging_wiki,
         ],
     )
     await worker.run()

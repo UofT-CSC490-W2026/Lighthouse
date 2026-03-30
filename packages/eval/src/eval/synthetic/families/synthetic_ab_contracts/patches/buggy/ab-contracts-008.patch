@@ -1,0 +1,12 @@
+diff --git a/consumer_app/ratios.py b/consumer_app/ratios.py
+--- a/consumer_app/ratios.py
++++ b/consumer_app/ratios.py
+@@ -4,7 +4,5 @@
+ 
+ 
+ def ratio_or_label(numerator: float, denominator: float, default: str = "n/a") -> str:
+-    result = safe_divide(numerator, denominator, default=None)
+-    if result is None:
+-        return default
++    result = safe_divide(numerator, denominator, default=0)
+     return f"{result:.2f}"

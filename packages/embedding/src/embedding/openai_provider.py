@@ -13,9 +13,11 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
     BATCH_SIZE = 2048
 
     def __init__(
-        self, api_key: str, model: str = OPENAI_DEFAULT_EMBEDDING_MODEL
+        self,
+        api_key: str | None = None,
+        model: str = OPENAI_DEFAULT_EMBEDDING_MODEL,
     ) -> None:
-        self.client = openai.OpenAI(api_key=api_key)
+        self.client = openai.OpenAI(api_key=api_key) if api_key else openai.OpenAI()
         self.model = model
 
     def embed_batch(self, texts: list[str]) -> list[list[float]]:

@@ -22,6 +22,7 @@ def test_settings(pg_dsn):
         openai_api_key="test-key",
         github_webhook_secret="test-secret",
         temporal_address="localhost:7233",
+        embedding_strategy="bedrock",
     )
 
 
@@ -49,7 +50,9 @@ class TestIngestionEndpoints:
         assert resp.json()["status"] == "ok"
 
     @pytest.mark.asyncio
-    async def test_index_repos_starts_one_workflow_per_branch(self, client, monkeypatch):
+    async def test_index_repos_starts_one_workflow_per_branch(
+        self, client, monkeypatch
+    ):
         monkeypatch.setattr(
             "ingestion.main._ensure_repository_record",
             lambda **_: "repo-12345",
@@ -76,13 +79,19 @@ class TestIngestionEndpoints:
             "index-branch-12345-owner-repo-feature-x",
         ]
 
-        start_calls = client._transport.app.state.temporal_client.start_workflow.await_args_list
+        start_calls = (
+            client._transport.app.state.temporal_client.start_workflow.await_args_list
+        )
         assert len(start_calls) == 2
         assert start_calls[0].kwargs["id"] == "index-branch-12345-owner-repo-main"
         assert start_calls[1].kwargs["id"] == "index-branch-12345-owner-repo-feature-x"
+        assert start_calls[0].args[1].embedding_strategy == "bedrock"
+        assert start_calls[1].args[1].embedding_strategy == "bedrock"
 
     @pytest.mark.asyncio
-    async def test_index_repos_skips_duplicate_branch_workflow(self, client, monkeypatch):
+    async def test_index_repos_skips_duplicate_branch_workflow(
+        self, client, monkeypatch
+    ):
         class FakeWorkflowAlreadyStartedError(Exception):
             pass
 
@@ -133,9 +142,7 @@ class TestIngestionEndpoints:
 
         repo = create_repository(db_manager, github_repo_id=11111)
         with db_manager.connection_context():
-            IndexedBranch.create(
-                repository=repo, branch_name="main", status="indexed"
-            )
+            IndexedBranch.create(repository=repo, branch_name="main", status="indexed")
 
         resp = await client.get("/status/11111")
         assert resp.status_code == 200
@@ -143,6 +150,61 @@ class TestIngestionEndpoints:
         assert data["github_repo_id"] == 11111
         assert len(data["branches"]) == 1
         assert data["branches"][0]["status"] == "indexed"
+
+    @pytest.mark.asyncio
+    async def test_generate_wiki_starts_workflow_with_bedrock_defaults(
+        self, client, db_manager
+    ):
+        from testing_utils.factories import create_repository
+
+        create_repository(
+            db_manager,
+            github_repo_id=22222,
+            full_name="owner/repo",
+        )
+
+        resp = await client.post(
+            "/generate-wiki",
+            json={"github_repo_id": 22222, "branch": "main"},
+        )
+
+        assert resp.status_code == 200
+        assert resp.json()["workflow_id"] == "wiki-22222-main"
+        start_call = (
+            client._transport.app.state.temporal_client.start_workflow.await_args
+        )
+        assert start_call.args[1].llm_strategy == "bedrock"
+        assert start_call.args[1].embedding_strategy == "bedrock"
+
+    @pytest.mark.asyncio
+    async def test_generate_wiki_rejects_missing_openai_api_key(
+        self, client, db_manager
+    ):
+        from testing_utils.factories import create_repository
+
+        create_repository(
+            db_manager,
+            github_repo_id=33333,
+            full_name="owner/repo",
+        )
+        client._transport.app.state.settings = IngestionSettings(
+            postgres_dsn=client._transport.app.state.settings.postgres_dsn,
+            milvus_uri="http://localhost:19530",
+            openai_api_key="",
+            github_webhook_secret="test-secret",
+            temporal_address="localhost:7233",
+            embedding_strategy="bedrock",
+            llm_strategy="openai",
+        )
+
+        resp = await client.post(
+            "/generate-wiki",
+            json={"github_repo_id": 33333, "branch": "main"},
+        )
+
+        assert resp.status_code == 400
+        assert "OPENAI_API_KEY" in resp.json()["detail"]
+        client._transport.app.state.temporal_client.start_workflow.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_webhook_valid_push(self, client, test_settings):
@@ -153,9 +215,12 @@ class TestIngestionEndpoints:
             "repository": {"id": 123, "full_name": "owner/repo"},
         }
         body = json.dumps(payload).encode()
-        sig = "sha256=" + hmac.new(
-            test_settings.github_webhook_secret.encode(), body, hashlib.sha256
-        ).hexdigest()
+        sig = (
+            "sha256="
+            + hmac.new(
+                test_settings.github_webhook_secret.encode(), body, hashlib.sha256
+            ).hexdigest()
+        )
 
         resp = await client.post(
             "/webhook",
@@ -168,6 +233,10 @@ class TestIngestionEndpoints:
         )
         assert resp.status_code == 200
         assert resp.json()["status"] == "accepted"
+        start_call = (
+            client._transport.app.state.temporal_client.start_workflow.await_args
+        )
+        assert start_call.args[1].embedding_strategy == "bedrock"
 
     @pytest.mark.asyncio
     async def test_webhook_invalid_signature(self, client):
@@ -192,9 +261,12 @@ class TestIngestionEndpoints:
     async def test_webhook_non_push_ignored(self, client, test_settings):
         payload = {}
         body = json.dumps(payload).encode()
-        sig = "sha256=" + hmac.new(
-            test_settings.github_webhook_secret.encode(), body, hashlib.sha256
-        ).hexdigest()
+        sig = (
+            "sha256="
+            + hmac.new(
+                test_settings.github_webhook_secret.encode(), body, hashlib.sha256
+            ).hexdigest()
+        )
 
         resp = await client.post(
             "/webhook",

@@ -11,7 +11,7 @@ This repository uses a workspace-level Python testing setup built around `pytest
 - Integration test infrastructure: `testcontainers` for Postgres and Milvus
 - Workflow testing: `temporalio.testing` for ingestion workflow tests
 
-The root [`pyproject.toml`](/Users/merrickliu/utoronto/year_4/csc490/lighthouse/pyproject.toml) is the source of truth for test discovery, markers, asyncio mode, and coverage settings.
+The root [`pyproject.toml`](../pyproject.toml) is the source of truth for test discovery, markers, asyncio mode, and coverage settings.
 
 ## Where Tests Live
 
@@ -35,7 +35,7 @@ As of March 26, 2026, the suite collects `234` tests.
 
 ## Test Markers
 
-The repo defines three markers in [`pyproject.toml`](/Users/merrickliu/utoronto/year_4/csc490/lighthouse/pyproject.toml):
+The repo defines three markers in [`pyproject.toml`](../pyproject.toml):
 
 - `unit`: pure unit tests with no external dependencies
 - `integration`: tests requiring Postgres/Milvus testcontainers
@@ -91,14 +91,14 @@ UV_CACHE_DIR=/tmp/uv-cache uv run pytest
 
 ## Shared Test Infrastructure
 
-Reusable test fixtures live in [`packages/testing/src/testing_utils`](/Users/merrickliu/utoronto/year_4/csc490/lighthouse/packages/testing/src/testing_utils).
+Reusable test fixtures live in [`packages/testing/src/testing_utils`](../packages/testing/src/testing_utils).
 
 Important shared pieces:
 
-- [`containers.py`](/Users/merrickliu/utoronto/year_4/csc490/lighthouse/packages/testing/src/testing_utils/containers.py): session-scoped Postgres and Milvus testcontainers plus derived DSN/URI fixtures
-- [`db_fixtures.py`](/Users/merrickliu/utoronto/year_4/csc490/lighthouse/packages/testing/src/testing_utils/db_fixtures.py): database manager fixtures used across services and packages
-- [`milvus_fixtures.py`](/Users/merrickliu/utoronto/year_4/csc490/lighthouse/packages/testing/src/testing_utils/milvus_fixtures.py): Milvus client fixtures
-- [`mock_embedding.py`](/Users/merrickliu/utoronto/year_4/csc490/lighthouse/packages/testing/src/testing_utils/mock_embedding.py): deterministic embedding mock for tests that should not call OpenAI
+- [`containers.py`](../packages/testing/src/testing_utils/containers.py): session-scoped Postgres and Milvus testcontainers plus derived DSN/URI fixtures
+- [`db_fixtures.py`](../packages/testing/src/testing_utils/db_fixtures.py): database manager fixtures used across services and packages
+- [`milvus_fixtures.py`](../packages/testing/src/testing_utils/milvus_fixtures.py): Milvus client fixtures
+- [`mock_embedding.py`](../packages/testing/src/testing_utils/mock_embedding.py): deterministic embedding mock for tests that should not call a real embedding backend
 
 Most package and service `conftest.py` files import these shared fixtures instead of redefining infrastructure setup.
 
@@ -129,11 +129,11 @@ Most package and service `conftest.py` files import these shared fixtures instea
 
 ### `services/web`
 
-There is currently no frontend test runner or frontend test suite configured in [`services/web/package.json`](/Users/merrickliu/utoronto/year_4/csc490/lighthouse/services/web/package.json). The existing automated test setup is effectively Python-only.
+There is currently no frontend test runner or frontend test suite configured in [`services/web/package.json`](../services/web/package.json). The existing automated test setup is effectively Python-only.
 
 ## Coverage And CI
 
-CI is defined in [`.github/workflows/tests.yml`](/Users/merrickliu/utoronto/year_4/csc490/lighthouse/.github/workflows/tests.yml).
+CI is defined in [`.github/workflows/tests.yml`](../.github/workflows/tests.yml).
 
 On every pull request and every push to `main`, GitHub Actions:
 
@@ -144,7 +144,7 @@ On every pull request and every push to `main`, GitHub Actions:
 The workflow also:
 
 - Generates a coverage summary from `coverage.xml`
-- Updates the coverage section in [`README.md`](/Users/merrickliu/utoronto/year_4/csc490/lighthouse/README.md) on pushes to `main`
+- Updates the coverage section in [`README.md`](../README.md) on pushes to `main`
 - Posts or updates a PR comment with the current total coverage on pull requests
 
 There is currently no minimum coverage gate because CI uses `--cov-fail-under=0`.

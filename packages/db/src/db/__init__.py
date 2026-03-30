@@ -6,8 +6,11 @@ from .models import (
     Repository,
     Session,
     StagingChunk,
+    StagingWikiPage,
     User,
     UserHiddenRepository,
+    WikiGeneration,
+    WikiPage,
 )
 
 __all__ = [
@@ -19,6 +22,9 @@ __all__ = [
     "Repository",
     "Session",
     "StagingChunk",
+    "StagingWikiPage",
     "User",
     "UserHiddenRepository",
+    "WikiGeneration",
+    "WikiPage",
 ]

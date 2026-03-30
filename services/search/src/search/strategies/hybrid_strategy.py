@@ -79,8 +79,6 @@ class HybridSearchStrategy(SearchStrategy[SearchRequest, SearchResult]):
     ) -> tuple[list[dict], str]:
         """Execute PostgreSQL full-text search on chunks.content."""
         with self.db_manager.connection_context():
-            # Build raw SQL for full-text search (Peewee's ORM doesn't
-            # handle tsvector/tsquery parameterization cleanly)
             conditions = [
                 "to_tsvector('english', chunks.content) @@ plainto_tsquery('english', %s)"
             ]

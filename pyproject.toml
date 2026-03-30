@@ -13,10 +13,12 @@ members = [
   "services/ingestion",
   "services/search",
   "services/mcp_server",
+  "packages/eval",
   "packages/shared",
   "packages/vectordb",
   "packages/db",
   "packages/embedding",
+  "packages/llm",
   "packages/testing",
 ]
 
@@ -36,6 +38,7 @@ testing = { workspace = true }
 
 [tool.pytest.ini_options]
 testpaths = [
+  "packages/eval/tests",
   "packages/db/tests",
   "packages/vectordb/tests",
   "packages/embedding/tests",
@@ -59,6 +62,7 @@ source = [
   "packages/db/src",
   "packages/vectordb/src",
   "packages/embedding/src",
+  "packages/llm/src",
   "packages/shared/src",
   "services/ingestion/src",
   "services/search/src",
@@ -79,4 +83,4 @@ exclude_lines = [
 extend-exclude = ["assignments", "infra", "docs"]
 
 [tool.ty.src]
-exclude = ["assignments", "infra", "docs"]
+exclude = ["assignments", "infra", "docs", "packages/eval/src/eval/synthetic/families"]

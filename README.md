@@ -19,10 +19,14 @@ monorepo/
 │   ├── mcp_server/         # MCP server (agent-facing API)
 │   └── web/                # Web service
 │
+├── evaluation/             # Evaluation framework for baseline/augmented runs
+│
 ├── packages/               # Shared internal libraries
 │   ├── db/                 # Relational DB models & migrations
 │   ├── vectordb/           # Vector DB client & helpers
 │   └── shared/             # Common utilities (logging, config, auth)
+│
+├── docs/                   # Architecture and operational documentation
 │
 ├── infra/                  # Infrastructure as code
 │
@@ -40,6 +44,13 @@ monorepo/
 1. Install [Docker Desktop](https://docs.docker.com/desktop/)
 2. Install [`uv`](https://docs.astral.sh/uv/getting-started/installation/) for Python package management.
 3. Run `uv sync --all-packages --dev` to install dependencies for the entire monorepo.
+
+### Documentation
+
+- [Search Service](docs/search.md)
+- [Ingestion Service](docs/ingestion.md)
+- [Evaluation Framework](docs/evaluation.md)
+- [Testing Guide](docs/testing.md)
 
 ### Running the Services
 
