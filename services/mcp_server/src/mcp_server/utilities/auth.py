@@ -14,7 +14,7 @@ from fastmcp import Context
 from fastapi import Request
 
 from db import Session, User
-from .errors import RequestError
+from .errors import AppError, RequestError
 
 if TYPE_CHECKING:
     from ..main import App
@@ -28,14 +28,35 @@ _GITHUB_USER_REPOS_URL = "https://api.github.com/user/repos"
 OAUTH_SCOPES = "read:user read:org repo"
 
 
-class AuthorizationError(RequestError):
+class AuthorizationError(AppError):
     """Represent an authentication or authorization failure."""
 
     def __init__(
-        self, detail: str = "Not authenticated", status_code: int = 401
+        self,
+        detail: str = "Not authenticated",
+        status_code: int = 401,
+        *,
+        error_code: str | None = None,
+        recoverable: bool = True,
+        context: dict | None = None,
+        internal_message: str | None = None,
     ) -> None:
         """Create an auth error with a default unauthorized status."""
-        super().__init__(detail=detail, status_code=status_code)
+        if error_code is None:
+            if status_code == 401:
+                error_code = "AUTH_REQUIRED"
+            elif status_code == 403:
+                error_code = "FORBIDDEN"
+            else:
+                error_code = "AUTH_INVALID_TOKEN"
+        super().__init__(
+            message=detail,
+            status_code=status_code,
+            error_code=error_code,
+            recoverable=recoverable,
+            context=context or {},
+            internal_message=internal_message,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -189,14 +210,22 @@ class Authenticator:
             )
 
         if response.status_code == 404:
-            raise RequestError(
-                "Repository does not exist or you do not currently have access to it.",
+            raise AppError(
+                message="Repository does not exist or you do not currently have access to it.",
                 status_code=404,
+                error_code="REPOSITORY_NOT_FOUND_OR_INACCESSIBLE",
+                recoverable=True,
+                context={"repository": repo_id},
+                internal_message="GitHub repository lookup returned 404.",
             )
         if response.status_code in {401, 403}:
-            raise RequestError(
-                "Lighthouse could not verify your GitHub access for this repository.",
+            raise AppError(
+                message="Lighthouse could not verify your GitHub access for this repository.",
                 status_code=403,
+                error_code="FORBIDDEN",
+                recoverable=True,
+                context={"repository": repo_id},
+                internal_message=f"GitHub repository lookup returned {response.status_code}.",
             )
         response.raise_for_status()
         return self._to_github_repository(response.json())
@@ -256,7 +285,10 @@ class Authenticator:
         """Authenticate an MCP request using the underlying HTTP headers."""
         request = ctx.request_context.request
         if request is None:
-            raise AuthorizationError("Request context is unavailable")
+            raise AuthorizationError(
+                "Request context is unavailable",
+                error_code="AUTH_REQUIRED",
+            )
         return await self.authenticate_bearer_token(
             self.extract_bearer_token(request.headers.get("Authorization"))
         )
@@ -296,11 +328,17 @@ class Authenticator:
     def extract_bearer_token(self, authorization_header: str | None) -> str:
         """Extract the bearer token value from an Authorization header."""
         if not authorization_header:
-            raise AuthorizationError("Missing Authorization header")
+            raise AuthorizationError(
+                "Missing Authorization header",
+                error_code="AUTH_REQUIRED",
+            )
 
         scheme, _, token = authorization_header.partition(" ")
         if scheme.lower() != "bearer" or not token.strip():
-            raise AuthorizationError("Authorization header must use Bearer auth")
+            raise AuthorizationError(
+                "Authorization header must use Bearer auth",
+                error_code="AUTH_REQUIRED",
+            )
         return token.strip()
 
     def encrypt_token(self, plaintext: str) -> str:
@@ -341,7 +379,10 @@ class Authenticator:
                 | (User.mcp_token_hash == token_hash)
             )
             if user is None:
-                raise AuthorizationError("Invalid or revoked token")
+                raise AuthorizationError(
+                    "Invalid or revoked token",
+                    error_code="AUTH_INVALID_TOKEN",
+                )
 
             token_candidates: list[tuple[str, str]] = []
             if user.api_token_hash == token_hash and user.api_token_encrypted:
@@ -354,7 +395,10 @@ class Authenticator:
             if secrets.compare_digest(stored_token, token):
                 return self._to_authenticated_user(user, authenticated_via=token_kind)
 
-        raise AuthorizationError("Invalid or revoked token")
+        raise AuthorizationError(
+            "Invalid or revoked token",
+            error_code="AUTH_INVALID_TOKEN",
+        )
 
     def _upsert_github_user_and_issue_token_sync(
         self,
@@ -445,7 +489,10 @@ class Authenticator:
         with self.app.database.connection_context():
             user = User.get_or_none(User.id == user_id)
             if user is None:
-                raise AuthorizationError("Invalid or revoked token")
+                raise AuthorizationError(
+                    "Invalid or revoked token",
+                    error_code="AUTH_INVALID_TOKEN",
+                )
 
             if not user.mcp_token_encrypted:
                 return ManagedToken(token=None, issued_at=None)
@@ -460,7 +507,10 @@ class Authenticator:
         with self.app.database.connection_context():
             user = User.get_or_none(User.id == user_id)
             if user is None:
-                raise AuthorizationError("Invalid or revoked token")
+                raise AuthorizationError(
+                    "Invalid or revoked token",
+                    error_code="AUTH_INVALID_TOKEN",
+                )
 
             mcp_token = self.generate_api_token()
             issued_at = datetime.now(timezone.utc)

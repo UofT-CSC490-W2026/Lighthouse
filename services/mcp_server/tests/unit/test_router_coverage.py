@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -75,6 +76,12 @@ class SyncErrorRoute:
         raise RequestError("sync-http", status_code=409)
 
 
+class BodyRequestRoute:
+    @httproute("POST", "/body-request", name="body_request")
+    async def body_request(self, auth, request: EchoModel) -> dict[str, str]:
+        return {"value": request.value, "user": auth.id}
+
+
 class ForwardTool:
     @toolcall("forward_tool", auth_required=False)
     def forward_tool(self, value: "MissingType") -> str:
@@ -100,6 +107,9 @@ async def test_http_route_handler_auth_and_error_paths(monkeypatch):
     with pytest.raises(Exception) as exc_info:
         await route.endpoint(request=request, value="bad")
     assert exc_info.value.status_code == 422
+    assert exc_info.value.detail["message"] == "bad request"
+    assert exc_info.value.detail["error_code"] == "INVALID_ARGUMENT"
+    assert "error_id" in exc_info.value.detail
 
     app.authenticator.require_http_request = AsyncMock(
         side_effect=RequestError("denied", status_code=401)
@@ -107,6 +117,8 @@ async def test_http_route_handler_auth_and_error_paths(monkeypatch):
     with pytest.raises(Exception) as exc_info:
         await route.endpoint(request=request, value="ok")
     assert exc_info.value.status_code == 401
+    assert exc_info.value.detail["message"] == "denied"
+    assert exc_info.value.detail["error_code"] == "AUTH_REQUIRED"
 
 
 @pytest.mark.unit
@@ -197,6 +209,19 @@ async def test_make_route_fn_handles_sync_request_errors():
         route_fn = handler.make_route_fn(bound)
     assert "value" in inspect.signature(route_fn).parameters
 
+    app = SimpleNamespace(
+        engine=SimpleNamespace(registries=lambda: ()),
+        authenticator=SimpleNamespace(require_http_request=AsyncMock(return_value=SimpleNamespace(id="user-1"))),
+    )
+    bound = BoundRoute(
+        meta=RouteMeta(method="POST", path="/body-request", name="body_request", auth_required=True),
+        method=BodyRequestRoute().body_request,
+        owner=BodyRequestRoute(),
+    )
+    route_fn = HTTPRouteHandler(app).make_route_fn(bound)
+    result = await route_fn(_http_request=SimpleNamespace(state=SimpleNamespace()), request=EchoModel(value="x"))
+    assert result == {"value": "x", "user": "user-1"}
+
 
 @pytest.mark.unit
 @pytest.mark.asyncio
@@ -227,14 +252,21 @@ async def test_mcp_tool_handler_startup_shutdown_and_wrappers(monkeypatch):
     result = await tool_fn(SimpleNamespace(), value="ok")
     assert result == {"value": "user-1:ok"}
 
-    with pytest.raises(ValueError, match="bad tool"):
+    with pytest.raises(ValueError) as exc_info:
         await tool_fn(SimpleNamespace(), value="bad")
+    payload = json.loads(str(exc_info.value))
+    assert payload["message"] == "bad tool"
+    assert payload["error_code"] == "INVALID_ARGUMENT"
+    assert "error_id" in payload
 
     app.authenticator.require_mcp_context = AsyncMock(
         side_effect=RequestError("forbidden", status_code=403)
     )
-    with pytest.raises(PermissionError, match="forbidden"):
+    with pytest.raises(PermissionError) as exc_info:
         await tool_fn(SimpleNamespace(), value="ok")
+    payload = json.loads(str(exc_info.value))
+    assert payload["message"] == "forbidden"
+    assert payload["error_code"] == "FORBIDDEN"
     app.authenticator.require_mcp_context = AsyncMock(
         return_value=SimpleNamespace(id="user-1")
     )
@@ -261,8 +293,11 @@ async def test_mcp_tool_handler_startup_shutdown_and_wrappers(monkeypatch):
         owner=CtxTools(),
     )
     sync_fail_tool_fn = handler._make_tool_fn(sync_fail_tool)
-    with pytest.raises(ValueError, match="bad:x"):
+    with pytest.raises(ValueError) as exc_info:
         await sync_fail_tool_fn(SimpleNamespace(), value="x")
+    payload = json.loads(str(exc_info.value))
+    assert payload["message"] == "bad:x"
+    assert payload["error_code"] == "INVALID_ARGUMENT"
 
     forward_tool = BoundToolCall(
         meta=ToolCallMeta(name="forward_tool", auth_required=False),

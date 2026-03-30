@@ -26,11 +26,20 @@ from .decorators import (
     routable,
     toolcall,
 )
-from .errors import RequestError
+from .errors import (
+    AppError,
+    ErrorEnvelope,
+    RequestError,
+    default_error_code_for_status,
+    generate_error_id,
+    log_error,
+    to_public_error,
+)
 from .logging import Colour, get_logger, pp
 
 __all__ = [
     "AuthenticatedUser",
+    "AppError",
     "Authenticator",
     "AuthorizationError",
     "BoundRoute",
@@ -42,6 +51,7 @@ __all__ = [
     "RequestError",
     "RouteMeta",
     "DEBUG",
+    "ErrorEnvelope",
     "SSM_PARAMETER_ENV_VAR",
     "Settings",
     "ToolCallMeta",
@@ -55,5 +65,9 @@ __all__ = [
     "pp",
     "reload_settings",
     "routable",
+    "to_public_error",
     "toolcall",
+    "default_error_code_for_status",
+    "generate_error_id",
+    "log_error",
 ]
