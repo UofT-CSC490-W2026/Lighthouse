@@ -78,6 +78,7 @@ class IncrementalIndexWorkflow:
             branch=input.branch,
             before_commit=input.before_commit,
             after_commit=input.after_commit,
+            repo_url=input.repo_url,
             chunker_strategy=input.chunker_strategy,
             embedding_strategy=input.embedding_strategy,
         )
@@ -86,7 +87,7 @@ class IncrementalIndexWorkflow:
             ensure_repository_record,
             EnsureRepoInput(
                 github_repo_id=input.github_repo_id,
-                repo_url="",
+                repo_url=input.repo_url,
                 full_name=input.full_name,
             ),
             start_to_close_timeout=timedelta(seconds=30),
@@ -136,7 +137,7 @@ class IncrementalIndexWorkflow:
             git_result: GitCloneFetchOutput = await workflow.execute_activity(
                 git_clone_or_fetch,
                 GitCloneFetchInput(
-                    repo_url="",
+                    repo_url=input.repo_url,
                     repo_dir_name=str(input.github_repo_id),
                     branch=input.branch,
                 ),

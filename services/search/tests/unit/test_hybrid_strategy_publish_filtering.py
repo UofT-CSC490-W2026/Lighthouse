@@ -15,6 +15,64 @@ def _connection_context():
 
 
 @pytest.mark.unit
+def test_list_indexed_branches_returns_branches_when_indexed_files_non_empty(monkeypatch):
+    """Line 348: when IndexedFile returns branches, return them directly."""
+    db_manager = SimpleNamespace(connection_context=_connection_context)
+    strategy = HybridSearchStrategy(
+        db_manager=db_manager,
+        milvus=MagicMock(),
+        embedder=MagicMock(),
+    )
+
+    indexed_file_query = MagicMock()
+    indexed_file_query.where.return_value = indexed_file_query
+    indexed_file_query.distinct.return_value = [
+        SimpleNamespace(branch_name="main"),
+        SimpleNamespace(branch_name="dev"),
+    ]
+    monkeypatch.setattr(
+        "search.strategies.hybrid_strategy.IndexedFile.select",
+        MagicMock(return_value=indexed_file_query),
+    )
+
+    branches = strategy._list_indexed_branches("repo-1")
+    assert branches == ["dev", "main"]
+
+
+@pytest.mark.unit
+def test_list_indexed_branches_falls_back_to_chunks_when_indexed_files_empty(monkeypatch):
+    """When IndexedFile has no results, fall back to querying Chunk table."""
+    db_manager = SimpleNamespace(connection_context=_connection_context)
+    strategy = HybridSearchStrategy(
+        db_manager=db_manager,
+        milvus=MagicMock(),
+        embedder=MagicMock(),
+    )
+
+    # IndexedFile query returns empty set → no branches
+    indexed_file_query = MagicMock()
+    indexed_file_query.where.return_value = indexed_file_query
+    indexed_file_query.distinct.return_value = []  # No rows
+    monkeypatch.setattr(
+        "search.strategies.hybrid_strategy.IndexedFile.select",
+        MagicMock(return_value=indexed_file_query),
+    )
+
+    # Chunk query returns some branches
+    chunk_row = SimpleNamespace(branch="feature-x")
+    chunk_query = MagicMock()
+    chunk_query.where.return_value = chunk_query
+    chunk_query.distinct.return_value = [chunk_row]
+    monkeypatch.setattr(
+        "search.strategies.hybrid_strategy.Chunk.select",
+        MagicMock(return_value=chunk_query),
+    )
+
+    branches = strategy._list_indexed_branches("repo-1")
+    assert branches == ["feature-x"]
+
+
+@pytest.mark.unit
 class TestHybridStrategyPublishFiltering:
     def _make_strategy(self) -> HybridSearchStrategy:
         db_manager = SimpleNamespace(connection_context=_connection_context)

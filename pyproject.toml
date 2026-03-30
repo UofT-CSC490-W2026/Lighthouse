@@ -39,6 +39,7 @@ testpaths = [
   "packages/db/tests",
   "packages/vectordb/tests",
   "packages/embedding/tests",
+  "packages/llm/tests",
   "packages/shared/tests",
   "services/ingestion/tests",
   "services/search/tests",

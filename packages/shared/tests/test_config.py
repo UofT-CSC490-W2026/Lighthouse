@@ -42,7 +42,7 @@ def test_provider_specific_embedding_defaults():
 @pytest.mark.unit
 def test_provider_specific_llm_defaults():
     assert BEDROCK_LLM_MODEL == "us.amazon.nova-lite-v1:0"
-    assert OPENAI_LLM_MODEL == "gpt-5.4-mini"
+    assert OPENAI_LLM_MODEL == "gpt-5.4-nano"
 
 
 @pytest.mark.unit
@@ -83,3 +83,21 @@ def test_chunk_max_lines():
 @pytest.mark.unit
 def test_chunk_overlap_lines():
     assert CHUNK_OVERLAP_LINES == 10
+
+
+@pytest.mark.unit
+def test_default_embedding_model_raises_for_unknown_strategy():
+    with pytest.raises(ValueError, match="Unsupported embedding strategy"):
+        default_embedding_model("unknown")
+
+
+@pytest.mark.unit
+def test_default_embedding_dimension_raises_for_unknown_strategy():
+    with pytest.raises(ValueError, match="Unsupported embedding strategy"):
+        default_embedding_dimension("unknown")
+
+
+@pytest.mark.unit
+def test_default_llm_model_raises_for_unknown_strategy():
+    with pytest.raises(ValueError, match="Unsupported llm strategy"):
+        default_llm_model("unknown")

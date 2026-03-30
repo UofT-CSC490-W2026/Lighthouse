@@ -1,0 +1,715 @@
+\documentclass[a4paper,12pt]{article}
+
+\usepackage{a4wide}
+\usepackage{amsfonts}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{csquotes}
+\usepackage{lipsum}
+\usepackage{bm}
+\usepackage{tabularx}
+\usepackage{longtable}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{tikz}
+\usepackage{float}
+\usetikzlibrary{positioning, arrows.meta, shapes.geometric, fit}
+
+\usepackage{graphicx}  % For including images
+\usepackage{xcolor}  % For a colorfull presentation
+\usepackage{listings}  % For presenting code 
+
+\usepackage{algorithm}
+\usepackage[noend]{algpseudocode}
+\makeatletter
+\def\BState{\State\hskip-\ALG@thistlm}
+\makeatletter
+\usepackage[normalem]{ulem}
+\usepackage{array}
+\usepackage{hyperref}
+% \usepackage[hyphens]{url}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue,
+  urlcolor=blue,
+  citecolor=blue
+}
+\newcommand{\bluehref}[2]{\href{#1}{\textcolor{blue}{\uline{#2}}}}
+\makeatletter
+\newcommand*{\citelinktext}[2]{%
+  \hyper@@link[cite]{}{cite.#1}{#2}}
+\makeatother
+
+\usepackage{booktabs} 
+\usepackage{enumitem}
+\usepackage{bbm}
+\usepackage{tcolorbox}
+
+\usepackage{minted}
+\usepackage{subcaption}
+
+\usepackage[font=small,labelfont=bf]{caption}
+
+\usepackage{fullpage,amsmath,amsthm,amssymb}
+\newtheorem*{solution}{Solution}
+\newtheorem*{part1}{Part 1}
+\newtheorem*{part2}{Part 2}
+
+\newcommand{\Cov}{\mathrm{Cov}}
+\newcommand{\Var}{\mathrm{Var}}
+\newcommand{\rank}{\mathrm{rank}}
+\newcommand{\Span}{\mathrm{span}}
+\newcommand{\clip}{\mathrm{clip}}
+\newcommand{\Dim}{\mathrm{dim}}
+
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\newcolumntype{R}[1]{>{\raggedright\arraybackslash}p{#1}}
+
+\tcbset{
+  colback=gray!3,
+  colframe=black!20,
+  boxsep=1mm,
+  left=1mm,
+  right=1mm,
+  top=1mm,
+  bottom=1mm,
+}
+
+\usepackage{changepage}
+\setlength{\parindent}{0pt}
+
+\newenvironment{restoretext}%
+    {
+     \begin{adjustwidth}{}{\leftmargin}%
+    }{\end{adjustwidth}
+     }
+
+% Definition of a style for code, matter of taste
+\lstdefinestyle{mystyle}{
+  language=Python,
+  basicstyle=\ttfamily\footnotesize,
+  backgroundcolor=\color[HTML]{F7F7F7},
+  rulecolor=\color[HTML]{EEEEEE},
+  identifierstyle=\color[HTML]{24292E},
+  emphstyle=\color[HTML]{005CC5},
+  keywordstyle=\color[HTML]{D73A49},
+  commentstyle=\color[HTML]{6A737D},
+  stringstyle=\color[HTML]{032F62},
+  emph={@property,self,range,True,False},
+  morekeywords={super,with,as,lambda},
+  literate=%
+    {+}{{{\color[HTML]{D73A49}+}}}1
+    {-}{{{\color[HTML]{D73A49}-}}}1
+    {*}{{{\color[HTML]{D73A49}*}}}1
+    {/}{{{\color[HTML]{D73A49}/}}}1
+    {=}{{{\color[HTML]{D73A49}=}}}1
+    {/=}{{{\color[HTML]{D73A49}=}}}1,
+  breakatwhitespace=false,
+  breaklines=true,
+  captionpos=b,
+  keepspaces=true,
+  numbers=none,
+  showspaces=false,
+  showstringspaces=false,
+  showtabs=false,
+  tabsize=4,
+  frame=single,
+}
+\lstset{style=mystyle}
+
+\begin{document}
+\begin{titlepage}
+    \centering
+    \vspace*{1cm}
+    
+    \Huge
+    \textbf{CSC490: Project Report}
+    
+    \vspace{0.5cm}
+    
+    \vspace{1.5cm}
+    
+    \textbf{Team Members}
+    
+    \vspace{0.8cm}
+    
+    \large
+    \begin{tabular}{ll}
+        \textbf{Name} & \textbf{Student ID} \\
+        \midrule
+        Aarya Prakash & 1008790257 \\
+        Derek Huynh & 1008849052 \\
+        Merrick Liu & 1008951920 \\
+        Rhys Balevicius & 1000801974 \\
+    \end{tabular}
+    
+    \vfill
+    
+    \large
+    University of Toronto\\
+    Department of Computer Science    
+\end{titlepage}
+% ================================================================================
+\section{Abstract}
+
+AI coding agents have dramatically accelerated software development, yet they
+remain fundamentally limited by context: they can only reason over the files
+immediately visible in their working session.
+In large-scale software systems—spanning dozens of repositories, layered
+service boundaries, and years of accumulated architectural conventions—this
+constraint is a critical bottleneck.
+Agents that lack knowledge of upstream API contracts, cross-repository
+dependencies, or established design patterns produce incorrect, inconsistent, or
+redundant code.\\
+
+We present \textbf{Lighthouse}, a retrieval-augmented context engine designed
+specifically to address this gap for AI coding agents.
+Lighthouse indexes GitHub repositories through durable, Temporal-orchestrated
+pipelines that produce semantically chunked, embedded representations of source
+code and auto-generated documentation.
+At query time, a hybrid retrieval strategy combining dense vector search
+(Milvus), full-text search (PostgreSQL), LLM-driven keyword expansion, and
+Cohere reranking surfaces the most relevant context from across all indexed
+repositories.
+This context is delivered to agents via the Model Context Protocol (MCP), a
+standardized interface that requires no changes to the agent or its tooling.
+Lighthouse is built to production standards: 100\% line coverage across 2{,}418
+source lines, zero-downtime incremental re-indexing via a publish-and-switch
+model, and a reproducible evaluation framework benchmarked against SWE-bench
+and synthetic API-contract tasks.
+
+% ================================================================================
+\section{Introduction and Problem Statement}
+
+AI coding agents—tools such as GitHub Copilot, Cursor, and Claude Code—have
+become central to modern software development.
+They automate routine implementation, synthesize boilerplate, and increasingly
+attempt to resolve multi-step engineering tasks with minimal human guidance.
+Yet despite rapid capability gains, these agents share a structural limitation:
+their context window is bounded by the files open in the current session.
+For self-contained tasks within a single file, this is often sufficient.
+For the kinds of tasks that arise in real engineering organizations—tasks that
+cross service boundaries, depend on the implicit contracts of internal libraries,
+or require knowledge of established architectural patterns—it is not.
+
+\subsection{The Problem}
+
+Modern software is organized around distributed, multi-repository systems.
+A typical enterprise product may comprise dozens of independently versioned
+services, each exposing interfaces consumed by others.
+Developers navigating this environment carry substantial implicit knowledge: they
+know which endpoints are stable versus unstable, which patterns are idiomatic in
+the organization's codebase, and which decisions were made for historical reasons
+that are no longer obvious from the code alone.
+An AI coding agent starting a new session has none of this knowledge.\\
+
+This produces a concrete and common class of agent failure.
+When an agent is asked to implement a new feature that calls an internal service,
+it may hallucinate an API endpoint that does not exist, use a deprecated calling
+convention, or miss a required authentication header that every other caller in
+the codebase includes.
+When asked to add a new module, it may duplicate infrastructure that already
+exists two repositories away.
+When asked to refactor a shared utility, it cannot reason about downstream
+consumers it has never seen.
+In each case, the agent's output is syntactically plausible but semantically
+wrong—and the error is invisible until it propagates to testing or review.\\
+
+The root cause is not a deficiency in the agent's reasoning capability; it is a
+deficiency in the information available to it.
+The agent is not failing to reason well about the context it has—it is failing
+because the relevant context was never provided.
+
+\subsection{Why Existing Tools Fall Short}
+
+Existing tools address adjacent problems but not this one.
+IDE-integrated autocomplete systems (GitHub Copilot, Tabnine) improve
+single-file productivity but do not index non-local repositories or expose
+retrieved context programmatically to agents.
+Code search platforms (Sourcegraph, Glean) are optimized for human developers
+querying a search interface; they are not designed to be called by agents during
+active reasoning, and they do not provide a standardized protocol for agents to
+retrieve structured context on demand.
+General-purpose RAG frameworks exist but require per-codebase configuration,
+lack the incremental indexing needed to stay current with a live codebase, and
+offer no code-aware chunking or retrieval logic.
+None of these solutions address the full problem: an always-current,
+semantically-indexed, agent-native context retrieval layer that spans an
+organization's entire codebase.
+
+\subsection{Lighthouse: A Context Layer for Coding Agents}
+
+We propose and implement \textbf{Lighthouse}, a retrieval system that treats
+context retrieval as a first-class infrastructure concern for AI coding agents.
+Lighthouse allows developers to register GitHub repositories for indexing.
+An ingestion pipeline—orchestrated by Temporal for durability and incremental
+correctness—clones each repository, splits source files into semantically
+coherent chunks using AST-aware or sliding-window strategies, generates
+embeddings via OpenAI or AWS Bedrock, and writes the results to a dual-store
+backend (PostgreSQL for metadata and full-text search, Milvus for dense vector
+retrieval).
+A separate workflow generates natural-language wiki documentation from the
+indexed code using an LLM, providing an additional retrieval surface for
+architectural and behavioral queries.\\
+
+At query time, a hybrid retrieval pipeline combines dense vector similarity
+search, PostgreSQL full-text search, LLM-driven keyword expansion, and
+Cohere reranking to surface the most relevant code snippets and documentation
+from across all indexed repositories.
+The system is exposed to coding agents via the \textbf{Model Context Protocol
+(MCP)}, a standardized tool-use interface that allows any MCP-compatible agent
+to query Lighthouse without any agent-side modification.\\
+
+We make the following contributions:
+
+\begin{enumerate}
+  \item A \textbf{production-grade ingestion pipeline} with full and incremental
+    indexing, durable execution via Temporal, and a publish-and-switch model
+    that eliminates search gaps during re-indexing.
+  \item A \textbf{multi-stage hybrid retrieval strategy} combining dense vector
+    search, sparse full-text search, LLM keyword extraction, and neural
+    reranking via Cohere.
+  \item An \textbf{automated wiki generation system} that uses an LLM to
+    synthesize repository documentation from indexed source code, expanding the
+    retrievable surface beyond raw code.
+  \item An \textbf{agent-native MCP interface} that exposes code and wiki search
+    as first-class tools consumable by AI coding agents with no custom
+    integration.
+  \item A \textbf{reproducible evaluation framework} integrating SWE-bench and
+    synthetic API-contract benchmarks to measure the impact of Lighthouse on
+    agent task completion.
+\end{enumerate}
+
+The remainder of this report is structured as follows.
+Section~\ref{sec:related} surveys related academic and industry work.
+Section~\ref{sec:approach} describes the technical design of Lighthouse in
+detail.
+Section~\ref{sec:experiments} presents our experimental setup and results.
+Section~\ref{sec:future} discusses future work, and
+Section~\ref{sec:reflection} offers a team reflection connecting the project to
+course material.
+
+% ================================================================================
+\section{Related Work}
+\label{sec:related}
+
+Lighthouse sits at the intersection of code retrieval, retrieval-augmented
+generation, and AI agent tooling.
+We survey the most relevant prior work across three dimensions: industry
+products that address adjacent problems, academic techniques that underpin our
+design, and evaluation benchmarks we use to measure system performance.\\
+
+\subsection{Industry Solutions}
+
+Several commercial products target developer productivity through code search
+or AI-assisted coding, but none provide a general-purpose, agent-native context
+retrieval layer.
+Table~\ref{tab:industry} summarizes the most relevant products and their key
+limitations relative to Lighthouse.\\
+
+\begin{table}[H]
+\centering
+\small
+\caption{Comparison of industry tools to Lighthouse.}
+\label{tab:industry}
+\begin{tabularx}{\textwidth}{R{2.4cm}YY}
+\toprule
+\textbf{Tool} & \textbf{Approach} & \textbf{Limitation vs.\ Lighthouse} \\
+\midrule
+GitHub Copilot
+  & LLM-based inline completion and chat; context scoped to open editor tabs.
+  & No cross-repository indexing; context not queryable by agents as a tool. \\
+\addlinespace
+Cursor
+  & AI code editor with codebase indexing and multi-file context.
+  & Index is local and per-session; not exposed via a standardized agent protocol. \\
+\addlinespace
+Sourcegraph / Cody
+  & Enterprise code search platform; Cody adds LLM-based Q\&A over indexed code.
+  & Search is developer-facing; no MCP interface; not designed for agent-driven retrieval. \\
+\addlinespace
+AugmentCode
+  & Codebase-aware AI coding assistant that indexes large monorepos for context.
+  & Tightly coupled to a proprietary IDE plugin; no open agent interface. \\
+\addlinespace
+Glean
+  & Enterprise knowledge retrieval across code, docs, and tickets.
+  & Not code-specific; does not perform semantic code chunking or vector search. \\
+\addlinespace
+Cognition Deep Wiki
+  & Automatically generates natural-language wiki documentation for a repository using an LLM agent.
+  & Documentation-generation only; no retrieval interface, no MCP integration, no code search. \\
+\addlinespace
+grep.app
+  & Fast regex and literal search over public GitHub repositories via a web interface.
+  & Lexical search only; no semantic/vector retrieval, no agent interface, no private repo support. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Academic Work}
+
+Lighthouse builds on several foundational techniques from the information
+retrieval and NLP literature.
+Table~\ref{tab:academic} summarizes the key works most directly relevant to
+our design.\\
+
+\begin{table}[H]
+\centering
+\small
+\caption{Academic works that inform the Lighthouse design.}
+\label{tab:academic}
+\begin{tabularx}{\textwidth}{R{2.8cm}YY}
+\toprule
+\textbf{Work} & \textbf{Contribution} & \textbf{Relevance to Lighthouse} \\
+\midrule
+RAG \cite{lewis2020rag}
+  & Augments LLM generation with non-parametric retrieval over a dense document index.
+  & Establishes the retrieval-then-generate paradigm that Lighthouse operationalizes for code. \\
+\addlinespace
+DPR \cite{karpukhin2020dpr}
+  & Dense bi-encoder retrieval using dot-product similarity over fixed-dimensional vectors.
+  & Basis for our Milvus-backed vector search stage using OpenAI \texttt{text-embedding-3-large}. \\
+\addlinespace
+CodeSearchNet \cite{husain2019codesearchnet}
+  & Large-scale code--docstring pairs across six languages for training code search models.
+  & Provides a reference approach to NL$\to$code retrieval; informs our embedding evaluation methodology. \\
+\addlinespace
+Reciprocal Rank Fusion \cite{cormack2009rrf}
+  & Score-free fusion of ranked lists by inverse rank position.
+  & Directly implemented in our hybrid search pipeline to combine vector and full-text result lists. \\
+\addlinespace
+CodeRAG-Bench \cite{wang2024coderag}
+  & Benchmark for RAG-augmented code generation covering eight task types and five retrieval corpora.
+  & Most directly comparable to our evaluation design; establishes retrieval+generation as a joint evaluation target. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Evaluation Benchmarks}
+
+Measuring whether Lighthouse actually improves agent outcomes requires
+benchmarks that capture real-world coding tasks at the repository level.
+Table~\ref{tab:benchmarks} lists the benchmarks most relevant to our
+evaluation setup, selected from a broader landscape surveyed in our earlier
+design work.\\
+
+\begin{table}[H]
+\centering
+\small
+\caption{Evaluation benchmarks used in or considered for Lighthouse experiments.}
+\label{tab:benchmarks}
+\begin{tabularx}{\textwidth}{R{2.6cm}YY}
+\toprule
+\textbf{Benchmark} & \textbf{Description} & \textbf{Role in Lighthouse Evaluation} \\
+\midrule
+SWE-bench \cite{jimenez2024swebench}
+  & 2,294 GitHub issue-resolution tasks across 12 Python repositories, each with a linked PR and test patch.
+  & Primary end-to-end evaluation: run agents with and without Lighthouse MCP and compare resolution rates. \\
+\addlinespace
+RepoBench \cite{liu2023repobench}
+  & 11K cross-file code completion instances requiring imports and related functions from other files in the same repo.
+  & Tests whether Lighthouse surfaces correct cross-file context; directly exercises our vector and FTS pipelines. \\
+\addlinespace
+CodeRAG-Bench \cite{wang2024coderag}
+  & RAG-augmented generation benchmark with five retrieval corpora and execution-based correctness metrics.
+  & Provides a controlled setting for ablating retrieval strategies (vector-only vs.\ hybrid vs.\ LLM-combined). \\
+\addlinespace
+GitChameleon 2.0 \cite{gitchameleon}
+  & 328 version-conditioned Python code-completion problems spanning 26 library versions (2014--2023).
+  & Tests whether Lighthouse can retrieve version-specific documentation to resolve API incompatibilities. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+
+% ================================================================================
+\section{Technical Approach, Solution, and Designs}
+\label{sec:approach}
+
+
+
+% ================================================================================
+\section{Experiments, Key Metrics, and Results}
+\label{sec:experiments}
+
+\subsection{Synthetic Benchmark Dataset}
+
+Our current evaluation track is built around a synthetic benchmark that is checked into the repository and executed by the \texttt{packages/eval} pipeline. The full checked-in corpus contains 150 executable tasks spanning six families, but the matrix runner evaluates deterministic seeded subsets of that corpus for tractability. In particular, the family configuration files use \texttt{task\_count=10} as the default per-run sample size, while the task manifests themselves contain the full corpus. This distinction matters most for the \texttt{synthetic-ab-contracts} family: it contains 100 task instances in the manifest, but a standard matrix cell samples 10 of them with a fixed seed so that model and retrieval comparisons are made on the same subset. \\
+
+\begin{table}[t]
+\centering
+\small
+\caption{Synthetic benchmark families currently checked into the repository. Counts are taken from the task manifests, not the default per-run sample size.}
+\label{tab:synthetic-family-summary}
+\begin{tabular}{l l r p{5.2cm}}
+\hline
+Family & Task type & Tasks & Benchmark role \\
+\hline
+\texttt{synthetic-ab-contracts} & \texttt{api\_contract\_mismatch} & 100 & Dual-repo repair tasks where the consumer must recover non-local provider semantics. \\
+\texttt{synthetic-api-feature} & \texttt{feature\_api\_integration} & 10 & Dual-repo feature tasks implemented against provider APIs. \\
+\texttt{synthetic-doc-behavior} & \texttt{doc\_behavior\_mismatch} & 10 & Dual-repo repair tasks where the documented library behavior matters. \\
+\texttt{synthetic-doc-feature} & \texttt{feature\_doc\_guided} & 10 & Dual-repo feature tasks guided by library documentation. \\
+\texttt{synthetic-type-coercion} & \texttt{data\_type\_coercion} & 10 & Single-repo repair controls focused on local code understanding. \\
+\texttt{synthetic-wrong-operator} & \texttt{logic\_wrong\_operator} & 10 & Single-repo repair controls focused on local bug localization. \\
+\hline
+Total & --- & 150 & 130 repair tasks and 20 feature tasks overall. \\
+\hline
+\end{tabular}
+\end{table}
+
+Each task manifest stores executable ground truth rather than free-form human judgments. Concretely, every task records a \texttt{buggy\_patch\_path}, a \texttt{gold\_patch\_path}, the targeted \texttt{pytest\_targets}, and several relevance annotations such as \texttt{expected\_relevant\_files}, \texttt{expected\_relevant\_symbols}, \texttt{visible\_api\_names}, and \texttt{test\_context}. The evaluator first materializes the buggy workspace by applying the buggy patch, then validates the instance by checking that (i) the buggy state fails on the declared tests and (ii) the gold patch applies cleanly and makes those same tests pass. The result is an executable notion of correctness: a model output is counted as successful only if its extracted patch applies with \texttt{git apply} and the declared tests pass.
+
+The benchmark is intentionally aligned with Lighthouse's core value proposition: surfacing non-local context that is not obvious from the local edit alone. This is most direct in the dual-repo families, especially \texttt{synthetic-ab-contracts}, where the consumer code is wrong because it violates the contract of a helper in a separate provider repository. The provider repository remains correct, and the task is to recover that behavior from surfaced provider code or documentation. The documentation-centric families extend the same idea to cases where the desired behavior is stated more explicitly in generated wiki content than in the local consumer implementation. By contrast, the single-repo \texttt{logic\_wrong\_operator} and \texttt{data\_type\_coercion} families act as controls: they are still useful coding tasks, but they are much less dependent on dependency-aware retrieval and therefore help isolate where Lighthouse adds genuine value rather than merely reformatting already local information.\\
+
+The \texttt{synthetic-ab-contracts} family is intentionally over-represented because it is our clearest stress test for dependency-context retrieval. Its build script expands 10 base consumer/provider contract motifs into 100 concrete instances by generating many contract-specific test cases around the same underlying buggy and gold patches. That design gives us both semantic diversity and repeated opportunities to test whether retrieval can recover subtle provider behavior such as rounding rules, default values, parsing semantics, or normalization conventions.\\
+
+Two methodological caveats are important to state explicitly. First, our ``no-context'' baseline is not a zero-information prompt. The baseline prompt still includes the task statement, the failing test context, the local buggy consumer files, and the relevant local test files. What it withholds is retrieved non-local context from the dependency side. Throughout the paper, ``no context'' should therefore be read as ``no surfaced dependency context beyond the standard local prompt.'' Second, the current query builder uses high-quality task metadata such as \texttt{visible\_api\_names} and \texttt{expected\_relevant\_symbols} when forming retrieval queries. We therefore interpret the benchmark as measuring retrieval and downstream patch generation given a well-specified issue query, not as a fully end-to-end evaluation of raw bug-report understanding.\\
+
+\subsection{Experimental Setup and Ablations}
+
+Our experiments are organized as a matrix over five factors: task family, context source, chunking strategy, code-generation model, and embedding model. The matrix runner expands this grid automatically and writes per-cell artifacts for score, pass@k, and efficiency. The checked-in configuration under \texttt{.cache/config/bedrock.json} currently sweeps four retrieval conditions (\texttt{grep}, \texttt{code}, \texttt{wiki}, and \texttt{combined}), uses the base chunking strategy, fixes \texttt{top\_k=5}, and compares six code generators: \texttt{bedrock/anthropic.claude-sonnet-4-6}, \texttt{bedrock/amazon.nova-pro-v1:0}, \texttt{bedrock/deepseek.v3.2}, \texttt{bedrock/google.gemma-3-12b-it}, \texttt{bedrock/meta.llama4-scout-17b-instruct-v1:0}, and \texttt{openai/gpt-5.4}. The current checked-in run uses Bedrock Titan embeddings (\texttt{amazon.titan-embed-text-v2:0}), while the evaluation code and tests also support separate sweeps over alternative embedding models such as \texttt{text-embedding-3-large}. Because embedding strategy is single-valued per matrix config, cross-provider embedding comparisons are run as separate batches.\\
+
+We compare the following retrieval settings.
+\begin{itemize}
+  \item \textbf{Baseline}: no retrieved dependency context. The model sees only the task statement, failing-test context, local buggy files, and local test files.
+  \item \textbf{Grep}: a strong lexical baseline. The evaluator derives up to 12 search terms from the task title, problem statement, test context, \texttt{visible\_api\_names}, and \texttt{expected\_relevant\_symbols}, runs \texttt{rg} over non-test Python files, ranks files by matched-term count, and surfaces local snippets around the first match.
+  \item \textbf{Code}: Lighthouse code retrieval over indexed code chunks.
+  \item \textbf{Wiki}: Lighthouse retrieval over generated repository wiki pages.
+  \item \textbf{AST}: Lighthouse retrieval over AST-oriented code chunks for the settings that index the AST view.
+  \item \textbf{Combined}: the strongest synthetic retrieval setting, which fuses ranked code, wiki, and AST results via reciprocal-rank fusion in the evaluator. A legacy \texttt{code+wiki} mode is also available when we want fusion without AST.
+\end{itemize}
+
+For the Lighthouse conditions, the underlying search service is hybrid rather than purely vector based. Code search combines Milvus vector retrieval with PostgreSQL full-text search and fuses the ranked lists using reciprocal-rank fusion. Wiki search uses the same pattern over generated wiki pages. When the search service receives multiple context sources, it fuses already-ranked code and wiki lists with reciprocal-rank fusion; in the synthetic evaluator, the \texttt{combined} condition extends this to code, wiki, and AST lists. This makes the ablation meaningful: \texttt{code} tests whether surfaced implementation details are sufficient, \texttt{wiki} tests whether surfaced documentation is sufficient, and \texttt{combined} tests whether broader retrieval breadth improves or dilutes the signal.\\
+
+The generation side is controlled so that the code-generation comparison is clean. Both Bedrock and OpenAI generators are prompted to return only a unified diff patch, and the evaluator extracts the patch, applies it with \texttt{git apply}, and runs the declared tests. We treat the dual-repo feature families separately from the repair families in the narrative because the feature tasks are not bug fixes in the narrow sense; they typically start from a stub that raises \texttt{NotImplementedError} and require composing one or more non-local helper APIs into a correct implementation.\\
+
+We also include chunking and embedding ablations. The base chunker corresponds to the standard sliding-window index, while the AST setting uses a separate AST-oriented index. The final paper should report these as controlled ablations rather than as a single leaderboard, because the right retrieval representation is plausibly task dependent: AST-heavy chunking may help symbolically local code tasks, whereas documentation-heavy tasks may benefit more from wiki retrieval than from any change in code chunk granularity.\\
+
+\subsection{Key Metrics}
+
+Our primary downstream metric is task \emph{score}, defined as the percentage of tasks in a run that are fully resolved:
+\[
+\mathrm{score} = \frac{\#\ \mathrm{resolved\ instances}}{\#\ \mathrm{total\ instances}}.
+\]
+A task is resolved only when the model emits a non-empty patch, the patch applies cleanly, and the declared failing tests pass after application. We additionally keep the intermediate failure modes (\texttt{missing\_patch}, \texttt{patch\_failed}, \texttt{unresolved}, and \texttt{error}) because they are useful for understanding whether a method is failing at localization, patch formatting, or semantic repair.
+
+When we run repeated samples of the same matrix cell, we also report pass@k. The evaluator uses the standard estimator
+\[
+\mathrm{pass@}k = 1 - \frac{\mathrm{C}(n-c,k)}{\mathrm{C}(n,k)},
+\]
+where \(n\) is the number of sampled runs for a task and \(c\) is the number of successful runs. The matrix runner aggregates this per task and then macro-averages across tasks in the cell. In the final paper, pass@k should be reported only for repeated cells; if a sweep is run with a single repeat, pass@1 is still meaningful but higher-k values are not.
+
+Our efficiency analysis has three parts. First, we log generation input tokens, output tokens, total tokens, latency, and estimated generation cost using checked-in pricing catalogs for both OpenAI and Bedrock models. Second, we log end-to-end stage durations, including indexing time, wiki-generation time, retrieval time, generation time, and total wall-clock time. Third, we distinguish one-time retrieval setup cost from per-query cost: indexing and wiki generation are amortizable offline costs, while retrieval calls, query embedding tokens, and generation tokens are online costs. The current evaluator already emits generation-side efficiency fields directly and has schema support for retrieval query token and cost estimates; the final version of the paper should explicitly separate offline embedding/indexing cost from online retrieval-plus-generation cost in the main tables.
+
+Two additional reporting conventions are important. First, because the benchmark is per-task executable and strongly typed, we can report \emph{improved}, \emph{regressed}, and \emph{unchanged} task counts relative to the baseline rather than only aggregate score deltas. Second, the evaluator targets the declared failing pytest slice for each task rather than a full repository regression suite. The results should therefore be interpreted as targeted fail-to-pass performance on well-scoped coding tasks, not as a full pass-to-pass regression guarantee over the entire repository.
+
+\begin{table}[t]
+\centering
+\fbox{\parbox{0.95\linewidth}{
+\vspace{0.5em}
+\centering
+Placeholder for the main quantitative table.
+
+Recommended columns: family, task type, context source, codegen model, embedding model, score, pass@1, pass@k, improved tasks, regressed tasks, mean generation tokens, mean estimated generation cost, mean total wall-clock time.
+\vspace{0.5em}
+}}
+\caption{Main quantitative results. Fill from the exported matrix and comparison artifacts once the full sweep completes.}
+\label{tab:main-results}
+\end{table}
+
+\subsection{Results}
+
+The main question is whether retrieved non-local context improves downstream coding performance enough to justify its additional cost. Our expectation is that the answer will depend strongly on task family. On the dependency-centric families, especially \texttt{synthetic-ab-contracts} and \texttt{synthetic-api-feature}, we expect surfaced provider code to dominate the baseline because the correct fix depends on behavior that is implemented outside the local consumer edit. On the documentation-centric families, we expect \texttt{wiki} retrieval to close more of the gap, and possibly exceed pure code retrieval when the required behavior is expressed more directly in prose than in the provider implementation. On the single-repo control families, we expect much smaller gains, which would support the claim that Lighthouse's benefit comes from surfacing non-local context rather than simply re-presenting already local code.
+
+\begin{figure}[t]
+\centering
+\fbox{\parbox{0.95\linewidth}{
+\vspace{0.5em}
+\centering
+Placeholder for the main heatmaps.
+
+Use the matrix runner's heatmaps or equivalent plots with codegen model on the x-axis, context source on the y-axis, and separate panels for embedding model and task family. Include both score and pass@k views.
+\vspace{0.5em}
+}}
+\caption{Family-by-family retrieval heatmaps for score and pass@k.}
+\label{fig:main-heatmaps}
+\end{figure}
+
+\paragraph{Preliminary observations from completed cells.}
+The currently completed cells already show the qualitative shape we expect. On a seeded 10-task subset of \texttt{synthetic-ab-contracts} with Titan embeddings and \texttt{top\_k=5}, \texttt{bedrock/amazon.nova-pro-v1:0} improves from 1/10 resolved tasks in the baseline to 8/10 with \texttt{code} retrieval, 5/10 with \texttt{combined} retrieval, and 2/10 with \texttt{wiki} retrieval. In the same completed runs, the code condition yields 7 improved tasks and 0 regressions relative to the baseline, while the combined and wiki conditions are weaker and introduce regressions. This is a strong early signal that exact provider implementation context matters more than documentation alone for contract-mismatch repair, and that adding more heterogeneous context can sometimes dilute the most useful evidence instead of strengthening it.
+
+The partial efficiency results show the trade-off clearly. For the same Nova Pro runs, total generation tokens increase from 10{,}355 in the baseline to 20{,}130 with code retrieval, 19{,}017 with combined retrieval, and 16{,}428 with wiki retrieval. Total wall-clock time also changes unevenly: the code run increases from 18.5\,s to 24.0\,s, the wiki run is roughly neutral at 19.3\,s, and the combined run grows to 42.5\,s because it pays for broader retrieval and a larger prompt. This is the kind of quality-cost frontier we want the full paper to make explicit.
+
+The smaller-model story remains suggestive but not settled. In the completed \texttt{synthetic-ab-contracts} code runs, \texttt{bedrock/google.gemma-3-12b-it} improves from 3/10 to 4/10 resolved tasks when code retrieval is enabled, with 5 improved tasks but also 2 regressions. That is consistent with the hypothesis that weaker or cheaper models can benefit from retrieval while also being more brittle to noisy context. The full matrix is needed to test that hypothesis properly across all families and models. A likely final interpretation, if the larger sweep follows this pattern, is that retrieval provides the largest relative lift for cheaper models while the strongest frontier models define the best no-retrieval ceiling.
+
+\begin{figure}[t]
+\centering
+\fbox{\parbox{0.95\linewidth}{
+\vspace{0.5em}
+\centering
+Placeholder for the efficiency frontier figure.
+
+Recommended plot: score (or pass@1) on the y-axis against mean generation cost or mean total tokens on the x-axis, grouped by context source and colored by codegen model. A second panel can show wall-clock time instead of cost.
+\vspace{0.5em}
+}}
+\caption{Quality-efficiency frontier across code-generation models and retrieval settings.}
+\label{fig:efficiency-tradeoff}
+\end{figure}
+
+The final version of this section should therefore make three claims, subject to the completed matrix data. First, non-local retrieval should matter most on dual-repo contract and API-integration tasks, which directly test Lighthouse's value proposition. Second, the best retrieval source should be task dependent: code should dominate when exact implementation semantics matter, while wiki context should be more competitive when behavior is explicitly documented. Third, the practical value of retrieval is not just whether it improves score, but whether it improves score enough to justify the additional token, latency, and cost budget. The completed cells already indicate that this trade-off is real and model dependent; the full tables and heatmaps will let us quantify it precisely.
+
+
+
+
+
+% ================================================================================
+\section{Future Work and Next Steps}
+\label{sec:future}
+
+Lighthouse is a research instrument and proof of concept with a clear path
+toward becoming a production product.
+Future work spans two lenses: product maturity and research depth.\\
+
+\subsection{Product}
+
+\textbf{Automated webhook setup.}
+Currently, a developer must manually trigger re-indexing after pushing to a
+repository.
+The natural next step is to register GitHub webhooks automatically when a
+repository is added, so that every push triggers an incremental index update
+without any developer action.
+This removes the largest remaining friction point in the onboarding flow.\\
+
+\textbf{Incremental wiki generation.}
+Wiki generation is currently re-run in full on every indexing job, making it
+the dominant cost in the ingestion pipeline.
+Because a typical push changes only a small fraction of the codebase, the wiki
+should be updated incrementally: only pages whose source chunks changed need
+to be regenerated.
+This would reduce wiki generation from a per-job full pass to a diff-driven
+partial update, substantially improving ingestion throughput.\\
+
+\textbf{Expanded search types.}
+The current retrieval surface covers code chunks and wiki pages.
+Useful additions include agent conversation history (surfacing context from
+prior sessions on the same codebase), commit history and PR descriptions
+(capturing intent and rationale that does not appear in the code itself), and
+issue threads (linking failing tests or bug reports back to relevant code
+regions).
+Each of these extends the types of questions an agent can answer with
+Lighthouse context.\\
+
+\subsection{Research}
+
+\textbf{Graph-structured indexing.}
+The current index treats code chunks independently.
+A natural extension is to index the dependency graph explicitly — representing
+files, modules, and packages as nodes and import/call relationships as edges —
+enabling retrieval that follows structural dependencies rather than relying
+solely on semantic similarity.
+Graph databases such as Neo4j are well-suited to this representation.\\
+
+\textbf{Agentic retrieval.}
+Our current retrieval pipeline is a single-shot query-then-rank process.
+An agentic retrieval layer could iteratively refine queries based on
+intermediate results: issuing a first retrieval pass, inspecting the top
+candidates, and re-querying with refined or expanded terms.
+This is especially valuable for complex tasks where the relevant context is
+spread across multiple files or repositories and cannot be captured in a single
+query.\\
+
+\textbf{Indexing beyond source code.}
+We currently index source files and LLM-generated wiki pages.
+Extending the index to external documentation (library API docs, changelogs,
+README files) and package dependency manifests would allow agents to retrieve
+context for third-party APIs and version-specific behavior — the class of
+failures that benchmarks like GitChameleon 2.0 are designed to stress-test.\\
+
+The directions above represent a few of many paths forward.
+Lighthouse opens up a large and largely unexplored design space — in how
+context is indexed, what is indexed, how it is retrieved, and how it is
+consumed by agents — and we expect the most impactful directions to emerge
+from empirical experimentation on real agent tasks.
+
+
+% ================================================================================
+\section{Team Reflection}
+\label{sec:reflection}
+% On the project including connection to the course material (1 page)
+
+\subsection{Infrastructure as a First-Class Concern}
+
+The infrastructure lecture framed the ML engineering stack as a layered pyramid: at the base sits hardware and cloud infrastructure, above it data pipelines and model serving, and only at the top does the user-facing application appear. Building Lighthouse forced us to internalize this ordering in a concrete way. We began by prototyping the search logic and quickly discovered that without reliable infrastructure underneath — durable workflow orchestration, a vector store that could handle bulk upserts without corruption, a zero-downtime re-indexing strategy — no amount of algorithmic sophistication mattered. Every advanced retrieval experiment we wanted to run depended on the infra layer being solid first.\\
+
+We adopted the same build-vs-buy calculus described in the lecture. For infrastructure primitives we leaned on managed services: AWS ECS for container orchestration, RDS for relational storage, S3 for artifact staging, and a hosted Milvus cluster for vector similarity search. For anything in the application and retrieval layers — chunking strategies, hybrid ranking, MCP server protocol handling — we built from scratch, because that was where our research contribution lived. Terraform IaC was not an afterthought; we wrote it early so that spinning up a fresh environment was a single \texttt{terraform apply} rather than tribal knowledge. Containerizing each service with Docker gave us environment parity between local development and production and made staged rollouts straightforward.\\
+
+\subsection{AI-Assisted Development and the Value of Tests}
+
+We used AI coding agents extensively throughout the project, and this experience was itself a kind of meta-experiment given what Lighthouse is trying to do. Letting agents run loosely on well-scoped tasks — implementing a new chunking strategy, adding a migration, wiring up a new API route — produced usable output surprisingly quickly. Velocity was high.\\
+
+The risk, which we felt acutely, was correctness. Agent-generated code does not come with a guarantee that it respects the invariants of surrounding systems. The A5 testing requirement forced us to write a comprehensive test suite — 300+ tests covering 100\% of lines — and this discipline paid dividends far beyond the assignment grade. Writing tests first for new components effectively imposed a contract before implementation, which turned out to be exactly the right interface for handing work off to an AI agent: specify what the function must do, let the agent implement it, and let the test suite catch the cases where the agent's assumptions diverged from ours. The project inadvertently became an exercise in test-driven development as a technique for supervising AI-generated code.\\
+
+\subsection{Production Hardness and the Cost of Experimentation}
+
+Shipping a system to production surfaces a category of problems that never appear in a research prototype. The incremental indexing workflow is the clearest example. A naive implementation processes new commits while the existing index is live, but this creates a race condition: a search query mid-re-index can see a partially updated collection, returning stale or inconsistent results. Our publish-and-switch model — build a new collection in the background, atomically swap the pointer, retire the old one — eliminated the race at the cost of requiring careful lifecycle management of Milvus collections and coordination between the ingestion and search services. Every production edge case of this kind required not just a code fix but a deliberate design decision about where state lives and who owns transitions.\\
+
+Experimentation costs money. The retrieval pipeline has a large parameter space: chunking strategy (AST-aware vs.\ sliding window), chunk size, embedding model, full-text search weight, reranking model, number of candidates passed to the reranker. Every configuration combination requires running the embedding model and, in evaluation, querying the LLM judge. We learned quickly to be deliberate about what we were measuring and to fix all variables except the one under study. Token budgets shaped experimental design in a way that purely computational costs often do not, because the feedback loop between a hypothesis and a result is gated by API spend.\\
+
+\subsection{Abstractions, Collaboration, and the Configurability Tradeoff}
+
+Building Lighthouse as a team across four services made interface design a continuous negotiation. The most consequential decisions were not about algorithms but about where to draw abstraction boundaries — what a service exposed to its callers versus what it kept internal. The retrieval pipeline is illustrative: chunking strategy, embedding model, search weights, and reranking model all needed to be swappable for experimentation, but exposing every knob at every layer would have made the codebase unreadable and individual services impossible to reason about in isolation. We arrived at a discipline of parameterizing at service boundaries and hardcoding within them, with configuration surfaced through a small set of explicit options rather than an open-ended parameter bag. This let any team member swap a chunking strategy or reranking model for an experiment without needing to understand the internals of the service that consumed it.\\
+
+Working in a shared codebase with AI-generated contributions added pressure to this discipline. Code that an agent produces is often locally correct but globally inconsistent — it may not follow the abstraction conventions the rest of the team established, or may reimplement something that already exists. Code review became as much about architectural coherence as about correctness, and having clear, named abstractions (a \texttt{Chunker} protocol, a \texttt{SearchResult} dataclass, a \texttt{WorkflowHandle} wrapper) gave reviewers a vocabulary for pointing out deviations quickly. The lesson is that good abstractions pay for themselves twice in a team setting: once in the clarity they provide to human collaborators, and again in the guardrails they provide when supervising AI-generated code.\\
+
+\subsection{Research and Product in the Same System}
+
+Looking back, the most valuable decision we made early was to treat Lighthouse simultaneously as a research instrument and a production system rather than choosing one framing. The research framing gave us clear evaluation criteria: does the system improve agent outcomes on SWE-bench tasks? Does hybrid search outperform pure vector retrieval? The product framing gave us the discipline to build things that actually work under real conditions rather than curated benchmarks. These two pressures reinforced each other. The infrastructure lecture's point that the infra layer enables everything above it captures exactly what we experienced: scalable, observable infrastructure is what made it possible to iterate on retrieval algorithms without rebuilding from scratch each time. The result is a system we are genuinely confident could be deployed and extended — a standard that, in retrospect, made the project considerably more demanding and considerably more rewarding than a research prototype alone would have been.\\
+
+
+% ================================================================================
+\begin{thebibliography}{9}
+
+\bibitem{lewis2020rag}
+Lewis, P., et al.\ (2020).
+Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks.
+\textit{Advances in Neural Information Processing Systems}, 33, 9459--9474.
+
+\bibitem{karpukhin2020dpr}
+Karpukhin, V., et al.\ (2020).
+Dense Passage Retrieval for Open-Domain Question Answering.
+\textit{Proceedings of EMNLP 2020}, 6769--6781.
+
+\bibitem{husain2019codesearchnet}
+Husain, H., et al.\ (2019).
+CodeSearchNet Challenge: Evaluating the State of Semantic Code Search.
+\textit{arXiv preprint arXiv:1909.09436}.
+
+\bibitem{cormack2009rrf}
+Cormack, G.~V., Clarke, C.~L.~A., and Buettcher, S.\ (2009).
+Reciprocal Rank Fusion Outperforms Condorcet and Individual Rank Learning Methods.
+\textit{Proceedings of SIGIR 2009}, 758--759.
+
+\bibitem{wang2024coderag}
+Wang, Z., et al.\ (2024).
+CodeRAG-Bench: Can Retrieval Augment Code Generation?
+\textit{arXiv preprint arXiv:2406.14497}.
+
+\bibitem{jimenez2024swebench}
+Jimenez, C.~E., et al.\ (2024).
+SWE-bench: Can Language Models Resolve Real-World GitHub Issues?
+\textit{Proceedings of ICLR 2024}.
+
+\bibitem{liu2023repobench}
+Liu, T., et al.\ (2023).
+RepoBench: Benchmarking Repository-Level Code Auto-Completion Systems.
+\textit{arXiv preprint arXiv:2306.03091}.
+
+\bibitem{gitchameleon}
+Zan, D., et al.\ (2024).
+GitChameleon: Unmasking the Version-Conditioned Code Generation Challenge.
+\textit{arXiv preprint arXiv:2411.05830}.
+
+\end{thebibliography}
+\end{document}

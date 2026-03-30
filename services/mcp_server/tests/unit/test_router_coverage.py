@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from pydantic import BaseModel
 
+from fastapi import Request
 from mcp_server.routers.http.handler import HTTPRouteHandler, _make_route_fn, build_router
 from mcp_server.routers.mcp.handler import MCPToolHandler
 from mcp_server.utilities import RequestError, httproute, toolcall
@@ -221,6 +222,187 @@ async def test_make_route_fn_handles_sync_request_errors():
     route_fn = HTTPRouteHandler(app).make_route_fn(bound)
     result = await route_fn(_http_request=SimpleNamespace(state=SimpleNamespace()), request=EchoModel(value="x"))
     assert result == {"value": "x", "user": "user-1"}
+
+
+class NativeRequestRoute:
+    """Route that expects a FastAPI Request object directly."""
+
+    @httproute("GET", "/native-request", name="native_request")
+    async def native_request(self, auth, request: Request, value: str) -> dict[str, str]:
+        return {"value": value, "user": auth.id}
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_http_route_handler_native_request_param(monkeypatch):
+    """Cover line 139: expects_http_request=True path."""
+    from fastapi import Request
+
+    app = SimpleNamespace(
+        engine=SimpleNamespace(registries=lambda: ()),
+        authenticator=SimpleNamespace(
+            require_http_request=AsyncMock(return_value=SimpleNamespace(id="user-1"))
+        ),
+    )
+    bound = BoundRoute(
+        meta=RouteMeta(method="GET", path="/native-request", name="native_request", auth_required=True),
+        method=NativeRequestRoute().native_request,
+        owner=NativeRequestRoute(),
+    )
+    route_fn = HTTPRouteHandler(app).make_route_fn(bound)
+    mock_request = SimpleNamespace(state=SimpleNamespace())
+    result = await route_fn(request=mock_request, value="hello")
+    assert result == {"value": "hello", "user": "user-1"}
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_http_route_handler_generic_exception_during_auth():
+    """Cover lines 161-164: non-RequestError during authentication."""
+    app = SimpleNamespace(
+        engine=SimpleNamespace(registries=lambda: ()),
+        authenticator=SimpleNamespace(
+            require_http_request=AsyncMock(side_effect=RuntimeError("auth system crashed"))
+        ),
+    )
+    bound = BoundRoute(
+        meta=RouteMeta(method="GET", path="/private", name="private", auth_required=True),
+        method=DemoRoutes().private,
+        owner=DemoRoutes(),
+    )
+    route_fn = HTTPRouteHandler(app).make_route_fn(bound)
+    with pytest.raises(Exception) as exc_info:
+        await route_fn(request=SimpleNamespace(state=SimpleNamespace()), value="ok")
+    assert exc_info.value.status_code == 500
+    assert exc_info.value.detail["error_code"] == "INTERNAL_ERROR"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_http_route_handler_generic_exception_from_sync_method():
+    """Cover lines 186-189: non-RequestError from synchronous method."""
+
+    class BoomSyncRoute:
+        @httproute("GET", "/boom-sync", name="boom_sync", auth_required=False)
+        def boom_sync(self, value: str) -> dict[str, str]:
+            raise RuntimeError("sync boom")
+
+    app = SimpleNamespace(engine=SimpleNamespace(registries=lambda: ()))
+    bound = BoundRoute(
+        meta=RouteMeta(method="GET", path="/boom-sync", name="boom_sync", auth_required=False),
+        method=BoomSyncRoute().boom_sync,
+        owner=BoomSyncRoute(),
+    )
+    route_fn = HTTPRouteHandler(app).make_route_fn(bound)
+    with pytest.raises(Exception) as exc_info:
+        await route_fn(value="x")
+    assert exc_info.value.status_code == 500
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_http_route_handler_generic_exception_from_async_method():
+    """Cover lines 203-206: non-RequestError from awaited method."""
+
+    class BoomAsyncRoute:
+        @httproute("GET", "/boom-async", name="boom_async", auth_required=False)
+        async def boom_async(self, value: str) -> dict[str, str]:
+            raise RuntimeError("async boom")
+
+    app = SimpleNamespace(engine=SimpleNamespace(registries=lambda: ()))
+    bound = BoundRoute(
+        meta=RouteMeta(method="GET", path="/boom-async", name="boom_async", auth_required=False),
+        method=BoomAsyncRoute().boom_async,
+        owner=BoomAsyncRoute(),
+    )
+    route_fn = HTTPRouteHandler(app).make_route_fn(bound)
+    with pytest.raises(Exception) as exc_info:
+        await route_fn(value="x")
+    assert exc_info.value.status_code == 500
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_mcp_tool_handler_generic_exception_from_sync_method():
+    """Cover lines 196-199 in mcp/handler.py: generic Exception from sync method."""
+
+    class BoomSyncTool:
+        @toolcall("boom_sync", auth_required=False)
+        def boom_sync(self, value: str) -> str:
+            raise RuntimeError("sync crash")
+
+    app = SimpleNamespace(
+        engine=SimpleNamespace(registries=lambda: (BoomSyncTool(),)),
+        authenticator=SimpleNamespace(require_mcp_context=AsyncMock()),
+    )
+    handler = MCPToolHandler(app)
+    tool = BoundToolCall(
+        meta=ToolCallMeta(name="boom_sync", auth_required=False),
+        method=BoomSyncTool().boom_sync,
+        owner=BoomSyncTool(),
+    )
+    tool_fn = handler._make_tool_fn(tool)
+    with pytest.raises(ValueError) as exc_info:
+        await tool_fn(SimpleNamespace(), value="x")
+    import json
+    payload = json.loads(str(exc_info.value))
+    assert payload["error_code"] == "INTERNAL_ERROR"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_mcp_tool_handler_generic_exception_from_async_method():
+    """Cover lines 209-212 in mcp/handler.py: generic Exception from async method."""
+
+    class BoomAsyncTool:
+        @toolcall("boom_async", auth_required=False)
+        async def boom_async(self, value: str) -> str:
+            raise RuntimeError("async crash")
+
+    app = SimpleNamespace(
+        engine=SimpleNamespace(registries=lambda: (BoomAsyncTool(),)),
+        authenticator=SimpleNamespace(require_mcp_context=AsyncMock()),
+    )
+    handler = MCPToolHandler(app)
+    tool = BoundToolCall(
+        meta=ToolCallMeta(name="boom_async", auth_required=False),
+        method=BoomAsyncTool().boom_async,
+        owner=BoomAsyncTool(),
+    )
+    tool_fn = handler._make_tool_fn(tool)
+    with pytest.raises(ValueError) as exc_info:
+        await tool_fn(SimpleNamespace(), value="x")
+    import json
+    payload = json.loads(str(exc_info.value))
+    assert payload["error_code"] == "INTERNAL_ERROR"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_mcp_tool_handler_request_error_from_async_method():
+    """Cover lines 203-208 in mcp/handler.py: RequestError from async method."""
+
+    class FailAsyncTool:
+        @toolcall("fail_async", auth_required=False)
+        async def fail_async(self, value: str) -> str:
+            raise RequestError("fail", status_code=400)
+
+    app = SimpleNamespace(
+        engine=SimpleNamespace(registries=lambda: (FailAsyncTool(),)),
+        authenticator=SimpleNamespace(require_mcp_context=AsyncMock()),
+    )
+    handler = MCPToolHandler(app)
+    tool = BoundToolCall(
+        meta=ToolCallMeta(name="fail_async", auth_required=False),
+        method=FailAsyncTool().fail_async,
+        owner=FailAsyncTool(),
+    )
+    tool_fn = handler._make_tool_fn(tool)
+    with pytest.raises(ValueError) as exc_info:
+        await tool_fn(SimpleNamespace(), value="x")
+    import json
+    payload = json.loads(str(exc_info.value))
+    assert payload["message"] == "fail"
 
 
 @pytest.mark.unit

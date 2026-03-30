@@ -129,6 +129,7 @@ class IncrementalIndexInput:
     branch: str
     before_commit: str
     after_commit: str
+    repo_url: str = ""
     chunker_strategy: str = "sliding_window"
     embedding_strategy: str = "openai"
     llm_strategy: str = "openai"
@@ -141,6 +142,7 @@ class IncrementalPushSignalInput:
     branch: str
     before_commit: str
     after_commit: str
+    repo_url: str = ""
     chunker_strategy: str = "sliding_window"
     embedding_strategy: str = "openai"
     llm_strategy: str = "openai"
