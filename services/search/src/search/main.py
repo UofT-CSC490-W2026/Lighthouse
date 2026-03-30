@@ -5,13 +5,8 @@ import logging
 from contextlib import asynccontextmanager
 
 from db import DatabaseManager
-from fastapi import Depends, FastAPI
-from embedding import (
-    EmbeddingProvider,
-    EmbeddingStrategy,
-    OpenAIEmbeddingProvider,
-    get_embedding_provider,
-)
+from fastapi import Depends, FastAPI, HTTPException
+from embedding import EmbeddingProvider, EmbeddingStrategy, get_embedding_provider
 from shared.auth import verify_internal_token
 from shared.config import (
     DEFAULT_EMBEDDING_STRATEGY,
@@ -31,7 +26,7 @@ from shared.schemas.search import (
 from vectordb import MilvusClient
 
 from search.config import SearchSettings
-from search.strategies.hybrid_strategy import HybridSearchStrategy
+from search.strategies.hybrid_strategy import BranchNotIndexedError, HybridSearchStrategy
 from search.strategies.search_strategy import SearchStrategy
 from search.strategies.wiki_search_strategy import HybridWikiSearchStrategy
 
@@ -241,14 +236,18 @@ def _combined_snippet_key(snippet: CombinedSnippet) -> str:
     dependencies=[Depends(verify_internal_token)],
 )
 async def search(request: SearchRequest) -> SearchResult | WikiSearchResult | CombinedSearchResult:
-    return await _search_impl(request)
-
-
+    try:
+        return await _search_impl(request)
+    except BranchNotIndexedError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 @app.post("/search/wiki", response_model=WikiSearchResult, dependencies=[Depends(verify_internal_token)])
 async def search_wiki(request: WikiSearchRequest) -> WikiSearchResult:
-    result = await _search_impl(request)
-    return WikiSearchResult.model_validate(result.model_dump(mode="json"))
+    try:
+        result = await _search_impl(request)
+        return WikiSearchResult.model_validate(result.model_dump(mode="json"))
+    except BranchNotIndexedError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @app.get("/health")

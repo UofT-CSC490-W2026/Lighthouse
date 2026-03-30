@@ -33,7 +33,7 @@ from ingestion.utilities.services.chunk import ChunkService
 
 
 class DummyChunker(Chunker):
-    def chunk_file(self, content: str, file_path: str):
+    def chunk_file(self, content: str, file_path: str, language: str | None = None):
         return []
 
 
@@ -274,6 +274,7 @@ async def test_ingestion_lifespan_and_activity_helpers(monkeypatch):
         postgres_dsn="postgres://db",
         milvus_uri="http://milvus",
         embedding_strategy="openai",
+        chunker_strategy="sliding_window",
         embedding_dimension=0,
     )
     app = SimpleNamespace(state=SimpleNamespace())

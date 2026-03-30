@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
+from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
 from shared.config import DEFAULT_LLM_STRATEGY, default_llm_model
 from shared.ssm import ssm_settings_sources
 
@@ -25,7 +25,12 @@ class IngestionSettings(BaseSettings):
     llm_strategy: str = DEFAULT_LLM_STRATEGY
     llm_model: str = ""
 
-    model_config = {"env_prefix": "", "env_file": ".env", "extra": "ignore"}
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        env_prefix="",
+        extra="ignore",
+    )
 
     @classmethod
     def settings_customise_sources(

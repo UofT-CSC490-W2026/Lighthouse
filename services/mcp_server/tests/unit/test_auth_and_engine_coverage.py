@@ -437,9 +437,17 @@ async def test_search_and_user_engines_cover_error_paths(monkeypatch):
         display_name="owner/repo",
         added_at=datetime.now(timezone.utc),
     )
-    monkeypatch.setattr(user_engine, "_upsert_user_repo_sync", MagicMock(return_value=created_repo))
-    monkeypatch.setattr(user_engine, "_trigger_ingestion", AsyncMock())
+    upsert_mock = MagicMock(return_value=(created_repo, True))
+    monkeypatch.setattr(user_engine, "_upsert_user_repo_sync", upsert_mock)
+    trigger_mock = AsyncMock()
+    monkeypatch.setattr(user_engine, "_trigger_ingestion", trigger_mock)
     assert (await user_engine.add_user_repo(auth, "https://github.com/Owner/Repo.git")).full_name == "owner/repo"
+    trigger_mock.assert_awaited_once()
+
+    upsert_mock.return_value = (created_repo, False)
+    trigger_mock.reset_mock()
+    assert (await user_engine.add_user_repo(auth, "https://github.com/Owner/Repo.git")).full_name == "owner/repo"
+    trigger_mock.assert_not_called()
 
     monkeypatch.setattr(user_engine, "_hide_user_repo_sync", MagicMock(return_value=False))
     assert (await user_engine.remove_user_repo(auth, "owner/repo")).hidden is False
@@ -545,10 +553,11 @@ def test_search_and_user_engine_sync_db_paths(db_manager):
         default_branch="main",
     )
 
-    repo = user_engine._upsert_user_repo_sync(github_repo, "user-1")
+    repo, needs_ingestion = user_engine._upsert_user_repo_sync(github_repo, "user-1")
     assert repo.full_name == "owner/repo"
+    assert needs_ingestion is True
 
-    updated = user_engine._upsert_user_repo_sync(
+    updated, needs_again = user_engine._upsert_user_repo_sync(
         GitHubRepository(
             github_repo_id=55,
             full_name="owner/repo",
@@ -562,13 +571,15 @@ def test_search_and_user_engine_sync_db_paths(db_manager):
         "user-1",
     )
     assert updated.display_name == "Owner Repo"
+    assert needs_again is True
 
     assert user_engine._hide_user_repo_sync("user-1", "missing/repo") is False
     assert user_engine._hide_user_repo_sync("user-1", "owner/repo") is True
     assert user_engine._hide_user_repo_sync("user-1", "owner/repo") is False
     assert user_engine._list_user_repos_sync("user-1", set()) == []
 
-    user_engine._upsert_user_repo_sync(github_repo, "user-1")
+    _, needs_after_unhide = user_engine._upsert_user_repo_sync(github_repo, "user-1")
+    assert needs_after_unhide is False
     visible = user_engine._list_user_repos_sync("user-1", {55})
     assert len(visible) == 1
     repo_obj, branches = visible[0]

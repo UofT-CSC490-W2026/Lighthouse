@@ -127,3 +127,5 @@ class IncrementalIndexInput:
     before_commit: str
     after_commit: str
     embedding_strategy: str = "openai"
+    chunker_strategy: str = "sliding_window"
+    embedding_strategy: str = "openai"
