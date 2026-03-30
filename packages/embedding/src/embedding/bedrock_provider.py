@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from typing import Any
 
 import boto3
@@ -18,6 +19,9 @@ class BedrockEmbeddingProvider(EmbeddingProvider):
     """Embedding provider backed by AWS Bedrock."""
 
     _TOKEN_LIMIT_ERROR_FRAGMENT = "too many input tokens"
+    _THROTTLING_ERROR_CODES = ("ThrottlingException", "TooManyRequestsException")
+    _MAX_THROTTLE_RETRIES = 6
+    _THROTTLE_BASE_DELAY = 1.0
     _TRUNCATION_RATIO = 0.75
     _MIN_RETRY_TEXT_LENGTH = 256
     _TRUNCATION_MARKER = "\n...\n"
@@ -89,12 +93,34 @@ class BedrockEmbeddingProvider(EmbeddingProvider):
         if self.normalize is not None:
             payload["normalize"] = self.normalize
 
-        response = self.client.invoke_model(
-            modelId=self.model,
-            contentType="application/json",
-            accept="application/json",
-            body=json.dumps(payload),
-        )
+        last_error: Exception | None = None
+        for attempt in range(self._MAX_THROTTLE_RETRIES + 1):
+            try:
+                response = self.client.invoke_model(
+                    modelId=self.model,
+                    contentType="application/json",
+                    accept="application/json",
+                    body=json.dumps(payload),
+                )
+                break
+            except ClientError as exc:
+                error_code = exc.response.get("Error", {}).get("Code", "")
+                if error_code in self._THROTTLING_ERROR_CODES and attempt < self._MAX_THROTTLE_RETRIES:
+                    delay = self._THROTTLE_BASE_DELAY * (2 ** attempt)
+                    logger.warning(
+                        "Bedrock throttled (attempt %d/%d); retrying in %.1fs",
+                        attempt + 1,
+                        self._MAX_THROTTLE_RETRIES,
+                        delay,
+                    )
+                    time.sleep(delay)
+                    last_error = exc
+                    continue
+                raise
+        else:
+            raise RuntimeError(
+                "Bedrock embedding request throttled after maximum retries."
+            ) from last_error
         body = response.get("body")
         if body is None:
             raise RuntimeError("Bedrock embedding response did not include a body.")
