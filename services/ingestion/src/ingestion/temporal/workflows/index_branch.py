@@ -125,7 +125,7 @@ class IndexBranchWorkflow:
                             limit=EMBED_BATCH_SIZE,
                             embedding_strategy=input.embedding_strategy,
                         ),
-                        start_to_close_timeout=timedelta(minutes=5),
+                        start_to_close_timeout=timedelta(minutes=10),
                         retry_policy=_EMBED_RETRY,
                     )
                 )

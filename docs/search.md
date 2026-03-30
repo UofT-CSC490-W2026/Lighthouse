@@ -14,17 +14,20 @@ The intended focus is repository-aware code retrieval for tasks such as:
 - narrowing context before an agent makes a code change
 
 Today, the primary entrypoint is `POST /search`. The service combines vector
-search and PostgreSQL full-text search into one ranked result set.
+search and PostgreSQL full-text search into one ranked result set. The endpoint
+currently accepts a list of typed search requests and supports the `hybrid`
+search method.
 
 ## Current State
 
 The service is currently built around:
 
 - a FastAPI app with a lifespan-based dependency setup
-- a single `HybridSearchStrategy` used for all retrieval
+- a strategy registry with `hybrid` as the only implemented search method today
 - PostgreSQL as the source of chunk content and repository metadata
 - Milvus as the vector index
-- OpenAI embeddings for query embedding generation
+- a configurable embedding provider for query embedding generation
+  with Bedrock as the default and OpenAI as an optional override
 - shared typed request and response schemas in `packages/shared`
 
 Important current limitations:
@@ -54,7 +57,8 @@ Related shared packages:
 
 - `packages/shared/src/shared/schemas/search.py`: typed request and response contracts
 - `packages/db/src/db/models/indexing.py`: `Chunk` storage model used for retrieval
-- `packages/embedding/src/embedding/`: embedding provider abstraction and OpenAI implementation
+- `packages/embedding/src/embedding/`: embedding provider abstraction plus
+  Bedrock and OpenAI implementations
 
 ## Architecture
 
@@ -68,8 +72,8 @@ At startup it:
 1. loads typed settings
 2. connects a `DatabaseManager`
 3. creates a `MilvusClient`
-4. creates an `OpenAIEmbeddingProvider`
-5. stores a `HybridSearchStrategy` on `app.state.strategy`
+4. creates the configured embedding provider
+5. registers the available search strategies on `app.state.registry`
 
 At shutdown it:
 
@@ -78,10 +82,11 @@ At shutdown it:
 
 ### Search Strategy
 
-`services/search/src/search/strategies/hybrid_strategy.py` contains the real
-retrieval logic.
+`services/search/src/search/strategies/hybrid_strategy.py` contains the current
+retrieval logic, and `services/search/src/search/registry.py` dispatches typed
+requests to the registered strategy implementations.
 
-Its constructor receives:
+`HybridSearchStrategy` receives:
 
 - `db_manager`
 - `milvus`
@@ -111,8 +116,12 @@ The request and response types live in `packages/shared/src/shared/schemas/searc
 
 ### `SearchRequest`
 
-Current fields:
+`SearchRequest` is a discriminated union. The current concrete request type is
+`HybridRequest`, and `POST /search` accepts a list of these request envelopes.
 
+Current `HybridRequest` fields:
+
+- `method`
 - `query`
 - `github_repo_id`
 - `branch`
@@ -193,9 +202,10 @@ The fused result set is then:
 The current HTTP routes are:
 
 - `POST /search`
+- `GET /search/methods`
 - `GET /health`
 
-`POST /search` returns a `SearchResult`.
+`POST /search` accepts a list of typed search requests and returns a `SearchResult`.
 
 ## Data Dependencies
 
@@ -241,7 +251,10 @@ object from AWS Systems Manager Parameter Store and use it as a settings source.
 
 - `postgres_dsn`
 - `milvus_uri`
-- `openai_api_key`
+- `embedding_strategy`
+- `embedding_model`
+- `embedding_dimension`
+- `openai_api_key` when `EMBEDDING_STRATEGY=openai`
 
 ## Error Model and Runtime Behavior
 
@@ -267,7 +280,9 @@ The service expects working access to:
 
 - PostgreSQL
 - Milvus
-- an OpenAI API key for query embedding generation
+- embedding backend credentials:
+  AWS credentials for the default Bedrock path, or an OpenAI API key when
+  `EMBEDDING_STRATEGY=openai`
 
 ## Current Limitations and Follow-Up Work
 
@@ -280,6 +295,8 @@ The most important gaps at the time of writing are:
 - there is no explicit auth layer at the service boundary
 - retrieval quality depends on ingestion having already populated both PostgreSQL
   chunks and the Milvus collection
+- changing embedding strategy or embedding dimension requires re-indexing so the
+  Milvus collection matches the active vector shape
 
 ## Design Principles for Future Work
 

@@ -28,10 +28,28 @@ from .storage import (
     publish_full_branch,
     publish_staged_chunks,
 )
+from .wiki import (
+    WIKI_EMBED_BATCH_SIZE,
+    CleanupStagingWikiInput,
+    EmbedWikiPagesInput,
+    GenerateWikiInput,
+    GenerateWikiPageInput,
+    GenerateWikiStructureInput,
+    GenerateWikiStructureOutput,
+    StoreWikiPagesInput,
+    UpdateWikiStatusInput,
+    cleanup_staging_wiki,
+    embed_wiki_pages,
+    generate_wiki_page,
+    generate_wiki_structure,
+    store_wiki_pages,
+    update_wiki_status,
+)
 
 __all__ = [
     # Constants
     "EMBED_BATCH_SIZE",
+    "WIKI_EMBED_BATCH_SIZE",
     # Input/Output dataclasses
     "CleanupInactiveChunksInput",
     "ChunkFilesInput",
@@ -49,6 +67,15 @@ __all__ = [
     "PublishStagedChunksInput",
     "PublishStagedChunksOutput",
     "UpdateBranchStatusInput",
+    # Wiki Input/Output dataclasses
+    "CleanupStagingWikiInput",
+    "EmbedWikiPagesInput",
+    "GenerateWikiInput",
+    "GenerateWikiPageInput",
+    "GenerateWikiStructureInput",
+    "GenerateWikiStructureOutput",
+    "StoreWikiPagesInput",
+    "UpdateWikiStatusInput",
     # Activities
     "chunk_files",
     "cleanup_inactive_chunks",
@@ -60,4 +87,11 @@ __all__ = [
     "publish_full_branch",
     "publish_staged_chunks",
     "update_branch_status",
+    # Wiki Activities
+    "cleanup_staging_wiki",
+    "embed_wiki_pages",
+    "generate_wiki_page",
+    "generate_wiki_structure",
+    "store_wiki_pages",
+    "update_wiki_status",
 ]

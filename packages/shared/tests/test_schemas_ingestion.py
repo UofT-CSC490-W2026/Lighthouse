@@ -26,7 +26,7 @@ def test_repo_index_request_defaults():
 @pytest.mark.unit
 def test_index_request_requires_repositories():
     with pytest.raises(ValidationError):
-        IndexRequest()  # type: ignore[call-arg]
+        IndexRequest.model_validate({})
 
 
 @pytest.mark.unit

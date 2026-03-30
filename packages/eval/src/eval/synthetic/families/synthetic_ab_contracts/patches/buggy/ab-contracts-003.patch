@@ -1,0 +1,9 @@
+diff --git a/consumer_app/usernames.py b/consumer_app/usernames.py
+--- a/consumer_app/usernames.py
++++ b/consumer_app/usernames.py
+@@ -4,4 +4,4 @@
+ 
+ 
+ def canonical_username(raw: str) -> str:
+-    return normalize_username(raw)
++    return raw.strip().lower()

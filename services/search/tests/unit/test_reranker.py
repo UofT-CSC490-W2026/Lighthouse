@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+import search.reranker.cohere_reranker as cohere_reranker_module
 from search.reranker import BaseReranker, CohereReranker, RankedDocument
 from search.reranker.base_reranker import RankedDocument as DirectRankedDocument
 from search.reranker.cohere_reranker import COHERE_DEFAULT_RERANK_MODEL
@@ -55,6 +56,14 @@ def test_cohere_reranker_honors_model_override(mock_client_cls):
     reranker = CohereReranker(api_key="cohere-key", model="rerank-custom")
 
     assert reranker.model == "rerank-custom"
+
+
+@pytest.mark.unit
+def test_cohere_reranker_raises_when_dependency_is_unavailable(monkeypatch):
+    monkeypatch.setattr(cohere_reranker_module.cohere, "AsyncClientV2", None)
+
+    with pytest.raises(ModuleNotFoundError, match="cohere is required"):
+        CohereReranker(api_key="cohere-key")
 
 
 @pytest.mark.unit

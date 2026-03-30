@@ -1,0 +1,3018 @@
+{
+  "family_name": "synthetic-ab-contracts",
+  "family_version": "1",
+  "generation_config": {
+    "task_type": "api_contract_mismatch",
+    "task_count": 10,
+    "shared_library_repo_count": 1,
+    "consumer_repo_mode": "one_a_per_task",
+    "python_version_target": "3.11",
+    "context_modes": [
+      "code",
+      "wiki"
+    ],
+    "seed": 490
+  },
+  "tasks": [
+    {
+      "task_id": "ab-contracts-001",
+      "task_type": "api_contract_mismatch",
+      "title": "Progress badge should use whole percentages",
+      "problem_statement": "The progress badge in consumer_app.progress is misusing providerlib.metrics.clamp_percentage. Fix the badge so it displays whole percentages instead of a fractional percentage string.",
+      "repo_a_name": "synthetic/consumer-app-001",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000001,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-001.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-001.patch",
+      "pytest_targets": [
+        "tests/test_progress.py::test_render_progress_badge_uses_whole_percentages"
+      ],
+      "expected_relevant_files": [
+        "providerlib/metrics.py"
+      ],
+      "expected_relevant_symbols": [
+        "clamp_percentage"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.metrics.clamp_percentage"
+      ],
+      "test_context": "The failing test checks that progress values render as rounded whole percentages and clamp values above 100."
+    },
+    {
+      "task_id": "ab-contracts-002",
+      "task_type": "api_contract_mismatch",
+      "title": "Retry delay should preserve provider defaults",
+      "problem_statement": "consumer_app.retries no longer respects the default semantics of providerlib.http.parse_retry_header for missing or blank headers. Restore the helper contract so missing retry headers still fall back to one second.",
+      "repo_a_name": "synthetic/consumer-app-002",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000002,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-002.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-002.patch",
+      "pytest_targets": [
+        "tests/test_retries.py::test_describe_retry_delay_uses_provider_defaults"
+      ],
+      "expected_relevant_files": [
+        "providerlib/http.py"
+      ],
+      "expected_relevant_symbols": [
+        "parse_retry_header"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.http.parse_retry_header"
+      ],
+      "test_context": "The failing test covers None, blank, and numeric Retry-After values and expects the helper's one-second default."
+    },
+    {
+      "task_id": "ab-contracts-003",
+      "task_type": "api_contract_mismatch",
+      "title": "Usernames should use provider normalization",
+      "problem_statement": "consumer_app.usernames is bypassing providerlib.identity.normalize_username. Fix the consumer so usernames follow providerlib's normalization rules, including whitespace collapsing.",
+      "repo_a_name": "synthetic/consumer-app-003",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000003,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-003.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-003.patch",
+      "pytest_targets": [
+        "tests/test_usernames.py::test_canonical_username_uses_provider_normalization"
+      ],
+      "expected_relevant_files": [
+        "providerlib/identity.py"
+      ],
+      "expected_relevant_symbols": [
+        "normalize_username"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.identity.normalize_username"
+      ],
+      "test_context": "The failing test expects leading whitespace removal, internal whitespace collapsing, and lowercase usernames."
+    },
+    {
+      "task_id": "ab-contracts-004",
+      "task_type": "api_contract_mismatch",
+      "title": "Primary email should preserve provider cleaning rules",
+      "problem_statement": "consumer_app.emails is no longer delegating to providerlib.identity.choose_primary_email. Fix the consumer so email selection uses providerlib's trimming and lowercase behavior.",
+      "repo_a_name": "synthetic/consumer-app-004",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000004,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-004.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-004.patch",
+      "pytest_targets": [
+        "tests/test_emails.py::test_primary_contact_uses_provider_email_cleanup"
+      ],
+      "expected_relevant_files": [
+        "providerlib/identity.py"
+      ],
+      "expected_relevant_symbols": [
+        "choose_primary_email"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.identity.choose_primary_email"
+      ],
+      "test_context": "The failing test checks that the first non-empty email is normalized rather than returned verbatim."
+    },
+    {
+      "task_id": "ab-contracts-005",
+      "task_type": "api_contract_mismatch",
+      "title": "Feature flags should use provider parsing",
+      "problem_statement": "consumer_app.flags is treating feature flag strings as generic truthy values instead of using providerlib.http.parse_feature_flag. Fix the consumer so explicit off-like values remain disabled.",
+      "repo_a_name": "synthetic/consumer-app-005",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000005,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-005.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-005.patch",
+      "pytest_targets": [
+        "tests/test_flags.py::test_is_beta_enabled_uses_feature_flag_parser"
+      ],
+      "expected_relevant_files": [
+        "providerlib/http.py"
+      ],
+      "expected_relevant_symbols": [
+        "parse_feature_flag"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.http.parse_feature_flag"
+      ],
+      "test_context": "The failing test distinguishes on/off string values and expects None to stay disabled."
+    },
+    {
+      "task_id": "ab-contracts-006",
+      "task_type": "api_contract_mismatch",
+      "title": "Timeouts should stay in milliseconds",
+      "problem_statement": "consumer_app.timeouts is double-converting the output of providerlib.metrics.seconds_to_timeout_ms. Fix the consumer so providerlib's millisecond contract is preserved.",
+      "repo_a_name": "synthetic/consumer-app-006",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000006,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-006.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-006.patch",
+      "pytest_targets": [
+        "tests/test_timeouts.py::test_client_timeout_ms_uses_provider_units"
+      ],
+      "expected_relevant_files": [
+        "providerlib/metrics.py"
+      ],
+      "expected_relevant_symbols": [
+        "seconds_to_timeout_ms"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.metrics.seconds_to_timeout_ms"
+      ],
+      "test_context": "The failing test verifies that providerlib already returns milliseconds and that None maps to zero."
+    },
+    {
+      "task_id": "ab-contracts-007",
+      "task_type": "api_contract_mismatch",
+      "title": "Tag order should stay provider-defined",
+      "problem_statement": "consumer_app.tags is reordering the output of providerlib.identity.normalize_tags. Fix the consumer so providerlib's normalized tag order is preserved.",
+      "repo_a_name": "synthetic/consumer-app-007",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000007,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-007.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-007.patch",
+      "pytest_targets": [
+        "tests/test_tags.py::test_normalized_tag_line_preserves_provider_order"
+      ],
+      "expected_relevant_files": [
+        "providerlib/identity.py"
+      ],
+      "expected_relevant_symbols": [
+        "normalize_tags"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.identity.normalize_tags"
+      ],
+      "test_context": "The failing test expects duplicates to collapse without sorting the provider-defined order."
+    },
+    {
+      "task_id": "ab-contracts-008",
+      "task_type": "api_contract_mismatch",
+      "title": "Ratio fallback should respect caller default",
+      "problem_statement": "consumer_app.ratios is no longer preserving the caller's fallback label when providerlib.math_utils.safe_divide cannot divide. Fix the consumer so zero denominators return the requested label.",
+      "repo_a_name": "synthetic/consumer-app-008",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000008,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-008.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-008.patch",
+      "pytest_targets": [
+        "tests/test_ratios.py::test_ratio_or_label_respects_default_label"
+      ],
+      "expected_relevant_files": [
+        "providerlib/math_utils.py"
+      ],
+      "expected_relevant_symbols": [
+        "safe_divide"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.math_utils.safe_divide"
+      ],
+      "test_context": "The failing test covers both normal division and the custom label used when division is not possible."
+    },
+    {
+      "task_id": "ab-contracts-009",
+      "task_type": "api_contract_mismatch",
+      "title": "Session keys should use provider cache formatting",
+      "problem_statement": "consumer_app.cache_keys is bypassing providerlib.cache.build_cache_key. Fix the consumer so session keys include providerlib's normalization and version suffix.",
+      "repo_a_name": "synthetic/consumer-app-009",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000009,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-009.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-009.patch",
+      "pytest_targets": [
+        "tests/test_cache_keys.py::test_session_cache_key_uses_provider_key_format"
+      ],
+      "expected_relevant_files": [
+        "providerlib/cache.py"
+      ],
+      "expected_relevant_symbols": [
+        "build_cache_key"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.cache.build_cache_key"
+      ],
+      "test_context": "The failing test expects lowercase normalization and the provider version suffix on session keys."
+    },
+    {
+      "task_id": "ab-contracts-010",
+      "task_type": "api_contract_mismatch",
+      "title": "Badge colors should use provider mapping",
+      "problem_statement": "consumer_app.statuses is returning raw status text instead of the providerlib.ui.status_to_color mapping. Fix the consumer so status badges use provider-defined colors.",
+      "repo_a_name": "synthetic/consumer-app-010",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000010,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-010.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-010.patch",
+      "pytest_targets": [
+        "tests/test_statuses.py::test_badge_color_uses_provider_mapping"
+      ],
+      "expected_relevant_files": [
+        "providerlib/ui.py"
+      ],
+      "expected_relevant_symbols": [
+        "status_to_color"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.ui.status_to_color"
+      ],
+      "test_context": "The failing test expects queued and failed statuses to map to provider-defined badge colors."
+    },
+    {
+      "task_id": "ab-contracts-011",
+      "task_type": "api_contract_mismatch",
+      "title": "Progress badge should clamp negative values to zero before rendering",
+      "problem_statement": "consumer_app.progress is misusing providerlib.metrics.clamp_percentage. Fix the consumer so it clamp negative values to zero before rendering.",
+      "repo_a_name": "synthetic/consumer-app-011",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000011,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-001.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-001.patch",
+      "pytest_targets": [
+        "tests/test_progress.py::test_render_progress_badge_contract_cases[clamps-negative-values-to-zero]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/metrics.py"
+      ],
+      "expected_relevant_symbols": [
+        "clamp_percentage"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.metrics.clamp_percentage"
+      ],
+      "test_context": "The failing test checks that it clamp negative values to zero before rendering."
+    },
+    {
+      "task_id": "ab-contracts-012",
+      "task_type": "api_contract_mismatch",
+      "title": "Progress badge should clamp values above one hundred to one hundred before rendering",
+      "problem_statement": "consumer_app.progress is misusing providerlib.metrics.clamp_percentage. Fix the consumer so it clamp values above one hundred to one hundred before rendering.",
+      "repo_a_name": "synthetic/consumer-app-012",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000012,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-001.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-001.patch",
+      "pytest_targets": [
+        "tests/test_progress.py::test_render_progress_badge_contract_cases[clamps-large-values-to-hundred]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/metrics.py"
+      ],
+      "expected_relevant_symbols": [
+        "clamp_percentage"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.metrics.clamp_percentage"
+      ],
+      "test_context": "The failing test checks that it clamp values above one hundred to one hundred before rendering."
+    },
+    {
+      "task_id": "ab-contracts-013",
+      "task_type": "api_contract_mismatch",
+      "title": "Progress badge should round fractional progress values to the nearest whole percent",
+      "problem_statement": "consumer_app.progress is misusing providerlib.metrics.clamp_percentage. Fix the consumer so it round fractional progress values to the nearest whole percent.",
+      "repo_a_name": "synthetic/consumer-app-013",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000013,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-001.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-001.patch",
+      "pytest_targets": [
+        "tests/test_progress.py::test_render_progress_badge_contract_cases[rounds-up-fractional-progress]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/metrics.py"
+      ],
+      "expected_relevant_symbols": [
+        "clamp_percentage"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.metrics.clamp_percentage"
+      ],
+      "test_context": "The failing test checks that it round fractional progress values to the nearest whole percent."
+    },
+    {
+      "task_id": "ab-contracts-014",
+      "task_type": "api_contract_mismatch",
+      "title": "Progress badge should round very small fractional values down to zero percent",
+      "problem_statement": "consumer_app.progress is misusing providerlib.metrics.clamp_percentage. Fix the consumer so it round very small fractional values down to zero percent.",
+      "repo_a_name": "synthetic/consumer-app-014",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000014,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-001.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-001.patch",
+      "pytest_targets": [
+        "tests/test_progress.py::test_render_progress_badge_contract_cases[rounds-down-small-fractions]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/metrics.py"
+      ],
+      "expected_relevant_symbols": [
+        "clamp_percentage"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.metrics.clamp_percentage"
+      ],
+      "test_context": "The failing test checks that it round very small fractional values down to zero percent."
+    },
+    {
+      "task_id": "ab-contracts-015",
+      "task_type": "api_contract_mismatch",
+      "title": "Progress badge should round small fractional values up when they cross the half-percent boundary",
+      "problem_statement": "consumer_app.progress is misusing providerlib.metrics.clamp_percentage. Fix the consumer so it round small fractional values up when they cross the half-percent boundary.",
+      "repo_a_name": "synthetic/consumer-app-015",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000015,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-001.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-001.patch",
+      "pytest_targets": [
+        "tests/test_progress.py::test_render_progress_badge_contract_cases[rounds-up-small-fractions]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/metrics.py"
+      ],
+      "expected_relevant_symbols": [
+        "clamp_percentage"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.metrics.clamp_percentage"
+      ],
+      "test_context": "The failing test checks that it round small fractional values up when they cross the half-percent boundary."
+    },
+    {
+      "task_id": "ab-contracts-016",
+      "task_type": "api_contract_mismatch",
+      "title": "Progress badge should keep zero progress as a whole-percentage badge",
+      "problem_statement": "consumer_app.progress is misusing providerlib.metrics.clamp_percentage. Fix the consumer so it keep zero progress as a whole-percentage badge.",
+      "repo_a_name": "synthetic/consumer-app-016",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000016,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-001.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-001.patch",
+      "pytest_targets": [
+        "tests/test_progress.py::test_render_progress_badge_contract_cases[preserves-zero-progress]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/metrics.py"
+      ],
+      "expected_relevant_symbols": [
+        "clamp_percentage"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.metrics.clamp_percentage"
+      ],
+      "test_context": "The failing test checks that it keep zero progress as a whole-percentage badge."
+    },
+    {
+      "task_id": "ab-contracts-017",
+      "task_type": "api_contract_mismatch",
+      "title": "Progress badge should render integer progress values without changing the provider result",
+      "problem_statement": "consumer_app.progress is misusing providerlib.metrics.clamp_percentage. Fix the consumer so it render integer progress values without changing the provider result.",
+      "repo_a_name": "synthetic/consumer-app-017",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000017,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-001.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-001.patch",
+      "pytest_targets": [
+        "tests/test_progress.py::test_render_progress_badge_contract_cases[keeps-integer-progress-values]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/metrics.py"
+      ],
+      "expected_relevant_symbols": [
+        "clamp_percentage"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.metrics.clamp_percentage"
+      ],
+      "test_context": "The failing test checks that it render integer progress values without changing the provider result."
+    },
+    {
+      "task_id": "ab-contracts-018",
+      "task_type": "api_contract_mismatch",
+      "title": "Progress badge should preserve exact one-hundred-percent progress badges",
+      "problem_statement": "consumer_app.progress is misusing providerlib.metrics.clamp_percentage. Fix the consumer so it preserve exact one-hundred-percent progress badges.",
+      "repo_a_name": "synthetic/consumer-app-018",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000018,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-001.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-001.patch",
+      "pytest_targets": [
+        "tests/test_progress.py::test_render_progress_badge_contract_cases[handles-exact-hundred]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/metrics.py"
+      ],
+      "expected_relevant_symbols": [
+        "clamp_percentage"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.metrics.clamp_percentage"
+      ],
+      "test_context": "The failing test checks that it preserve exact one-hundred-percent progress badges."
+    },
+    {
+      "task_id": "ab-contracts-019",
+      "task_type": "api_contract_mismatch",
+      "title": "Progress badge should round multi-digit fractional progress using provider semantics",
+      "problem_statement": "consumer_app.progress is misusing providerlib.metrics.clamp_percentage. Fix the consumer so it round multi-digit fractional progress using provider semantics.",
+      "repo_a_name": "synthetic/consumer-app-019",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000019,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-001.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-001.patch",
+      "pytest_targets": [
+        "tests/test_progress.py::test_render_progress_badge_contract_cases[rounds-teen-fractions]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/metrics.py"
+      ],
+      "expected_relevant_symbols": [
+        "clamp_percentage"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.metrics.clamp_percentage"
+      ],
+      "test_context": "The failing test checks that it round multi-digit fractional progress using provider semantics."
+    },
+    {
+      "task_id": "ab-contracts-020",
+      "task_type": "api_contract_mismatch",
+      "title": "Retry delay should default empty retry headers to one second",
+      "problem_statement": "consumer_app.retries is no longer preserving the default and minimum semantics of providerlib.http.parse_retry_header. Fix the consumer so it default empty retry headers to one second.",
+      "repo_a_name": "synthetic/consumer-app-020",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000020,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-002.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-002.patch",
+      "pytest_targets": [
+        "tests/test_retries.py::test_describe_retry_delay_contract_cases[defaults-empty-headers-to-one-second]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/http.py"
+      ],
+      "expected_relevant_symbols": [
+        "parse_retry_header"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.http.parse_retry_header"
+      ],
+      "test_context": "The failing test checks that it default empty retry headers to one second."
+    },
+    {
+      "task_id": "ab-contracts-021",
+      "task_type": "api_contract_mismatch",
+      "title": "Retry delay should default blank retry headers to one second",
+      "problem_statement": "consumer_app.retries is no longer preserving the default and minimum semantics of providerlib.http.parse_retry_header. Fix the consumer so it default blank retry headers to one second.",
+      "repo_a_name": "synthetic/consumer-app-021",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000021,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-002.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-002.patch",
+      "pytest_targets": [
+        "tests/test_retries.py::test_describe_retry_delay_contract_cases[defaults-blank-headers-to-one-second]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/http.py"
+      ],
+      "expected_relevant_symbols": [
+        "parse_retry_header"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.http.parse_retry_header"
+      ],
+      "test_context": "The failing test checks that it default blank retry headers to one second."
+    },
+    {
+      "task_id": "ab-contracts-022",
+      "task_type": "api_contract_mismatch",
+      "title": "Retry delay should default tab-only retry headers to one second",
+      "problem_statement": "consumer_app.retries is no longer preserving the default and minimum semantics of providerlib.http.parse_retry_header. Fix the consumer so it default tab-only retry headers to one second.",
+      "repo_a_name": "synthetic/consumer-app-022",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000022,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-002.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-002.patch",
+      "pytest_targets": [
+        "tests/test_retries.py::test_describe_retry_delay_contract_cases[defaults-tab-headers-to-one-second]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/http.py"
+      ],
+      "expected_relevant_symbols": [
+        "parse_retry_header"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.http.parse_retry_header"
+      ],
+      "test_context": "The failing test checks that it default tab-only retry headers to one second."
+    },
+    {
+      "task_id": "ab-contracts-023",
+      "task_type": "api_contract_mismatch",
+      "title": "Retry delay should default newline-only retry headers to one second",
+      "problem_statement": "consumer_app.retries is no longer preserving the default and minimum semantics of providerlib.http.parse_retry_header. Fix the consumer so it default newline-only retry headers to one second.",
+      "repo_a_name": "synthetic/consumer-app-023",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000023,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-002.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-002.patch",
+      "pytest_targets": [
+        "tests/test_retries.py::test_describe_retry_delay_contract_cases[defaults-newline-headers-to-one-second]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/http.py"
+      ],
+      "expected_relevant_symbols": [
+        "parse_retry_header"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.http.parse_retry_header"
+      ],
+      "test_context": "The failing test checks that it default newline-only retry headers to one second."
+    },
+    {
+      "task_id": "ab-contracts-024",
+      "task_type": "api_contract_mismatch",
+      "title": "Retry delay should clamp zero-second retry headers up to one second",
+      "problem_statement": "consumer_app.retries is no longer preserving the default and minimum semantics of providerlib.http.parse_retry_header. Fix the consumer so it clamp zero-second retry headers up to one second.",
+      "repo_a_name": "synthetic/consumer-app-024",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000024,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-002.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-002.patch",
+      "pytest_targets": [
+        "tests/test_retries.py::test_describe_retry_delay_contract_cases[clamps-zero-retry-values-to-one-second]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/http.py"
+      ],
+      "expected_relevant_symbols": [
+        "parse_retry_header"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.http.parse_retry_header"
+      ],
+      "test_context": "The failing test checks that it clamp zero-second retry headers up to one second."
+    },
+    {
+      "task_id": "ab-contracts-025",
+      "task_type": "api_contract_mismatch",
+      "title": "Retry delay should clamp signed zero retry headers up to one second",
+      "problem_statement": "consumer_app.retries is no longer preserving the default and minimum semantics of providerlib.http.parse_retry_header. Fix the consumer so it clamp signed zero retry headers up to one second.",
+      "repo_a_name": "synthetic/consumer-app-025",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000025,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-002.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-002.patch",
+      "pytest_targets": [
+        "tests/test_retries.py::test_describe_retry_delay_contract_cases[clamps-signed-zero-retry-values-to-one-second]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/http.py"
+      ],
+      "expected_relevant_symbols": [
+        "parse_retry_header"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.http.parse_retry_header"
+      ],
+      "test_context": "The failing test checks that it clamp signed zero retry headers up to one second."
+    },
+    {
+      "task_id": "ab-contracts-026",
+      "task_type": "api_contract_mismatch",
+      "title": "Retry delay should clamp negative retry headers up to one second",
+      "problem_statement": "consumer_app.retries is no longer preserving the default and minimum semantics of providerlib.http.parse_retry_header. Fix the consumer so it clamp negative retry headers up to one second.",
+      "repo_a_name": "synthetic/consumer-app-026",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000026,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-002.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-002.patch",
+      "pytest_targets": [
+        "tests/test_retries.py::test_describe_retry_delay_contract_cases[clamps-negative-retry-values-to-one-second]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/http.py"
+      ],
+      "expected_relevant_symbols": [
+        "parse_retry_header"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.http.parse_retry_header"
+      ],
+      "test_context": "The failing test checks that it clamp negative retry headers up to one second."
+    },
+    {
+      "task_id": "ab-contracts-027",
+      "task_type": "api_contract_mismatch",
+      "title": "Retry delay should clamp zero retry headers with surrounding whitespace up to one second",
+      "problem_statement": "consumer_app.retries is no longer preserving the default and minimum semantics of providerlib.http.parse_retry_header. Fix the consumer so it clamp zero retry headers with surrounding whitespace up to one second.",
+      "repo_a_name": "synthetic/consumer-app-027",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000027,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-002.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-002.patch",
+      "pytest_targets": [
+        "tests/test_retries.py::test_describe_retry_delay_contract_cases[clamps-zero-with-whitespace-to-one-second]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/http.py"
+      ],
+      "expected_relevant_symbols": [
+        "parse_retry_header"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.http.parse_retry_header"
+      ],
+      "test_context": "The failing test checks that it clamp zero retry headers with surrounding whitespace up to one second."
+    },
+    {
+      "task_id": "ab-contracts-028",
+      "task_type": "api_contract_mismatch",
+      "title": "Retry delay should clamp negative retry headers with surrounding whitespace up to one second",
+      "problem_statement": "consumer_app.retries is no longer preserving the default and minimum semantics of providerlib.http.parse_retry_header. Fix the consumer so it clamp negative retry headers with surrounding whitespace up to one second.",
+      "repo_a_name": "synthetic/consumer-app-028",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000028,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-002.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-002.patch",
+      "pytest_targets": [
+        "tests/test_retries.py::test_describe_retry_delay_contract_cases[clamps-negative-with-whitespace-to-one-second]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/http.py"
+      ],
+      "expected_relevant_symbols": [
+        "parse_retry_header"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.http.parse_retry_header"
+      ],
+      "test_context": "The failing test checks that it clamp negative retry headers with surrounding whitespace up to one second."
+    },
+    {
+      "task_id": "ab-contracts-029",
+      "task_type": "api_contract_mismatch",
+      "title": "Usernames should collapse repeated internal spaces in usernames",
+      "problem_statement": "consumer_app.usernames is bypassing providerlib.identity.normalize_username. Fix the consumer so it collapse repeated internal spaces in usernames.",
+      "repo_a_name": "synthetic/consumer-app-029",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000029,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-003.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-003.patch",
+      "pytest_targets": [
+        "tests/test_usernames.py::test_canonical_username_contract_cases[collapses-double-spaces-in-usernames]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/identity.py"
+      ],
+      "expected_relevant_symbols": [
+        "normalize_username"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.identity.normalize_username"
+      ],
+      "test_context": "The failing test checks that it collapse repeated internal spaces in usernames."
+    },
+    {
+      "task_id": "ab-contracts-030",
+      "task_type": "api_contract_mismatch",
+      "title": "Usernames should trim and collapse leading and internal spaces in usernames",
+      "problem_statement": "consumer_app.usernames is bypassing providerlib.identity.normalize_username. Fix the consumer so it trim and collapse leading and internal spaces in usernames.",
+      "repo_a_name": "synthetic/consumer-app-030",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000030,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-003.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-003.patch",
+      "pytest_targets": [
+        "tests/test_usernames.py::test_canonical_username_contract_cases[collapses-leading-and-internal-spaces]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/identity.py"
+      ],
+      "expected_relevant_symbols": [
+        "normalize_username"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.identity.normalize_username"
+      ],
+      "test_context": "The failing test checks that it trim and collapse leading and internal spaces in usernames."
+    },
+    {
+      "task_id": "ab-contracts-031",
+      "task_type": "api_contract_mismatch",
+      "title": "Usernames should collapse tab-separated usernames into single spaces",
+      "problem_statement": "consumer_app.usernames is bypassing providerlib.identity.normalize_username. Fix the consumer so it collapse tab-separated usernames into single spaces.",
+      "repo_a_name": "synthetic/consumer-app-031",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000031,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-003.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-003.patch",
+      "pytest_targets": [
+        "tests/test_usernames.py::test_canonical_username_contract_cases[collapses-tabs-in-usernames]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/identity.py"
+      ],
+      "expected_relevant_symbols": [
+        "normalize_username"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.identity.normalize_username"
+      ],
+      "test_context": "The failing test checks that it collapse tab-separated usernames into single spaces."
+    },
+    {
+      "task_id": "ab-contracts-032",
+      "task_type": "api_contract_mismatch",
+      "title": "Usernames should collapse newline-separated usernames into single spaces",
+      "problem_statement": "consumer_app.usernames is bypassing providerlib.identity.normalize_username. Fix the consumer so it collapse newline-separated usernames into single spaces.",
+      "repo_a_name": "synthetic/consumer-app-032",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000032,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-003.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-003.patch",
+      "pytest_targets": [
+        "tests/test_usernames.py::test_canonical_username_contract_cases[collapses-newlines-in-usernames]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/identity.py"
+      ],
+      "expected_relevant_symbols": [
+        "normalize_username"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.identity.normalize_username"
+      ],
+      "test_context": "The failing test checks that it collapse newline-separated usernames into single spaces."
+    },
+    {
+      "task_id": "ab-contracts-033",
+      "task_type": "api_contract_mismatch",
+      "title": "Usernames should collapse mixed whitespace in usernames into single spaces",
+      "problem_statement": "consumer_app.usernames is bypassing providerlib.identity.normalize_username. Fix the consumer so it collapse mixed whitespace in usernames into single spaces.",
+      "repo_a_name": "synthetic/consumer-app-033",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000033,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-003.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-003.patch",
+      "pytest_targets": [
+        "tests/test_usernames.py::test_canonical_username_contract_cases[collapses-mixed-whitespace]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/identity.py"
+      ],
+      "expected_relevant_symbols": [
+        "normalize_username"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.identity.normalize_username"
+      ],
+      "test_context": "The failing test checks that it collapse mixed whitespace in usernames into single spaces."
+    },
+    {
+      "task_id": "ab-contracts-034",
+      "task_type": "api_contract_mismatch",
+      "title": "Usernames should preserve single spaces after collapsing repeated separators",
+      "problem_statement": "consumer_app.usernames is bypassing providerlib.identity.normalize_username. Fix the consumer so it preserve single spaces after collapsing repeated separators.",
+      "repo_a_name": "synthetic/consumer-app-034",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000034,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-003.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-003.patch",
+      "pytest_targets": [
+        "tests/test_usernames.py::test_canonical_username_contract_cases[preserves-single-space-separators]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/identity.py"
+      ],
+      "expected_relevant_symbols": [
+        "normalize_username"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.identity.normalize_username"
+      ],
+      "test_context": "The failing test checks that it preserve single spaces after collapsing repeated separators."
+    },
+    {
+      "task_id": "ab-contracts-035",
+      "task_type": "api_contract_mismatch",
+      "title": "Usernames should normalize multiword usernames while keeping word boundaries",
+      "problem_statement": "consumer_app.usernames is bypassing providerlib.identity.normalize_username. Fix the consumer so it normalize multiword usernames while keeping word boundaries.",
+      "repo_a_name": "synthetic/consumer-app-035",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000035,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-003.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-003.patch",
+      "pytest_targets": [
+        "tests/test_usernames.py::test_canonical_username_contract_cases[normalizes-multiword-usernames]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/identity.py"
+      ],
+      "expected_relevant_symbols": [
+        "normalize_username"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.identity.normalize_username"
+      ],
+      "test_context": "The failing test checks that it normalize multiword usernames while keeping word boundaries."
+    },
+    {
+      "task_id": "ab-contracts-036",
+      "task_type": "api_contract_mismatch",
+      "title": "Usernames should strip surrounding whitespace and collapse internal spacing in usernames",
+      "problem_statement": "consumer_app.usernames is bypassing providerlib.identity.normalize_username. Fix the consumer so it strip surrounding whitespace and collapse internal spacing in usernames.",
+      "repo_a_name": "synthetic/consumer-app-036",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000036,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-003.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-003.patch",
+      "pytest_targets": [
+        "tests/test_usernames.py::test_canonical_username_contract_cases[strips-and-collapses-surrounding-whitespace]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/identity.py"
+      ],
+      "expected_relevant_symbols": [
+        "normalize_username"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.identity.normalize_username"
+      ],
+      "test_context": "The failing test checks that it strip surrounding whitespace and collapse internal spacing in usernames."
+    },
+    {
+      "task_id": "ab-contracts-037",
+      "task_type": "api_contract_mismatch",
+      "title": "Usernames should collapse repeated spacing across four-word usernames",
+      "problem_statement": "consumer_app.usernames is bypassing providerlib.identity.normalize_username. Fix the consumer so it collapse repeated spacing across four-word usernames.",
+      "repo_a_name": "synthetic/consumer-app-037",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000037,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-003.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-003.patch",
+      "pytest_targets": [
+        "tests/test_usernames.py::test_canonical_username_contract_cases[collapses-four-word-usernames]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/identity.py"
+      ],
+      "expected_relevant_symbols": [
+        "normalize_username"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.identity.normalize_username"
+      ],
+      "test_context": "The failing test checks that it collapse repeated spacing across four-word usernames."
+    },
+    {
+      "task_id": "ab-contracts-038",
+      "task_type": "api_contract_mismatch",
+      "title": "Primary email selection should skip empty first email entries",
+      "problem_statement": "consumer_app.emails is no longer delegating cleanup and fallback logic to providerlib.identity.choose_primary_email. Fix the consumer so it skip empty first email entries.",
+      "repo_a_name": "synthetic/consumer-app-038",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000038,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-004.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-004.patch",
+      "pytest_targets": [
+        "tests/test_emails.py::test_primary_contact_contract_cases[skips-empty-first-emails]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/identity.py"
+      ],
+      "expected_relevant_symbols": [
+        "choose_primary_email"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.identity.choose_primary_email"
+      ],
+      "test_context": "The failing test checks that it skip empty first email entries."
+    },
+    {
+      "task_id": "ab-contracts-039",
+      "task_type": "api_contract_mismatch",
+      "title": "Primary email selection should skip whitespace-only first email entries",
+      "problem_statement": "consumer_app.emails is no longer delegating cleanup and fallback logic to providerlib.identity.choose_primary_email. Fix the consumer so it skip whitespace-only first email entries.",
+      "repo_a_name": "synthetic/consumer-app-039",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000039,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-004.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-004.patch",
+      "pytest_targets": [
+        "tests/test_emails.py::test_primary_contact_contract_cases[skips-whitespace-only-first-emails]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/identity.py"
+      ],
+      "expected_relevant_symbols": [
+        "choose_primary_email"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.identity.choose_primary_email"
+      ],
+      "test_context": "The failing test checks that it skip whitespace-only first email entries."
+    },
+    {
+      "task_id": "ab-contracts-040",
+      "task_type": "api_contract_mismatch",
+      "title": "Primary email selection should lowercase uppercase primary email addresses",
+      "problem_statement": "consumer_app.emails is no longer delegating cleanup and fallback logic to providerlib.identity.choose_primary_email. Fix the consumer so it lowercase uppercase primary email addresses.",
+      "repo_a_name": "synthetic/consumer-app-040",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000040,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-004.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-004.patch",
+      "pytest_targets": [
+        "tests/test_emails.py::test_primary_contact_contract_cases[lowercases-uppercase-primary-emails]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/identity.py"
+      ],
+      "expected_relevant_symbols": [
+        "choose_primary_email"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.identity.choose_primary_email"
+      ],
+      "test_context": "The failing test checks that it lowercase uppercase primary email addresses."
+    },
+    {
+      "task_id": "ab-contracts-041",
+      "task_type": "api_contract_mismatch",
+      "title": "Primary email selection should trim surrounding spaces on primary email addresses",
+      "problem_statement": "consumer_app.emails is no longer delegating cleanup and fallback logic to providerlib.identity.choose_primary_email. Fix the consumer so it trim surrounding spaces on primary email addresses.",
+      "repo_a_name": "synthetic/consumer-app-041",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000041,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-004.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-004.patch",
+      "pytest_targets": [
+        "tests/test_emails.py::test_primary_contact_contract_cases[trims-surrounding-spaces-on-primary-emails]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/identity.py"
+      ],
+      "expected_relevant_symbols": [
+        "choose_primary_email"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.identity.choose_primary_email"
+      ],
+      "test_context": "The failing test checks that it trim surrounding spaces on primary email addresses."
+    },
+    {
+      "task_id": "ab-contracts-042",
+      "task_type": "api_contract_mismatch",
+      "title": "Primary email selection should skip blank values before the first valid email address",
+      "problem_statement": "consumer_app.emails is no longer delegating cleanup and fallback logic to providerlib.identity.choose_primary_email. Fix the consumer so it skip blank values before the first valid email address.",
+      "repo_a_name": "synthetic/consumer-app-042",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000042,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-004.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-004.patch",
+      "pytest_targets": [
+        "tests/test_emails.py::test_primary_contact_contract_cases[skips-blank-values-before-valid-emails]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/identity.py"
+      ],
+      "expected_relevant_symbols": [
+        "choose_primary_email"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.identity.choose_primary_email"
+      ],
+      "test_context": "The failing test checks that it skip blank values before the first valid email address."
+    },
+    {
+      "task_id": "ab-contracts-043",
+      "task_type": "api_contract_mismatch",
+      "title": "Primary email selection should skip tab-only values before the first valid email address",
+      "problem_statement": "consumer_app.emails is no longer delegating cleanup and fallback logic to providerlib.identity.choose_primary_email. Fix the consumer so it skip tab-only values before the first valid email address.",
+      "repo_a_name": "synthetic/consumer-app-043",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000043,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-004.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-004.patch",
+      "pytest_targets": [
+        "tests/test_emails.py::test_primary_contact_contract_cases[skips-tab-only-values-before-valid-emails]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/identity.py"
+      ],
+      "expected_relevant_symbols": [
+        "choose_primary_email"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.identity.choose_primary_email"
+      ],
+      "test_context": "The failing test checks that it skip tab-only values before the first valid email address."
+    },
+    {
+      "task_id": "ab-contracts-044",
+      "task_type": "api_contract_mismatch",
+      "title": "Primary email selection should lowercase the first valid mixed-case email address",
+      "problem_statement": "consumer_app.emails is no longer delegating cleanup and fallback logic to providerlib.identity.choose_primary_email. Fix the consumer so it lowercase the first valid mixed-case email address.",
+      "repo_a_name": "synthetic/consumer-app-044",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000044,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-004.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-004.patch",
+      "pytest_targets": [
+        "tests/test_emails.py::test_primary_contact_contract_cases[lowercases-first-valid-mixed-case-emails]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/identity.py"
+      ],
+      "expected_relevant_symbols": [
+        "choose_primary_email"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.identity.choose_primary_email"
+      ],
+      "test_context": "The failing test checks that it lowercase the first valid mixed-case email address."
+    },
+    {
+      "task_id": "ab-contracts-045",
+      "task_type": "api_contract_mismatch",
+      "title": "Primary email selection should trim the first valid email address before returning it",
+      "problem_statement": "consumer_app.emails is no longer delegating cleanup and fallback logic to providerlib.identity.choose_primary_email. Fix the consumer so it trim the first valid email address before returning it.",
+      "repo_a_name": "synthetic/consumer-app-045",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000045,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-004.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-004.patch",
+      "pytest_targets": [
+        "tests/test_emails.py::test_primary_contact_contract_cases[trims-first-valid-lowercase-emails]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/identity.py"
+      ],
+      "expected_relevant_symbols": [
+        "choose_primary_email"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.identity.choose_primary_email"
+      ],
+      "test_context": "The failing test checks that it trim the first valid email address before returning it."
+    },
+    {
+      "task_id": "ab-contracts-046",
+      "task_type": "api_contract_mismatch",
+      "title": "Primary email selection should skip multiple blank values before the first valid email address",
+      "problem_statement": "consumer_app.emails is no longer delegating cleanup and fallback logic to providerlib.identity.choose_primary_email. Fix the consumer so it skip multiple blank values before the first valid email address.",
+      "repo_a_name": "synthetic/consumer-app-046",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000046,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-004.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-004.patch",
+      "pytest_targets": [
+        "tests/test_emails.py::test_primary_contact_contract_cases[skips-multiple-blank-values-before-valid-emails]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/identity.py"
+      ],
+      "expected_relevant_symbols": [
+        "choose_primary_email"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.identity.choose_primary_email"
+      ],
+      "test_context": "The failing test checks that it skip multiple blank values before the first valid email address."
+    },
+    {
+      "task_id": "ab-contracts-047",
+      "task_type": "api_contract_mismatch",
+      "title": "Feature flags should parse uppercase off values as disabled",
+      "problem_statement": "consumer_app.flags is bypassing providerlib.http.parse_feature_flag. Fix the consumer so it parse uppercase off values as disabled.",
+      "repo_a_name": "synthetic/consumer-app-047",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000047,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-005.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-005.patch",
+      "pytest_targets": [
+        "tests/test_flags.py::test_is_beta_enabled_false_contract_cases[parses-uppercase-off-values]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/http.py"
+      ],
+      "expected_relevant_symbols": [
+        "parse_feature_flag"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.http.parse_feature_flag"
+      ],
+      "test_context": "The failing test checks that it parse uppercase off values as disabled."
+    },
+    {
+      "task_id": "ab-contracts-048",
+      "task_type": "api_contract_mismatch",
+      "title": "Feature flags should parse false literals as disabled",
+      "problem_statement": "consumer_app.flags is bypassing providerlib.http.parse_feature_flag. Fix the consumer so it parse false literals as disabled.",
+      "repo_a_name": "synthetic/consumer-app-048",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000048,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-005.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-005.patch",
+      "pytest_targets": [
+        "tests/test_flags.py::test_is_beta_enabled_false_contract_cases[parses-false-literals-as-disabled]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/http.py"
+      ],
+      "expected_relevant_symbols": [
+        "parse_feature_flag"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.http.parse_feature_flag"
+      ],
+      "test_context": "The failing test checks that it parse false literals as disabled."
+    },
+    {
+      "task_id": "ab-contracts-049",
+      "task_type": "api_contract_mismatch",
+      "title": "Feature flags should parse disabled literals as disabled",
+      "problem_statement": "consumer_app.flags is bypassing providerlib.http.parse_feature_flag. Fix the consumer so it parse disabled literals as disabled.",
+      "repo_a_name": "synthetic/consumer-app-049",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000049,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-005.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-005.patch",
+      "pytest_targets": [
+        "tests/test_flags.py::test_is_beta_enabled_false_contract_cases[parses-disabled-literals-as-disabled]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/http.py"
+      ],
+      "expected_relevant_symbols": [
+        "parse_feature_flag"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.http.parse_feature_flag"
+      ],
+      "test_context": "The failing test checks that it parse disabled literals as disabled."
+    },
+    {
+      "task_id": "ab-contracts-050",
+      "task_type": "api_contract_mismatch",
+      "title": "Feature flags should parse no literals as disabled",
+      "problem_statement": "consumer_app.flags is bypassing providerlib.http.parse_feature_flag. Fix the consumer so it parse no literals as disabled.",
+      "repo_a_name": "synthetic/consumer-app-050",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000050,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-005.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-005.patch",
+      "pytest_targets": [
+        "tests/test_flags.py::test_is_beta_enabled_false_contract_cases[parses-no-literals-as-disabled]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/http.py"
+      ],
+      "expected_relevant_symbols": [
+        "parse_feature_flag"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.http.parse_feature_flag"
+      ],
+      "test_context": "The failing test checks that it parse no literals as disabled."
+    },
+    {
+      "task_id": "ab-contracts-051",
+      "task_type": "api_contract_mismatch",
+      "title": "Feature flags should parse zero literals as disabled",
+      "problem_statement": "consumer_app.flags is bypassing providerlib.http.parse_feature_flag. Fix the consumer so it parse zero literals as disabled.",
+      "repo_a_name": "synthetic/consumer-app-051",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000051,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-005.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-005.patch",
+      "pytest_targets": [
+        "tests/test_flags.py::test_is_beta_enabled_false_contract_cases[parses-zero-literals-as-disabled]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/http.py"
+      ],
+      "expected_relevant_symbols": [
+        "parse_feature_flag"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.http.parse_feature_flag"
+      ],
+      "test_context": "The failing test checks that it parse zero literals as disabled."
+    },
+    {
+      "task_id": "ab-contracts-052",
+      "task_type": "api_contract_mismatch",
+      "title": "Feature flags should trim off values before parsing them as disabled",
+      "problem_statement": "consumer_app.flags is bypassing providerlib.http.parse_feature_flag. Fix the consumer so it trim off values before parsing them as disabled.",
+      "repo_a_name": "synthetic/consumer-app-052",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000052,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-005.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-005.patch",
+      "pytest_targets": [
+        "tests/test_flags.py::test_is_beta_enabled_false_contract_cases[trims-off-values-before-parsing]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/http.py"
+      ],
+      "expected_relevant_symbols": [
+        "parse_feature_flag"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.http.parse_feature_flag"
+      ],
+      "test_context": "The failing test checks that it trim off values before parsing them as disabled."
+    },
+    {
+      "task_id": "ab-contracts-053",
+      "task_type": "api_contract_mismatch",
+      "title": "Feature flags should reject unknown feature flag words",
+      "problem_statement": "consumer_app.flags is bypassing providerlib.http.parse_feature_flag. Fix the consumer so it reject unknown feature flag words.",
+      "repo_a_name": "synthetic/consumer-app-053",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000053,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-005.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-005.patch",
+      "pytest_targets": [
+        "tests/test_flags.py::test_is_beta_enabled_invalid_contract_cases[rejects-unknown-flag-words]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/http.py"
+      ],
+      "expected_relevant_symbols": [
+        "parse_feature_flag"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.http.parse_feature_flag"
+      ],
+      "test_context": "The failing test checks that it reject unknown feature flag words."
+    },
+    {
+      "task_id": "ab-contracts-054",
+      "task_type": "api_contract_mismatch",
+      "title": "Feature flags should reject blank feature flag values",
+      "problem_statement": "consumer_app.flags is bypassing providerlib.http.parse_feature_flag. Fix the consumer so it reject blank feature flag values.",
+      "repo_a_name": "synthetic/consumer-app-054",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000054,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-005.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-005.patch",
+      "pytest_targets": [
+        "tests/test_flags.py::test_is_beta_enabled_invalid_contract_cases[rejects-blank-flag-values]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/http.py"
+      ],
+      "expected_relevant_symbols": [
+        "parse_feature_flag"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.http.parse_feature_flag"
+      ],
+      "test_context": "The failing test checks that it reject blank feature flag values."
+    },
+    {
+      "task_id": "ab-contracts-055",
+      "task_type": "api_contract_mismatch",
+      "title": "Feature flags should reject partial feature flag tokens",
+      "problem_statement": "consumer_app.flags is bypassing providerlib.http.parse_feature_flag. Fix the consumer so it reject partial feature flag tokens.",
+      "repo_a_name": "synthetic/consumer-app-055",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000055,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-005.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-005.patch",
+      "pytest_targets": [
+        "tests/test_flags.py::test_is_beta_enabled_invalid_contract_cases[rejects-partial-flag-tokens]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/http.py"
+      ],
+      "expected_relevant_symbols": [
+        "parse_feature_flag"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.http.parse_feature_flag"
+      ],
+      "test_context": "The failing test checks that it reject partial feature flag tokens."
+    },
+    {
+      "task_id": "ab-contracts-056",
+      "task_type": "api_contract_mismatch",
+      "title": "Timeout conversion should convert one-second timeout values to milliseconds",
+      "problem_statement": "consumer_app.timeouts is misusing providerlib.metrics.seconds_to_timeout_ms. Fix the consumer so it convert one-second timeout values to milliseconds.",
+      "repo_a_name": "synthetic/consumer-app-056",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000056,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-006.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-006.patch",
+      "pytest_targets": [
+        "tests/test_timeouts.py::test_client_timeout_ms_contract_cases[converts-one-second-values-to-milliseconds]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/metrics.py"
+      ],
+      "expected_relevant_symbols": [
+        "seconds_to_timeout_ms"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.metrics.seconds_to_timeout_ms"
+      ],
+      "test_context": "The failing test checks that it convert one-second timeout values to milliseconds."
+    },
+    {
+      "task_id": "ab-contracts-057",
+      "task_type": "api_contract_mismatch",
+      "title": "Timeout conversion should convert half-second timeout values to milliseconds",
+      "problem_statement": "consumer_app.timeouts is misusing providerlib.metrics.seconds_to_timeout_ms. Fix the consumer so it convert half-second timeout values to milliseconds.",
+      "repo_a_name": "synthetic/consumer-app-057",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000057,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-006.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-006.patch",
+      "pytest_targets": [
+        "tests/test_timeouts.py::test_client_timeout_ms_contract_cases[converts-half-second-values-to-milliseconds]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/metrics.py"
+      ],
+      "expected_relevant_symbols": [
+        "seconds_to_timeout_ms"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.metrics.seconds_to_timeout_ms"
+      ],
+      "test_context": "The failing test checks that it convert half-second timeout values to milliseconds."
+    },
+    {
+      "task_id": "ab-contracts-058",
+      "task_type": "api_contract_mismatch",
+      "title": "Timeout conversion should convert fractional timeout values using provider rounding semantics",
+      "problem_statement": "consumer_app.timeouts is misusing providerlib.metrics.seconds_to_timeout_ms. Fix the consumer so it convert fractional timeout values using provider rounding semantics.",
+      "repo_a_name": "synthetic/consumer-app-058",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000058,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-006.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-006.patch",
+      "pytest_targets": [
+        "tests/test_timeouts.py::test_client_timeout_ms_contract_cases[converts-fractional-seconds-with-rounding]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/metrics.py"
+      ],
+      "expected_relevant_symbols": [
+        "seconds_to_timeout_ms"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.metrics.seconds_to_timeout_ms"
+      ],
+      "test_context": "The failing test checks that it convert fractional timeout values using provider rounding semantics."
+    },
+    {
+      "task_id": "ab-contracts-059",
+      "task_type": "api_contract_mismatch",
+      "title": "Timeout conversion should convert ten-second timeout values to milliseconds",
+      "problem_statement": "consumer_app.timeouts is misusing providerlib.metrics.seconds_to_timeout_ms. Fix the consumer so it convert ten-second timeout values to milliseconds.",
+      "repo_a_name": "synthetic/consumer-app-059",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000059,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-006.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-006.patch",
+      "pytest_targets": [
+        "tests/test_timeouts.py::test_client_timeout_ms_contract_cases[converts-ten-second-values-to-milliseconds]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/metrics.py"
+      ],
+      "expected_relevant_symbols": [
+        "seconds_to_timeout_ms"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.metrics.seconds_to_timeout_ms"
+      ],
+      "test_context": "The failing test checks that it convert ten-second timeout values to milliseconds."
+    },
+    {
+      "task_id": "ab-contracts-060",
+      "task_type": "api_contract_mismatch",
+      "title": "Timeout conversion should convert millisecond-scale fractional timeout values correctly",
+      "problem_statement": "consumer_app.timeouts is misusing providerlib.metrics.seconds_to_timeout_ms. Fix the consumer so it convert millisecond-scale fractional timeout values correctly.",
+      "repo_a_name": "synthetic/consumer-app-060",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000060,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-006.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-006.patch",
+      "pytest_targets": [
+        "tests/test_timeouts.py::test_client_timeout_ms_contract_cases[converts-millisecond-scale-fractions-correctly]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/metrics.py"
+      ],
+      "expected_relevant_symbols": [
+        "seconds_to_timeout_ms"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.metrics.seconds_to_timeout_ms"
+      ],
+      "test_context": "The failing test checks that it convert millisecond-scale fractional timeout values correctly."
+    },
+    {
+      "task_id": "ab-contracts-061",
+      "task_type": "api_contract_mismatch",
+      "title": "Timeout conversion should convert repeating fractional timeout values to milliseconds",
+      "problem_statement": "consumer_app.timeouts is misusing providerlib.metrics.seconds_to_timeout_ms. Fix the consumer so it convert repeating fractional timeout values to milliseconds.",
+      "repo_a_name": "synthetic/consumer-app-061",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000061,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-006.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-006.patch",
+      "pytest_targets": [
+        "tests/test_timeouts.py::test_client_timeout_ms_contract_cases[converts-repeating-fractions-to-milliseconds]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/metrics.py"
+      ],
+      "expected_relevant_symbols": [
+        "seconds_to_timeout_ms"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.metrics.seconds_to_timeout_ms"
+      ],
+      "test_context": "The failing test checks that it convert repeating fractional timeout values to milliseconds."
+    },
+    {
+      "task_id": "ab-contracts-062",
+      "task_type": "api_contract_mismatch",
+      "title": "Timeout conversion should convert decimal timeout values without changing their units",
+      "problem_statement": "consumer_app.timeouts is misusing providerlib.metrics.seconds_to_timeout_ms. Fix the consumer so it convert decimal timeout values without changing their units.",
+      "repo_a_name": "synthetic/consumer-app-062",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000062,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-006.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-006.patch",
+      "pytest_targets": [
+        "tests/test_timeouts.py::test_client_timeout_ms_contract_cases[converts-decimal-seconds-with-rounding]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/metrics.py"
+      ],
+      "expected_relevant_symbols": [
+        "seconds_to_timeout_ms"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.metrics.seconds_to_timeout_ms"
+      ],
+      "test_context": "The failing test checks that it convert decimal timeout values without changing their units."
+    },
+    {
+      "task_id": "ab-contracts-063",
+      "task_type": "api_contract_mismatch",
+      "title": "Timeout conversion should convert quarter-second timeout values to milliseconds",
+      "problem_statement": "consumer_app.timeouts is misusing providerlib.metrics.seconds_to_timeout_ms. Fix the consumer so it convert quarter-second timeout values to milliseconds.",
+      "repo_a_name": "synthetic/consumer-app-063",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000063,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-006.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-006.patch",
+      "pytest_targets": [
+        "tests/test_timeouts.py::test_client_timeout_ms_contract_cases[converts-quarter-second-values-to-milliseconds]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/metrics.py"
+      ],
+      "expected_relevant_symbols": [
+        "seconds_to_timeout_ms"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.metrics.seconds_to_timeout_ms"
+      ],
+      "test_context": "The failing test checks that it convert quarter-second timeout values to milliseconds."
+    },
+    {
+      "task_id": "ab-contracts-064",
+      "task_type": "api_contract_mismatch",
+      "title": "Timeout conversion should convert larger fractional timeout values to milliseconds",
+      "problem_statement": "consumer_app.timeouts is misusing providerlib.metrics.seconds_to_timeout_ms. Fix the consumer so it convert larger fractional timeout values to milliseconds.",
+      "repo_a_name": "synthetic/consumer-app-064",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000064,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-006.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-006.patch",
+      "pytest_targets": [
+        "tests/test_timeouts.py::test_client_timeout_ms_contract_cases[converts-large-fractional-values-to-milliseconds]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/metrics.py"
+      ],
+      "expected_relevant_symbols": [
+        "seconds_to_timeout_ms"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.metrics.seconds_to_timeout_ms"
+      ],
+      "test_context": "The failing test checks that it convert larger fractional timeout values to milliseconds."
+    },
+    {
+      "task_id": "ab-contracts-065",
+      "task_type": "api_contract_mismatch",
+      "title": "Tag rendering should preserve beta-before-alpha tag order from the provider",
+      "problem_statement": "consumer_app.tags is reordering the output of providerlib.identity.normalize_tags. Fix the consumer so it preserve beta-before-alpha tag order from the provider.",
+      "repo_a_name": "synthetic/consumer-app-065",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000065,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-007.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-007.patch",
+      "pytest_targets": [
+        "tests/test_tags.py::test_normalized_tag_line_contract_cases[preserves-beta-before-alpha-order]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/identity.py"
+      ],
+      "expected_relevant_symbols": [
+        "normalize_tags"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.identity.normalize_tags"
+      ],
+      "test_context": "The failing test checks that it preserve beta-before-alpha tag order from the provider."
+    },
+    {
+      "task_id": "ab-contracts-066",
+      "task_type": "api_contract_mismatch",
+      "title": "Tag rendering should preserve provider order across three unsorted tags",
+      "problem_statement": "consumer_app.tags is reordering the output of providerlib.identity.normalize_tags. Fix the consumer so it preserve provider order across three unsorted tags.",
+      "repo_a_name": "synthetic/consumer-app-066",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000066,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-007.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-007.patch",
+      "pytest_targets": [
+        "tests/test_tags.py::test_normalized_tag_line_contract_cases[preserves-input-order-across-three-tags]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/identity.py"
+      ],
+      "expected_relevant_symbols": [
+        "normalize_tags"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.identity.normalize_tags"
+      ],
+      "test_context": "The failing test checks that it preserve provider order across three unsorted tags."
+    },
+    {
+      "task_id": "ab-contracts-067",
+      "task_type": "api_contract_mismatch",
+      "title": "Tag rendering should keep first-seen provider order when duplicate tags appear",
+      "problem_statement": "consumer_app.tags is reordering the output of providerlib.identity.normalize_tags. Fix the consumer so it keep first-seen provider order when duplicate tags appear.",
+      "repo_a_name": "synthetic/consumer-app-067",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000067,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-007.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-007.patch",
+      "pytest_targets": [
+        "tests/test_tags.py::test_normalized_tag_line_contract_cases[keeps-first-seen-order-when-duplicates-appear]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/identity.py"
+      ],
+      "expected_relevant_symbols": [
+        "normalize_tags"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.identity.normalize_tags"
+      ],
+      "test_context": "The failing test checks that it keep first-seen provider order when duplicate tags appear."
+    },
+    {
+      "task_id": "ab-contracts-068",
+      "task_type": "api_contract_mismatch",
+      "title": "Tag rendering should preserve unsorted zulu-echo-delta provider order",
+      "problem_statement": "consumer_app.tags is reordering the output of providerlib.identity.normalize_tags. Fix the consumer so it preserve unsorted zulu-echo-delta provider order.",
+      "repo_a_name": "synthetic/consumer-app-068",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000068,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-007.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-007.patch",
+      "pytest_targets": [
+        "tests/test_tags.py::test_normalized_tag_line_contract_cases[preserves-zulu-echo-delta-order]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/identity.py"
+      ],
+      "expected_relevant_symbols": [
+        "normalize_tags"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.identity.normalize_tags"
+      ],
+      "test_context": "The failing test checks that it preserve unsorted zulu-echo-delta provider order."
+    },
+    {
+      "task_id": "ab-contracts-069",
+      "task_type": "api_contract_mismatch",
+      "title": "Tag rendering should preserve first-seen order for multiword provider tags",
+      "problem_statement": "consumer_app.tags is reordering the output of providerlib.identity.normalize_tags. Fix the consumer so it preserve first-seen order for multiword provider tags.",
+      "repo_a_name": "synthetic/consumer-app-069",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000069,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-007.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-007.patch",
+      "pytest_targets": [
+        "tests/test_tags.py::test_normalized_tag_line_contract_cases[preserves-first-seen-multiword-order]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/identity.py"
+      ],
+      "expected_relevant_symbols": [
+        "normalize_tags"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.identity.normalize_tags"
+      ],
+      "test_context": "The failing test checks that it preserve first-seen order for multiword provider tags."
+    },
+    {
+      "task_id": "ab-contracts-070",
+      "task_type": "api_contract_mismatch",
+      "title": "Tag rendering should preserve provider order for mixed-case tags",
+      "problem_statement": "consumer_app.tags is reordering the output of providerlib.identity.normalize_tags. Fix the consumer so it preserve provider order for mixed-case tags.",
+      "repo_a_name": "synthetic/consumer-app-070",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000070,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-007.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-007.patch",
+      "pytest_targets": [
+        "tests/test_tags.py::test_normalized_tag_line_contract_cases[preserves-provider-order-for-mixed-case-tags]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/identity.py"
+      ],
+      "expected_relevant_symbols": [
+        "normalize_tags"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.identity.normalize_tags"
+      ],
+      "test_context": "The failing test checks that it preserve provider order for mixed-case tags."
+    },
+    {
+      "task_id": "ab-contracts-071",
+      "task_type": "api_contract_mismatch",
+      "title": "Tag rendering should preserve late-early-middle provider order",
+      "problem_statement": "consumer_app.tags is reordering the output of providerlib.identity.normalize_tags. Fix the consumer so it preserve late-early-middle provider order.",
+      "repo_a_name": "synthetic/consumer-app-071",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000071,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-007.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-007.patch",
+      "pytest_targets": [
+        "tests/test_tags.py::test_normalized_tag_line_contract_cases[preserves-late-early-middle-order]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/identity.py"
+      ],
+      "expected_relevant_symbols": [
+        "normalize_tags"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.identity.normalize_tags"
+      ],
+      "test_context": "The failing test checks that it preserve late-early-middle provider order."
+    },
+    {
+      "task_id": "ab-contracts-072",
+      "task_type": "api_contract_mismatch",
+      "title": "Tag rendering should collapse duplicates without resorting provider-defined tags",
+      "problem_statement": "consumer_app.tags is reordering the output of providerlib.identity.normalize_tags. Fix the consumer so it collapse duplicates without resorting provider-defined tags.",
+      "repo_a_name": "synthetic/consumer-app-072",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000072,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-007.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-007.patch",
+      "pytest_targets": [
+        "tests/test_tags.py::test_normalized_tag_line_contract_cases[keeps-duplicates-collapsed-without-resorting]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/identity.py"
+      ],
+      "expected_relevant_symbols": [
+        "normalize_tags"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.identity.normalize_tags"
+      ],
+      "test_context": "The failing test checks that it collapse duplicates without resorting provider-defined tags."
+    },
+    {
+      "task_id": "ab-contracts-073",
+      "task_type": "api_contract_mismatch",
+      "title": "Tag rendering should preserve provider order for multiword tags",
+      "problem_statement": "consumer_app.tags is reordering the output of providerlib.identity.normalize_tags. Fix the consumer so it preserve provider order for multiword tags.",
+      "repo_a_name": "synthetic/consumer-app-073",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000073,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-007.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-007.patch",
+      "pytest_targets": [
+        "tests/test_tags.py::test_normalized_tag_line_contract_cases[preserves-multiword-provider-order]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/identity.py"
+      ],
+      "expected_relevant_symbols": [
+        "normalize_tags"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.identity.normalize_tags"
+      ],
+      "test_context": "The failing test checks that it preserve provider order for multiword tags."
+    },
+    {
+      "task_id": "ab-contracts-074",
+      "task_type": "api_contract_mismatch",
+      "title": "Ratio fallback should preserve custom zero-denominator fallback labels",
+      "problem_statement": "consumer_app.ratios is no longer preserving the caller-supplied default when providerlib.math_utils.safe_divide cannot divide. Fix the consumer so it preserve custom zero-denominator fallback labels.",
+      "repo_a_name": "synthetic/consumer-app-074",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000074,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-008.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-008.patch",
+      "pytest_targets": [
+        "tests/test_ratios.py::test_ratio_or_label_contract_cases[preserves-zero-fallback-labels]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/math_utils.py"
+      ],
+      "expected_relevant_symbols": [
+        "safe_divide"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.math_utils.safe_divide"
+      ],
+      "test_context": "The failing test checks that it preserve custom zero-denominator fallback labels."
+    },
+    {
+      "task_id": "ab-contracts-075",
+      "task_type": "api_contract_mismatch",
+      "title": "Ratio fallback should preserve custom missing fallback labels",
+      "problem_statement": "consumer_app.ratios is no longer preserving the caller-supplied default when providerlib.math_utils.safe_divide cannot divide. Fix the consumer so it preserve custom missing fallback labels.",
+      "repo_a_name": "synthetic/consumer-app-075",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000075,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-008.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-008.patch",
+      "pytest_targets": [
+        "tests/test_ratios.py::test_ratio_or_label_contract_cases[preserves-missing-fallback-labels]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/math_utils.py"
+      ],
+      "expected_relevant_symbols": [
+        "safe_divide"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.math_utils.safe_divide"
+      ],
+      "test_context": "The failing test checks that it preserve custom missing fallback labels."
+    },
+    {
+      "task_id": "ab-contracts-076",
+      "task_type": "api_contract_mismatch",
+      "title": "Ratio fallback should preserve unavailable fallback labels when division is impossible",
+      "problem_statement": "consumer_app.ratios is no longer preserving the caller-supplied default when providerlib.math_utils.safe_divide cannot divide. Fix the consumer so it preserve unavailable fallback labels when division is impossible.",
+      "repo_a_name": "synthetic/consumer-app-076",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000076,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-008.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-008.patch",
+      "pytest_targets": [
+        "tests/test_ratios.py::test_ratio_or_label_contract_cases[preserves-unavailable-fallback-labels]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/math_utils.py"
+      ],
+      "expected_relevant_symbols": [
+        "safe_divide"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.math_utils.safe_divide"
+      ],
+      "test_context": "The failing test checks that it preserve unavailable fallback labels when division is impossible."
+    },
+    {
+      "task_id": "ab-contracts-077",
+      "task_type": "api_contract_mismatch",
+      "title": "Ratio fallback should preserve no-ratio fallback labels when division is impossible",
+      "problem_statement": "consumer_app.ratios is no longer preserving the caller-supplied default when providerlib.math_utils.safe_divide cannot divide. Fix the consumer so it preserve no-ratio fallback labels when division is impossible.",
+      "repo_a_name": "synthetic/consumer-app-077",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000077,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-008.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-008.patch",
+      "pytest_targets": [
+        "tests/test_ratios.py::test_ratio_or_label_contract_cases[preserves-no-ratio-fallback-labels]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/math_utils.py"
+      ],
+      "expected_relevant_symbols": [
+        "safe_divide"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.math_utils.safe_divide"
+      ],
+      "test_context": "The failing test checks that it preserve no-ratio fallback labels when division is impossible."
+    },
+    {
+      "task_id": "ab-contracts-078",
+      "task_type": "api_contract_mismatch",
+      "title": "Ratio fallback should preserve dash fallback labels when division is impossible",
+      "problem_statement": "consumer_app.ratios is no longer preserving the caller-supplied default when providerlib.math_utils.safe_divide cannot divide. Fix the consumer so it preserve dash fallback labels when division is impossible.",
+      "repo_a_name": "synthetic/consumer-app-078",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000078,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-008.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-008.patch",
+      "pytest_targets": [
+        "tests/test_ratios.py::test_ratio_or_label_contract_cases[preserves-dash-fallback-labels]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/math_utils.py"
+      ],
+      "expected_relevant_symbols": [
+        "safe_divide"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.math_utils.safe_divide"
+      ],
+      "test_context": "The failing test checks that it preserve dash fallback labels when division is impossible."
+    },
+    {
+      "task_id": "ab-contracts-079",
+      "task_type": "api_contract_mismatch",
+      "title": "Ratio fallback should preserve empty-state fallback labels when division is impossible",
+      "problem_statement": "consumer_app.ratios is no longer preserving the caller-supplied default when providerlib.math_utils.safe_divide cannot divide. Fix the consumer so it preserve empty-state fallback labels when division is impossible.",
+      "repo_a_name": "synthetic/consumer-app-079",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000079,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-008.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-008.patch",
+      "pytest_targets": [
+        "tests/test_ratios.py::test_ratio_or_label_contract_cases[preserves-empty-fallback-labels]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/math_utils.py"
+      ],
+      "expected_relevant_symbols": [
+        "safe_divide"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.math_utils.safe_divide"
+      ],
+      "test_context": "The failing test checks that it preserve empty-state fallback labels when division is impossible."
+    },
+    {
+      "task_id": "ab-contracts-080",
+      "task_type": "api_contract_mismatch",
+      "title": "Ratio fallback should preserve unknown fallback labels when division is impossible",
+      "problem_statement": "consumer_app.ratios is no longer preserving the caller-supplied default when providerlib.math_utils.safe_divide cannot divide. Fix the consumer so it preserve unknown fallback labels when division is impossible.",
+      "repo_a_name": "synthetic/consumer-app-080",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000080,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-008.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-008.patch",
+      "pytest_targets": [
+        "tests/test_ratios.py::test_ratio_or_label_contract_cases[preserves-unknown-fallback-labels]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/math_utils.py"
+      ],
+      "expected_relevant_symbols": [
+        "safe_divide"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.math_utils.safe_divide"
+      ],
+      "test_context": "The failing test checks that it preserve unknown fallback labels when division is impossible."
+    },
+    {
+      "task_id": "ab-contracts-081",
+      "task_type": "api_contract_mismatch",
+      "title": "Ratio fallback should preserve undefined fallback labels when division is impossible",
+      "problem_statement": "consumer_app.ratios is no longer preserving the caller-supplied default when providerlib.math_utils.safe_divide cannot divide. Fix the consumer so it preserve undefined fallback labels when division is impossible.",
+      "repo_a_name": "synthetic/consumer-app-081",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000081,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-008.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-008.patch",
+      "pytest_targets": [
+        "tests/test_ratios.py::test_ratio_or_label_contract_cases[preserves-undefined-fallback-labels]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/math_utils.py"
+      ],
+      "expected_relevant_symbols": [
+        "safe_divide"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.math_utils.safe_divide"
+      ],
+      "test_context": "The failing test checks that it preserve undefined fallback labels when division is impossible."
+    },
+    {
+      "task_id": "ab-contracts-082",
+      "task_type": "api_contract_mismatch",
+      "title": "Ratio fallback should preserve custom symbolic fallback labels when division is impossible",
+      "problem_statement": "consumer_app.ratios is no longer preserving the caller-supplied default when providerlib.math_utils.safe_divide cannot divide. Fix the consumer so it preserve custom symbolic fallback labels when division is impossible.",
+      "repo_a_name": "synthetic/consumer-app-082",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000082,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-008.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-008.patch",
+      "pytest_targets": [
+        "tests/test_ratios.py::test_ratio_or_label_contract_cases[preserves-custom-symbolic-fallback-labels]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/math_utils.py"
+      ],
+      "expected_relevant_symbols": [
+        "safe_divide"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.math_utils.safe_divide"
+      ],
+      "test_context": "The failing test checks that it preserve custom symbolic fallback labels when division is impossible."
+    },
+    {
+      "task_id": "ab-contracts-083",
+      "task_type": "api_contract_mismatch",
+      "title": "Session cache keys should lowercase simple cache key identifiers",
+      "problem_statement": "consumer_app.cache_keys is bypassing providerlib.cache.build_cache_key. Fix the consumer so it lowercase simple cache key identifiers.",
+      "repo_a_name": "synthetic/consumer-app-083",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000083,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-009.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-009.patch",
+      "pytest_targets": [
+        "tests/test_cache_keys.py::test_session_cache_key_contract_cases[lowercases-simple-identifiers]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/cache.py"
+      ],
+      "expected_relevant_symbols": [
+        "build_cache_key"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.cache.build_cache_key"
+      ],
+      "test_context": "The failing test checks that it lowercase simple cache key identifiers."
+    },
+    {
+      "task_id": "ab-contracts-084",
+      "task_type": "api_contract_mismatch",
+      "title": "Session cache keys should trim and lowercase uppercase cache key identifiers",
+      "problem_statement": "consumer_app.cache_keys is bypassing providerlib.cache.build_cache_key. Fix the consumer so it trim and lowercase uppercase cache key identifiers.",
+      "repo_a_name": "synthetic/consumer-app-084",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000084,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-009.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-009.patch",
+      "pytest_targets": [
+        "tests/test_cache_keys.py::test_session_cache_key_contract_cases[trims-and-lowercases-uppercase-identifiers]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/cache.py"
+      ],
+      "expected_relevant_symbols": [
+        "build_cache_key"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.cache.build_cache_key"
+      ],
+      "test_context": "The failing test checks that it trim and lowercase uppercase cache key identifiers."
+    },
+    {
+      "task_id": "ab-contracts-085",
+      "task_type": "api_contract_mismatch",
+      "title": "Session cache keys should trim surrounding whitespace from cache key identifiers",
+      "problem_statement": "consumer_app.cache_keys is bypassing providerlib.cache.build_cache_key. Fix the consumer so it trim surrounding whitespace from cache key identifiers.",
+      "repo_a_name": "synthetic/consumer-app-085",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000085,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-009.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-009.patch",
+      "pytest_targets": [
+        "tests/test_cache_keys.py::test_session_cache_key_contract_cases[trims-surrounding-whitespace-from-identifiers]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/cache.py"
+      ],
+      "expected_relevant_symbols": [
+        "build_cache_key"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.cache.build_cache_key"
+      ],
+      "test_context": "The failing test checks that it trim surrounding whitespace from cache key identifiers."
+    },
+    {
+      "task_id": "ab-contracts-086",
+      "task_type": "api_contract_mismatch",
+      "title": "Session cache keys should preserve internal spaces while lowercasing cache key identifiers",
+      "problem_statement": "consumer_app.cache_keys is bypassing providerlib.cache.build_cache_key. Fix the consumer so it preserve internal spaces while lowercasing cache key identifiers.",
+      "repo_a_name": "synthetic/consumer-app-086",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000086,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-009.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-009.patch",
+      "pytest_targets": [
+        "tests/test_cache_keys.py::test_session_cache_key_contract_cases[preserves-spaces-while-lowercasing-identifiers]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/cache.py"
+      ],
+      "expected_relevant_symbols": [
+        "build_cache_key"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.cache.build_cache_key"
+      ],
+      "test_context": "The failing test checks that it preserve internal spaces while lowercasing cache key identifiers."
+    },
+    {
+      "task_id": "ab-contracts-087",
+      "task_type": "api_contract_mismatch",
+      "title": "Session cache keys should trim uppercase cache key identifiers before appending the version suffix",
+      "problem_statement": "consumer_app.cache_keys is bypassing providerlib.cache.build_cache_key. Fix the consumer so it trim uppercase cache key identifiers before appending the version suffix.",
+      "repo_a_name": "synthetic/consumer-app-087",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000087,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-009.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-009.patch",
+      "pytest_targets": [
+        "tests/test_cache_keys.py::test_session_cache_key_contract_cases[trims-uppercase-identifiers-before-versioning]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/cache.py"
+      ],
+      "expected_relevant_symbols": [
+        "build_cache_key"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.cache.build_cache_key"
+      ],
+      "test_context": "The failing test checks that it trim uppercase cache key identifiers before appending the version suffix."
+    },
+    {
+      "task_id": "ab-contracts-088",
+      "task_type": "api_contract_mismatch",
+      "title": "Session cache keys should append the provider version suffix for simple identifiers",
+      "problem_statement": "consumer_app.cache_keys is bypassing providerlib.cache.build_cache_key. Fix the consumer so it append the provider version suffix for simple identifiers.",
+      "repo_a_name": "synthetic/consumer-app-088",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000088,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-009.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-009.patch",
+      "pytest_targets": [
+        "tests/test_cache_keys.py::test_session_cache_key_contract_cases[appends-provider-version-for-simple-identifiers]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/cache.py"
+      ],
+      "expected_relevant_symbols": [
+        "build_cache_key"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.cache.build_cache_key"
+      ],
+      "test_context": "The failing test checks that it append the provider version suffix for simple identifiers."
+    },
+    {
+      "task_id": "ab-contracts-089",
+      "task_type": "api_contract_mismatch",
+      "title": "Session cache keys should append the provider version suffix for mixed-case identifiers",
+      "problem_statement": "consumer_app.cache_keys is bypassing providerlib.cache.build_cache_key. Fix the consumer so it append the provider version suffix for mixed-case identifiers.",
+      "repo_a_name": "synthetic/consumer-app-089",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000089,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-009.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-009.patch",
+      "pytest_targets": [
+        "tests/test_cache_keys.py::test_session_cache_key_contract_cases[appends-provider-version-for-mixed-case-identifiers]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/cache.py"
+      ],
+      "expected_relevant_symbols": [
+        "build_cache_key"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.cache.build_cache_key"
+      ],
+      "test_context": "The failing test checks that it append the provider version suffix for mixed-case identifiers."
+    },
+    {
+      "task_id": "ab-contracts-090",
+      "task_type": "api_contract_mismatch",
+      "title": "Session cache keys should trim trailing whitespace from identifiers before versioning",
+      "problem_statement": "consumer_app.cache_keys is bypassing providerlib.cache.build_cache_key. Fix the consumer so it trim trailing whitespace from identifiers before versioning.",
+      "repo_a_name": "synthetic/consumer-app-090",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000090,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-009.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-009.patch",
+      "pytest_targets": [
+        "tests/test_cache_keys.py::test_session_cache_key_contract_cases[trims-trailing-whitespace-before-versioning]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/cache.py"
+      ],
+      "expected_relevant_symbols": [
+        "build_cache_key"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.cache.build_cache_key"
+      ],
+      "test_context": "The failing test checks that it trim trailing whitespace from identifiers before versioning."
+    },
+    {
+      "task_id": "ab-contracts-091",
+      "task_type": "api_contract_mismatch",
+      "title": "Session cache keys should preserve email-style identifiers while appending the provider version suffix",
+      "problem_statement": "consumer_app.cache_keys is bypassing providerlib.cache.build_cache_key. Fix the consumer so it preserve email-style identifiers while appending the provider version suffix.",
+      "repo_a_name": "synthetic/consumer-app-091",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000091,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-009.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-009.patch",
+      "pytest_targets": [
+        "tests/test_cache_keys.py::test_session_cache_key_contract_cases[preserves-email-style-identifiers-with-versioning]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/cache.py"
+      ],
+      "expected_relevant_symbols": [
+        "build_cache_key"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.cache.build_cache_key"
+      ],
+      "test_context": "The failing test checks that it preserve email-style identifiers while appending the provider version suffix."
+    },
+    {
+      "task_id": "ab-contracts-092",
+      "task_type": "api_contract_mismatch",
+      "title": "Badge colors should map queued statuses to slate badge colors",
+      "problem_statement": "consumer_app.statuses is returning raw status text instead of using providerlib.ui.status_to_color. Fix the consumer so it map queued statuses to slate badge colors.",
+      "repo_a_name": "synthetic/consumer-app-092",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000092,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-010.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-010.patch",
+      "pytest_targets": [
+        "tests/test_statuses.py::test_badge_color_contract_cases[maps-lowercase-queued-statuses]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/ui.py"
+      ],
+      "expected_relevant_symbols": [
+        "status_to_color"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.ui.status_to_color"
+      ],
+      "test_context": "The failing test checks that it map queued statuses to slate badge colors."
+    },
+    {
+      "task_id": "ab-contracts-093",
+      "task_type": "api_contract_mismatch",
+      "title": "Badge colors should map running statuses to blue badge colors",
+      "problem_statement": "consumer_app.statuses is returning raw status text instead of using providerlib.ui.status_to_color. Fix the consumer so it map running statuses to blue badge colors.",
+      "repo_a_name": "synthetic/consumer-app-093",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000093,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-010.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-010.patch",
+      "pytest_targets": [
+        "tests/test_statuses.py::test_badge_color_contract_cases[maps-lowercase-running-statuses]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/ui.py"
+      ],
+      "expected_relevant_symbols": [
+        "status_to_color"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.ui.status_to_color"
+      ],
+      "test_context": "The failing test checks that it map running statuses to blue badge colors."
+    },
+    {
+      "task_id": "ab-contracts-094",
+      "task_type": "api_contract_mismatch",
+      "title": "Badge colors should map succeeded statuses to green badge colors",
+      "problem_statement": "consumer_app.statuses is returning raw status text instead of using providerlib.ui.status_to_color. Fix the consumer so it map succeeded statuses to green badge colors.",
+      "repo_a_name": "synthetic/consumer-app-094",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000094,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-010.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-010.patch",
+      "pytest_targets": [
+        "tests/test_statuses.py::test_badge_color_contract_cases[maps-lowercase-succeeded-statuses]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/ui.py"
+      ],
+      "expected_relevant_symbols": [
+        "status_to_color"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.ui.status_to_color"
+      ],
+      "test_context": "The failing test checks that it map succeeded statuses to green badge colors."
+    },
+    {
+      "task_id": "ab-contracts-095",
+      "task_type": "api_contract_mismatch",
+      "title": "Badge colors should map failed statuses to red badge colors",
+      "problem_statement": "consumer_app.statuses is returning raw status text instead of using providerlib.ui.status_to_color. Fix the consumer so it map failed statuses to red badge colors.",
+      "repo_a_name": "synthetic/consumer-app-095",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000095,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-010.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-010.patch",
+      "pytest_targets": [
+        "tests/test_statuses.py::test_badge_color_contract_cases[maps-titlecase-failed-statuses]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/ui.py"
+      ],
+      "expected_relevant_symbols": [
+        "status_to_color"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.ui.status_to_color"
+      ],
+      "test_context": "The failing test checks that it map failed statuses to red badge colors."
+    },
+    {
+      "task_id": "ab-contracts-096",
+      "task_type": "api_contract_mismatch",
+      "title": "Badge colors should normalize queued status casing before looking up badge colors",
+      "problem_statement": "consumer_app.statuses is returning raw status text instead of using providerlib.ui.status_to_color. Fix the consumer so it normalize queued status casing before looking up badge colors.",
+      "repo_a_name": "synthetic/consumer-app-096",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000096,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-010.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-010.patch",
+      "pytest_targets": [
+        "tests/test_statuses.py::test_badge_color_contract_cases[normalizes-titlecase-queued-statuses]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/ui.py"
+      ],
+      "expected_relevant_symbols": [
+        "status_to_color"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.ui.status_to_color"
+      ],
+      "test_context": "The failing test checks that it normalize queued status casing before looking up badge colors."
+    },
+    {
+      "task_id": "ab-contracts-097",
+      "task_type": "api_contract_mismatch",
+      "title": "Badge colors should normalize running status casing before looking up badge colors",
+      "problem_statement": "consumer_app.statuses is returning raw status text instead of using providerlib.ui.status_to_color. Fix the consumer so it normalize running status casing before looking up badge colors.",
+      "repo_a_name": "synthetic/consumer-app-097",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000097,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-010.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-010.patch",
+      "pytest_targets": [
+        "tests/test_statuses.py::test_badge_color_contract_cases[normalizes-titlecase-running-statuses]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/ui.py"
+      ],
+      "expected_relevant_symbols": [
+        "status_to_color"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.ui.status_to_color"
+      ],
+      "test_context": "The failing test checks that it normalize running status casing before looking up badge colors."
+    },
+    {
+      "task_id": "ab-contracts-098",
+      "task_type": "api_contract_mismatch",
+      "title": "Badge colors should normalize succeeded status casing before looking up badge colors",
+      "problem_statement": "consumer_app.statuses is returning raw status text instead of using providerlib.ui.status_to_color. Fix the consumer so it normalize succeeded status casing before looking up badge colors.",
+      "repo_a_name": "synthetic/consumer-app-098",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000098,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-010.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-010.patch",
+      "pytest_targets": [
+        "tests/test_statuses.py::test_badge_color_contract_cases[normalizes-uppercase-succeeded-statuses]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/ui.py"
+      ],
+      "expected_relevant_symbols": [
+        "status_to_color"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.ui.status_to_color"
+      ],
+      "test_context": "The failing test checks that it normalize succeeded status casing before looking up badge colors."
+    },
+    {
+      "task_id": "ab-contracts-099",
+      "task_type": "api_contract_mismatch",
+      "title": "Badge colors should return gray for unknown statuses",
+      "problem_statement": "consumer_app.statuses is returning raw status text instead of using providerlib.ui.status_to_color. Fix the consumer so it return gray for unknown statuses.",
+      "repo_a_name": "synthetic/consumer-app-099",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000099,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-010.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-010.patch",
+      "pytest_targets": [
+        "tests/test_statuses.py::test_badge_color_contract_cases[returns-gray-for-unknown-statuses]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/ui.py"
+      ],
+      "expected_relevant_symbols": [
+        "status_to_color"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.ui.status_to_color"
+      ],
+      "test_context": "The failing test checks that it return gray for unknown statuses."
+    },
+    {
+      "task_id": "ab-contracts-100",
+      "task_type": "api_contract_mismatch",
+      "title": "Badge colors should return gray for unmapped statuses after trimming whitespace",
+      "problem_statement": "consumer_app.statuses is returning raw status text instead of using providerlib.ui.status_to_color. Fix the consumer so it return gray for unmapped statuses after trimming whitespace.",
+      "repo_a_name": "synthetic/consumer-app-100",
+      "repo_b_name": "synthetic/providerlib",
+      "repo_a_id": 910000100,
+      "repo_b_id": 900000001,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/ab-contracts-010.patch",
+      "gold_patch_path": "patches/gold/ab-contracts-010.patch",
+      "pytest_targets": [
+        "tests/test_statuses.py::test_badge_color_contract_cases[returns-gray-for-unmapped-statuses-after-trimming]"
+      ],
+      "expected_relevant_files": [
+        "providerlib/ui.py"
+      ],
+      "expected_relevant_symbols": [
+        "status_to_color"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "providerlib.ui.status_to_color"
+      ],
+      "test_context": "The failing test checks that it return gray for unmapped statuses after trimming whitespace."
+    }
+  ]
+}

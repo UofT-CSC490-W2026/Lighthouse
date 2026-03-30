@@ -20,10 +20,8 @@ from pydantic import AliasChoices
 from pydantic.fields import FieldInfo
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
 
+from .aws import prefer_explicit_aws_credentials
 
-# ---------------------------------------------------------------------------
-# Internal helpers
-# ---------------------------------------------------------------------------
 
 def _dedupe(values: list[str]) -> list[str]:
     """Return *values* without empty entries or duplicates, preserving order."""
@@ -61,6 +59,8 @@ def get_ssm_client(region_name: str | None = None) -> Any:
         raise RuntimeError(
             "boto3 must be installed to load settings from AWS SSM Parameter Store."
         ) from exc
+
+    prefer_explicit_aws_credentials()
 
     kwargs: dict[str, Any] = {}
     if region_name:
@@ -125,10 +125,6 @@ def _load_parameter_payload(
     return payload
 
 
-# ---------------------------------------------------------------------------
-# Pydantic settings source
-# ---------------------------------------------------------------------------
-
 class SSMSettingsSource(PydanticBaseSettingsSource):
     """Load settings defaults from a single JSON blob stored in AWS SSM.
 
@@ -174,10 +170,6 @@ class SSMSettingsSource(PydanticBaseSettingsSource):
 
         return data
 
-
-# ---------------------------------------------------------------------------
-# Convenience helper
-# ---------------------------------------------------------------------------
 
 def ssm_settings_sources(
     ssm_env_var: str,

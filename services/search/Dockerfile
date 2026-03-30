@@ -1,8 +1,11 @@
-FROM ghcr.io/astral-sh/uv:python3.11-bookworm-slim AS builder
+FROM python:3.11-slim-bookworm AS builder
 
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
 
 WORKDIR /app
+
+# Avoid relying on GHCR for the builder image, which can fail with 403 token errors.
+RUN python -m pip install --no-cache-dir uv
 
 # Install dependencies (cached layer — only re-runs when lockfile or pyproject changes)
 COPY pyproject.toml uv.lock ./

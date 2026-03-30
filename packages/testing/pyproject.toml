@@ -6,6 +6,7 @@ dependencies = [
   "db",
   "vectordb",
   "embedding",
+  "llm",
   "shared",
   "pytest>=9.0.2",
   "pytest-asyncio>=1.3.0",
@@ -16,6 +17,7 @@ dependencies = [
 db = { workspace = true }
 vectordb = { workspace = true }
 embedding = { workspace = true }
+llm = { workspace = true }
 shared = { workspace = true }
 
 [build-system]

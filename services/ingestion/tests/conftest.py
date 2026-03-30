@@ -28,6 +28,7 @@ def ingestion_settings(pg_dsn, milvus_uri, tmp_path) -> IngestionSettings:
         clone_base_dir=str(tmp_path),
         temporal_address="localhost:7233",
         temporal_task_queue="test-ingestion",
+        embedding_dimension=8,
     )
 
 

@@ -1,0 +1,9 @@
+diff --git a/consumer_app/progress.py b/consumer_app/progress.py
+--- a/consumer_app/progress.py
++++ b/consumer_app/progress.py
+@@ -4,4 +4,4 @@
+ 
+ def render_progress_badge(progress: float | int) -> str:
+     value = clamp_percentage(progress)
+-    return f"{value / 100:.2f}% complete"
++    return f"{value}% complete"

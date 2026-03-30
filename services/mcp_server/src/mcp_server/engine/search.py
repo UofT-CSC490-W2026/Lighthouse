@@ -7,13 +7,17 @@ from typing import TYPE_CHECKING, Annotated
 import httpx
 from fastapi import Body
 from pydantic import BaseModel, Field, ValidationError
-from shared.schemas.search import SearchRequest, SearchResult
+from shared.schemas.search import HybridRequest, SearchMethod, SearchResult
 
 from db import Repository
 from ..utilities import AuthenticatedUser, RequestError, get_logger, httproute, toolcall
 
 if TYPE_CHECKING:
     from .engine import Engine
+
+
+# Backward-compatible alias used by older tests and callers.
+SearchRequest = HybridRequest
 
 
 class SearchEngine:
@@ -85,7 +89,10 @@ class SearchEngine:
             async with httpx.AsyncClient(timeout=30.0, headers=headers) as client:
                 resp = await client.post(
                     f"{search_url}/search",
-                    json=search_request.model_dump(exclude_none=True),
+                    json=search_request.model_dump(
+                        exclude_none=True,
+                        exclude={"method", "context_source", "context_sources"},
+                    ),
                 )
                 resp.raise_for_status()
                 result = SearchResult.model_validate(resp.json())

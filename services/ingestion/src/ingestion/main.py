@@ -15,11 +15,26 @@ from shared.schemas.ingestion import (
     IndexRequest,
     IndexStatusResponse,
 )
+from shared.schemas.wiki import (
+    GenerateWikiAcceptedResponse,
+    GenerateWikiRequest,
+    WikiStatusResponse,
+)
 from temporalio.client import Client
 from temporalio.exceptions import WorkflowAlreadyStartedError
 
-from .temporal import IncrementalIndexWorkflow, IndexBranchWorkflow
-from .temporal.activities import IncrementalIndexInput, IndexBranchInput
+from .temporal import (
+    GenerateWikiWorkflow,
+    IncrementalIndexWorkflow,
+    IndexBranchWorkflow,
+)
+from .temporal.activities import (
+    GenerateWikiInput,
+    IncrementalIndexInput,
+    IndexBranchInput,
+)
+from .embedding import EmbeddingStrategy
+from .llm import LLMStrategy
 from .utilities import IngestionSettings
 from .utilities.services import RepositoryService
 
@@ -57,7 +72,56 @@ def _ensure_repository_record(
         db.close()
 
 
-@app.post("/index", response_model=IndexAcceptedResponse, dependencies=[Depends(verify_internal_token)])
+def _validate_wiki_generation_settings(settings: IngestionSettings) -> None:
+    llm_strategy_value = settings.resolved_llm_strategy()
+
+    try:
+        llm_strategy = LLMStrategy(llm_strategy_value)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported wiki LLM strategy: {llm_strategy_value!r}",
+        ) from exc
+
+    try:
+        embedding_strategy = EmbeddingStrategy(
+            settings.embedding_strategy.strip().lower()
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported wiki embedding strategy: {settings.embedding_strategy!r}",
+        ) from exc
+
+    if llm_strategy == LLMStrategy.OPENAI and not settings.openai_api_key.strip():
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Wiki generation is configured to use the OpenAI LLM provider, but "
+                "OPENAI_API_KEY is not set. Set LLM_STRATEGY=bedrock or provide "
+                "OPENAI_API_KEY."
+            ),
+        )
+
+    if (
+        embedding_strategy == EmbeddingStrategy.OPENAI
+        and not settings.openai_api_key.strip()
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Wiki generation is configured to use OpenAI embeddings, but "
+                "OPENAI_API_KEY is not set. Set EMBEDDING_STRATEGY=bedrock or provide "
+                "OPENAI_API_KEY."
+            ),
+        )
+
+
+@app.post(
+    "/index",
+    response_model=IndexAcceptedResponse,
+    dependencies=[Depends(verify_internal_token)],
+)
 async def index_repos(request: IndexRequest):
     """Kick off indexing workflows for the specified repository branches."""
     temporal: Client = app.state.temporal_client
@@ -85,6 +149,7 @@ async def index_repos(request: IndexRequest):
                         full_name=full_name,
                         branch=branch,
                         github_token=repo.github_token,
+                        embedding_strategy=settings.embedding_strategy,
                     ),
                     id=workflow_id,
                     task_queue=settings.temporal_task_queue,
@@ -162,6 +227,7 @@ async def github_webhook(request: Request):
             before_commit=before_commit,
             after_commit=after_commit,
             chunker_strategy=settings.chunker_strategy,
+            embedding_strategy=settings.embedding_strategy,
         ),
         id=workflow_id,
         task_queue=settings.temporal_task_queue,
@@ -171,7 +237,11 @@ async def github_webhook(request: Request):
     return {"status": "accepted", "workflow_id": workflow_id}
 
 
-@app.get("/status/{github_repo_id:int}", response_model=IndexStatusResponse, dependencies=[Depends(verify_internal_token)])
+@app.get(
+    "/status/{github_repo_id:int}",
+    response_model=IndexStatusResponse,
+    dependencies=[Depends(verify_internal_token)],
+)
 async def get_status(github_repo_id: int):
     """Return indexing status for all branches of a repository."""
     from db import DatabaseManager, IndexedBranch, Repository
@@ -182,9 +252,7 @@ async def get_status(github_repo_id: int):
 
     try:
         with db.connection_context():
-            repo = Repository.get_or_none(
-                Repository.github_repo_id == github_repo_id
-            )
+            repo = Repository.get_or_none(Repository.github_repo_id == github_repo_id)
             if repo is None:
                 raise HTTPException(
                     status_code=404,
@@ -206,6 +274,102 @@ async def get_status(github_repo_id: int):
 
             return IndexStatusResponse(
                 github_repo_id=github_repo_id, branches=branch_statuses
+            )
+    finally:
+        db.close()
+
+
+@app.post(
+    "/generate-wiki",
+    response_model=GenerateWikiAcceptedResponse,
+    dependencies=[Depends(verify_internal_token)],
+)
+async def generate_wiki(request: GenerateWikiRequest):
+    """Kick off wiki generation for an already-indexed repository."""
+    from db import DatabaseManager, Repository
+
+    settings: IngestionSettings = app.state.settings
+    temporal: Client = app.state.temporal_client
+    _validate_wiki_generation_settings(settings)
+
+    db = DatabaseManager(settings.postgres_dsn)
+    db.connect()
+    try:
+        with db.connection_context():
+            repo = Repository.get_or_none(
+                Repository.github_repo_id == request.github_repo_id
+            )
+            if repo is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Repository {request.github_repo_id} not found",
+                )
+
+        workflow_id = f"wiki-{request.github_repo_id}-{request.branch}"
+        await temporal.start_workflow(
+            GenerateWikiWorkflow.run,
+            GenerateWikiInput(
+                repository_id=repo.id,
+                github_repo_id=request.github_repo_id,
+                full_name=repo.full_name,
+                branch=request.branch,
+                llm_strategy=settings.resolved_llm_strategy(),
+                embedding_strategy=settings.embedding_strategy,
+            ),
+            id=workflow_id,
+            task_queue=settings.temporal_task_queue,
+        )
+        logger.info("Started wiki generation workflow %s", workflow_id)
+
+        return GenerateWikiAcceptedResponse(workflow_id=workflow_id)
+    finally:
+        db.close()
+
+
+@app.get(
+    "/wiki-status/{github_repo_id:int}",
+    response_model=WikiStatusResponse,
+    dependencies=[Depends(verify_internal_token)],
+)
+async def get_wiki_status(github_repo_id: int, branch: str = "main"):
+    """Return the latest wiki generation status for a repository."""
+    from db import DatabaseManager, Repository, WikiGeneration
+
+    settings: IngestionSettings = app.state.settings
+    db = DatabaseManager(settings.postgres_dsn)
+    db.connect()
+
+    try:
+        with db.connection_context():
+            repo = Repository.get_or_none(Repository.github_repo_id == github_repo_id)
+            if repo is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Repository {github_repo_id} not found",
+                )
+
+            generation = (
+                WikiGeneration.select()
+                .where(
+                    (WikiGeneration.repository == repo)
+                    & (WikiGeneration.branch == branch)
+                )
+                .order_by(WikiGeneration.created_at.desc())
+                .first()
+            )
+
+            if generation is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"No wiki generation found for {github_repo_id}/{branch}",
+                )
+
+            return WikiStatusResponse(
+                github_repo_id=github_repo_id,
+                branch=branch,
+                status=generation.status,
+                wiki_title=generation.wiki_title,
+                page_count=generation.page_count,
             )
     finally:
         db.close()

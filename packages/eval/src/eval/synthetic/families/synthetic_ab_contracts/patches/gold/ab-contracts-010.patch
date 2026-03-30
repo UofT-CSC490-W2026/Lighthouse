@@ -1,0 +1,9 @@
+diff --git a/consumer_app/statuses.py b/consumer_app/statuses.py
+--- a/consumer_app/statuses.py
++++ b/consumer_app/statuses.py
+@@ -4,4 +4,4 @@
+ 
+ 
+ def badge_color(status: str) -> str:
+-    return status.strip().lower()
++    return status_to_color(status)
