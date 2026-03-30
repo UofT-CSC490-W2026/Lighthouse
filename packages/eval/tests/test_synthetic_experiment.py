@@ -7,10 +7,8 @@ from pathlib import Path
 import pytest
 
 from eval.synthetic import PreparedSyntheticWorkspace
-from eval.synthetic.experiment import (
-    run_synthetic_experiment,
-    run_synthetic_experiment_suite,
-)
+from eval.synthetic import experiment as synthetic_experiment_module
+from eval.synthetic.experiment import run_synthetic_experiment, run_synthetic_experiment_suite
 from eval.synthetic.predictions import SyntheticPredictionRecord
 
 
@@ -279,3 +277,28 @@ def test_run_synthetic_experiment_suite_writes_score_table_and_reports(
     assert result.comparison_text_paths["ast"].is_file()
     assert result.comparison_text_paths["combined"].is_file()
     assert result.report_path.is_file()
+
+
+@pytest.mark.unit
+def test_build_patch_generator_routes_openai_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    observed: dict[str, object] = {}
+
+    class FakeOpenAI:
+        def __init__(self, **kwargs: object) -> None:
+            observed.update(kwargs)
+            self.model_name = str(kwargs["model_name"])
+
+        def generate_text(self, *, system: str, user: str) -> str:
+            _ = system, user
+            return ""
+
+    monkeypatch.setattr(synthetic_experiment_module, "OpenAIPatchGenerator", FakeOpenAI)
+    generator = synthetic_experiment_module._build_patch_generator(
+        model_name="openai/gpt-5.4",
+        region_name="us-east-1",
+        temperature=0.1,
+        max_tokens=2048,
+    )
+    assert generator.model_name == "openai/gpt-5.4"
+    assert observed["temperature"] == 0.1
+    assert observed["max_tokens"] == 2048
