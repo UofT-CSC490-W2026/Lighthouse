@@ -6,6 +6,7 @@ dependencies = [
   "boto3>=1.42.77",
   "datasets>=4.8.4",
   "httpx>=0.28.1",
+  "matplotlib>=3.10.0",
   "shared",
   "swebench>=4.1.0",
 ]

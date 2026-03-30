@@ -38,6 +38,19 @@ from eval.lighthouse import (
     DEFAULT_SEARCH_TOP_K,
     build_lighthouse_messages,
 )
+from eval.compare import (
+    compare_swebench_runs,
+    compute_swebench_pass_at_k,
+    render_swebench_comparison_tables,
+    render_swebench_pass_at_k_table,
+    render_swebench_score_table,
+)
+from eval.experiment import (
+    DEFAULT_SWEBENCH_EXPERIMENT_ARTIFACTS_ROOT,
+    DEFAULT_SWEBENCH_PREDICTIONS_ROOT,
+    run_swebench_experiment,
+    run_swebench_experiment_suite,
+)
 from eval.predictions import generate_baseline_predictions, generate_predictions
 from eval.summary import HarnessRunSummary, summarize_swebench_run
 from eval.synthetic import (
@@ -89,6 +102,37 @@ from eval.wiki import (
     build_wiki_lighthouse_messages,
     prepare_lighthouse_wiki,
 )
+
+
+def _add_swebench_slice_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--dataset-name",
+        default=DEFAULT_DATASET_NAME,
+        help="Hugging Face dataset name to load",
+    )
+    parser.add_argument(
+        "--split",
+        default=DEFAULT_SPLIT,
+        help="Dataset split to load",
+    )
+    parser.add_argument(
+        "--max-instances",
+        type=int,
+        default=None,
+        help="Load the first N instances in dataset order",
+    )
+    parser.add_argument(
+        "--instance-id",
+        action="append",
+        default=[],
+        help="Explicit SWE-bench instance id to include; may be repeated",
+    )
+    parser.add_argument(
+        "--repo",
+        action="append",
+        default=[],
+        help="Filter to SWE-bench tasks from this repository (e.g. django/django); may be repeated",
+    )
 
 
 def _add_synthetic_selection_arguments(parser: argparse.ArgumentParser) -> None:
@@ -185,55 +229,13 @@ def _build_parser() -> argparse.ArgumentParser:
         "show-slice",
         help="Load and print a SWE-bench slice",
     )
-    show_slice.add_argument(
-        "--dataset-name",
-        default=DEFAULT_DATASET_NAME,
-        help="Hugging Face dataset name to load",
-    )
-    show_slice.add_argument(
-        "--split",
-        default=DEFAULT_SPLIT,
-        help="Dataset split to load",
-    )
-    show_slice.add_argument(
-        "--max-instances",
-        type=int,
-        default=None,
-        help="Load the first N instances in dataset order",
-    )
-    show_slice.add_argument(
-        "--instance-id",
-        action="append",
-        default=[],
-        help="Explicit SWE-bench instance id to include; may be repeated",
-    )
+    _add_swebench_slice_arguments(show_slice)
 
     prepare_images = subparsers.add_parser(
         "prepare-images",
         help="Prepare SWE-bench Docker images for a selected slice",
     )
-    prepare_images.add_argument(
-        "--dataset-name",
-        default=DEFAULT_DATASET_NAME,
-        help="Hugging Face dataset name to load",
-    )
-    prepare_images.add_argument(
-        "--split",
-        default=DEFAULT_SPLIT,
-        help="Dataset split to load",
-    )
-    prepare_images.add_argument(
-        "--max-instances",
-        type=int,
-        default=None,
-        help="Prepare images for the first N instances in dataset order",
-    )
-    prepare_images.add_argument(
-        "--instance-id",
-        action="append",
-        default=[],
-        help="Explicit SWE-bench instance id to include; may be repeated",
-    )
+    _add_swebench_slice_arguments(prepare_images)
     prepare_images.add_argument(
         "--workdir",
         default=str(DEFAULT_HARNESS_WORKDIR),
@@ -250,28 +252,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "index-repos",
         help="Index the repositories referenced by a selected SWE-bench slice",
     )
-    index_repos.add_argument(
-        "--dataset-name",
-        default=DEFAULT_DATASET_NAME,
-        help="Hugging Face dataset name to load",
-    )
-    index_repos.add_argument(
-        "--split",
-        default=DEFAULT_SPLIT,
-        help="Dataset split to load",
-    )
-    index_repos.add_argument(
-        "--max-instances",
-        type=int,
-        default=None,
-        help="Index repositories for the first N instances in dataset order",
-    )
-    index_repos.add_argument(
-        "--instance-id",
-        action="append",
-        default=[],
-        help="Explicit SWE-bench instance id to include; may be repeated",
-    )
+    _add_swebench_slice_arguments(index_repos)
     index_repos.add_argument(
         "--ingestion-url",
         default=DEFAULT_INGESTION_URL,
@@ -346,28 +327,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "prepare-wiki",
         help="Generate Lighthouse wiki documentation for the repositories in a selected SWE-bench slice",
     )
-    prepare_wiki.add_argument(
-        "--dataset-name",
-        default=DEFAULT_DATASET_NAME,
-        help="Hugging Face dataset name to load",
-    )
-    prepare_wiki.add_argument(
-        "--split",
-        default=DEFAULT_SPLIT,
-        help="Dataset split to load",
-    )
-    prepare_wiki.add_argument(
-        "--max-instances",
-        type=int,
-        default=None,
-        help="Prepare wiki docs for the first N instances in dataset order",
-    )
-    prepare_wiki.add_argument(
-        "--instance-id",
-        action="append",
-        default=[],
-        help="Explicit SWE-bench instance id to include; may be repeated",
-    )
+    _add_swebench_slice_arguments(prepare_wiki)
     prepare_wiki.add_argument(
         "--ingestion-url",
         default=DEFAULT_WIKI_INGESTION_URL,
@@ -412,28 +372,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "generate-baseline",
         help="Generate baseline SWE-bench prediction JSONL with Bedrock",
     )
-    generate_baseline.add_argument(
-        "--dataset-name",
-        default=DEFAULT_DATASET_NAME,
-        help="Hugging Face dataset name to load",
-    )
-    generate_baseline.add_argument(
-        "--split",
-        default=DEFAULT_SPLIT,
-        help="Dataset split to load",
-    )
-    generate_baseline.add_argument(
-        "--max-instances",
-        type=int,
-        default=None,
-        help="Generate predictions for the first N instances in dataset order",
-    )
-    generate_baseline.add_argument(
-        "--instance-id",
-        action="append",
-        default=[],
-        help="Explicit SWE-bench instance id to include; may be repeated",
-    )
+    _add_swebench_slice_arguments(generate_baseline)
     generate_baseline.add_argument(
         "--model",
         default=DEFAULT_BASELINE_MODEL,
@@ -471,28 +410,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "generate-lighthouse",
         help="Generate SWE-bench prediction JSONL with Lighthouse retrieval context",
     )
-    generate_lighthouse.add_argument(
-        "--dataset-name",
-        default=DEFAULT_DATASET_NAME,
-        help="Hugging Face dataset name to load",
-    )
-    generate_lighthouse.add_argument(
-        "--split",
-        default=DEFAULT_SPLIT,
-        help="Dataset split to load",
-    )
-    generate_lighthouse.add_argument(
-        "--max-instances",
-        type=int,
-        default=None,
-        help="Generate predictions for the first N instances in dataset order",
-    )
-    generate_lighthouse.add_argument(
-        "--instance-id",
-        action="append",
-        default=[],
-        help="Explicit SWE-bench instance id to include; may be repeated",
-    )
+    _add_swebench_slice_arguments(generate_lighthouse)
     generate_lighthouse.add_argument(
         "--model",
         default=DEFAULT_BASELINE_MODEL,
@@ -563,28 +481,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "evaluate",
         help="Evaluate SWE-bench predictions with the official harness",
     )
-    evaluate.add_argument(
-        "--dataset-name",
-        default=DEFAULT_DATASET_NAME,
-        help="Hugging Face dataset name to load",
-    )
-    evaluate.add_argument(
-        "--split",
-        default=DEFAULT_SPLIT,
-        help="Dataset split to load",
-    )
-    evaluate.add_argument(
-        "--max-instances",
-        type=int,
-        default=None,
-        help="Evaluate the first N instances in dataset order",
-    )
-    evaluate.add_argument(
-        "--instance-id",
-        action="append",
-        default=[],
-        help="Explicit SWE-bench instance id to include; may be repeated",
-    )
+    _add_swebench_slice_arguments(evaluate)
     evaluate.add_argument(
         "--predictions",
         required=True,
@@ -637,6 +534,234 @@ def _build_parser() -> argparse.ArgumentParser:
         "--workdir",
         default=str(DEFAULT_HARNESS_WORKDIR),
         help="Working directory for SWE-bench harness artifacts and logs",
+    )
+
+    compare_swebench = subparsers.add_parser(
+        "compare-swebench",
+        help="Compare baseline and Lighthouse SWE-bench harness runs",
+    )
+    _add_swebench_slice_arguments(compare_swebench)
+    compare_swebench.add_argument(
+        "--baseline-predictions",
+        required=True,
+        help="Path to the baseline predictions .jsonl file",
+    )
+    compare_swebench.add_argument(
+        "--lighthouse-predictions",
+        required=True,
+        help="Path to the Lighthouse predictions .jsonl file",
+    )
+    compare_swebench.add_argument(
+        "--baseline-run-id",
+        required=True,
+        help="Baseline harness run identifier",
+    )
+    compare_swebench.add_argument(
+        "--lighthouse-run-id",
+        required=True,
+        help="Lighthouse harness run identifier",
+    )
+    compare_swebench.add_argument(
+        "--workdir",
+        default=str(DEFAULT_HARNESS_WORKDIR),
+        help="Working directory for SWE-bench harness artifacts and logs",
+    )
+    compare_swebench.add_argument(
+        "--baseline-label",
+        default="baseline",
+        help="Display label for the baseline run",
+    )
+    compare_swebench.add_argument(
+        "--lighthouse-label",
+        default="lighthouse",
+        help="Display label for the Lighthouse run",
+    )
+
+    pass_at_k_swebench = subparsers.add_parser(
+        "pass-at-k-swebench",
+        help="Compute pass@k metrics across multiple SWE-bench harness runs",
+    )
+    _add_swebench_slice_arguments(pass_at_k_swebench)
+    pass_at_k_swebench.add_argument(
+        "--predictions",
+        action="append",
+        required=True,
+        default=[],
+        help="Path to a predictions .jsonl file; may be repeated",
+    )
+    pass_at_k_swebench.add_argument(
+        "--run-id",
+        action="append",
+        required=True,
+        default=[],
+        help="Harness run identifier corresponding to --predictions; may be repeated",
+    )
+    pass_at_k_swebench.add_argument(
+        "--k",
+        action="append",
+        type=int,
+        required=True,
+        default=[],
+        help="pass@k value to compute; may be repeated",
+    )
+    pass_at_k_swebench.add_argument(
+        "--workdir",
+        default=str(DEFAULT_HARNESS_WORKDIR),
+        help="Working directory for SWE-bench harness artifacts and logs",
+    )
+
+    run_swebench_experiment_cmd = subparsers.add_parser(
+        "run-swebench-experiment",
+        help="Run a full SWE-bench experiment: load, index, generate, evaluate, compare",
+    )
+    _add_swebench_slice_arguments(run_swebench_experiment_cmd)
+    run_swebench_experiment_cmd.add_argument(
+        "--run-prefix",
+        required=True,
+        help="Prefix for run ids and artifact filenames",
+    )
+    run_swebench_experiment_cmd.add_argument(
+        "--context-source",
+        choices=["code", "wiki", "all"],
+        default="code",
+        help="Lighthouse retrieval source; 'all' runs both code and wiki",
+    )
+    run_swebench_experiment_cmd.add_argument(
+        "--predictions-root",
+        default=str(DEFAULT_SWEBENCH_PREDICTIONS_ROOT),
+        help="Directory for generated prediction JSONL files",
+    )
+    run_swebench_experiment_cmd.add_argument(
+        "--artifacts-root",
+        default=str(DEFAULT_SWEBENCH_EXPERIMENT_ARTIFACTS_ROOT),
+        help="Directory for experiment artifacts (tables, reports)",
+    )
+    run_swebench_experiment_cmd.add_argument(
+        "--workdir",
+        default=str(DEFAULT_HARNESS_WORKDIR),
+        help="Working directory for SWE-bench harness artifacts and logs",
+    )
+    run_swebench_experiment_cmd.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Overwrite existing prediction files",
+    )
+    run_swebench_experiment_cmd.add_argument(
+        "--skip-image-prep",
+        action="store_true",
+        help="Skip Docker image preparation",
+    )
+    run_swebench_experiment_cmd.add_argument(
+        "--skip-index",
+        action="store_true",
+        help="Skip repository indexing",
+    )
+    run_swebench_experiment_cmd.add_argument(
+        "--skip-wiki-preparation",
+        action="store_true",
+        help="Skip wiki documentation generation",
+    )
+    run_swebench_experiment_cmd.add_argument(
+        "--ingestion-url",
+        default=DEFAULT_INGESTION_URL,
+        help="Base URL for the Lighthouse ingestion service",
+    )
+    run_swebench_experiment_cmd.add_argument(
+        "--search-url",
+        default=DEFAULT_SEARCH_SERVICE_URL,
+        help="Base URL for the Lighthouse search service",
+    )
+    run_swebench_experiment_cmd.add_argument(
+        "--top-k",
+        type=int,
+        default=DEFAULT_SEARCH_TOP_K,
+        help="Number of Lighthouse snippets to request per task",
+    )
+    run_swebench_experiment_cmd.add_argument(
+        "--model",
+        default=DEFAULT_BASELINE_MODEL,
+        help="Bedrock model in the form bedrock/<model-id>",
+    )
+    run_swebench_experiment_cmd.add_argument(
+        "--region-name",
+        default=DEFAULT_BASELINE_REGION,
+        help="AWS region for Bedrock generation",
+    )
+    run_swebench_experiment_cmd.add_argument(
+        "--temperature",
+        type=float,
+        default=DEFAULT_TEMPERATURE,
+        help="Sampling temperature for Bedrock generation",
+    )
+    run_swebench_experiment_cmd.add_argument(
+        "--max-tokens",
+        type=int,
+        default=DEFAULT_MAX_TOKENS,
+        help="Maximum response tokens for Bedrock generation",
+    )
+    run_swebench_experiment_cmd.add_argument(
+        "--max-workers",
+        type=int,
+        default=1,
+        help="Maximum parallel harness workers",
+    )
+    run_swebench_experiment_cmd.add_argument(
+        "--timeout-seconds",
+        type=int,
+        default=DEFAULT_RUN_TIMEOUT_SECONDS,
+        help="Per-instance test timeout in seconds",
+    )
+    run_swebench_experiment_cmd.add_argument(
+        "--cache-level",
+        default=DEFAULT_CACHE_LEVEL,
+        choices=["none", "base", "env", "instance"],
+        help="Harness image cache level",
+    )
+    run_swebench_experiment_cmd.add_argument(
+        "--github-token",
+        default=None,
+        help="Optional GitHub token for metadata lookup and ingestion",
+    )
+    run_swebench_experiment_cmd.add_argument(
+        "--repo-registry",
+        default=None,
+        help="Path to a JSON file mapping owner/repo to github_repo_id and branch",
+    )
+    run_swebench_experiment_cmd.add_argument(
+        "--status-poll-interval",
+        type=float,
+        default=DEFAULT_STATUS_POLL_INTERVAL_SECONDS,
+        help="Seconds between ingestion status polls",
+    )
+    run_swebench_experiment_cmd.add_argument(
+        "--progress-heartbeat-seconds",
+        type=float,
+        default=DEFAULT_PROGRESS_HEARTBEAT_SECONDS,
+        help="Seconds between 'still waiting' progress heartbeat lines",
+    )
+    run_swebench_experiment_cmd.add_argument(
+        "--status-timeout-seconds",
+        type=float,
+        default=DEFAULT_STATUS_TIMEOUT_SECONDS,
+        help="Maximum total wait time for indexing completion",
+    )
+    run_swebench_experiment_cmd.add_argument(
+        "--wiki-poll-interval",
+        type=float,
+        default=DEFAULT_WIKI_POLL_INTERVAL_SECONDS,
+        help="Seconds between wiki status polls",
+    )
+    run_swebench_experiment_cmd.add_argument(
+        "--wiki-progress-heartbeat-seconds",
+        type=float,
+        default=DEFAULT_WIKI_PROGRESS_HEARTBEAT_SECONDS,
+        help="Seconds between wiki preparation heartbeat lines",
+    )
+    run_swebench_experiment_cmd.add_argument(
+        "--wiki-timeout-seconds",
+        type=float,
+        default=DEFAULT_WIKI_TIMEOUT_SECONDS,
+        help="Maximum total wait time for wiki generation",
     )
 
     show_synthetic = subparsers.add_parser(
@@ -1085,6 +1210,7 @@ def _cmd_show_slice(args: argparse.Namespace) -> int:
         split=args.split,
         max_instances=args.max_instances,
         instance_ids=args.instance_id,
+        repos=args.repo,
     )
 
     _print_slice(tasks, args.dataset_name, args.split)
@@ -1101,6 +1227,7 @@ def _cmd_prepare_images(args: argparse.Namespace) -> int:
         split=args.split,
         max_instances=args.max_instances,
         instance_ids=args.instance_id,
+        repos=args.repo,
     )
 
     _print_slice(tasks, args.dataset_name, args.split)
@@ -1129,6 +1256,7 @@ def _cmd_index_repos(args: argparse.Namespace) -> int:
         split=args.split,
         max_instances=args.max_instances,
         instance_ids=args.instance_id,
+        repos=args.repo,
     )
 
     _print_slice(tasks, args.dataset_name, args.split)
@@ -1173,6 +1301,7 @@ def _cmd_prepare_wiki(args: argparse.Namespace) -> int:
         split=args.split,
         max_instances=args.max_instances,
         instance_ids=args.instance_id,
+        repos=args.repo,
     )
 
     _print_slice(tasks, args.dataset_name, args.split)
@@ -1209,6 +1338,7 @@ def _cmd_generate_baseline(args: argparse.Namespace) -> int:
         split=args.split,
         max_instances=args.max_instances,
         instance_ids=args.instance_id,
+        repos=args.repo,
     )
 
     output_path = Path(args.output)
@@ -1251,6 +1381,7 @@ def _cmd_generate_lighthouse(args: argparse.Namespace) -> int:
         split=args.split,
         max_instances=args.max_instances,
         instance_ids=args.instance_id,
+        repos=args.repo,
     )
 
     output_path = Path(args.output)
@@ -1311,6 +1442,7 @@ def _cmd_evaluate(args: argparse.Namespace) -> int:
         split=args.split,
         max_instances=args.max_instances,
         instance_ids=args.instance_id,
+        repos=args.repo,
     )
 
     _print_slice(tasks, args.dataset_name, args.split)
@@ -1337,6 +1469,164 @@ def _cmd_summarize(args: argparse.Namespace) -> int:
         workdir=Path(args.workdir),
     )
     _print_run_summary(summary)
+    return 0
+
+
+def _cmd_compare_swebench(args: argparse.Namespace) -> int:
+    _validate_slice_selection(args)
+
+    tasks = load_swebench_slice(
+        dataset_name=args.dataset_name,
+        split=args.split,
+        max_instances=args.max_instances,
+        instance_ids=args.instance_id,
+        repos=args.repo,
+    )
+    task_repo_map = {t.instance_id: t.repo for t in tasks}
+
+    baseline_summary = summarize_swebench_run(
+        predictions_path=Path(args.baseline_predictions),
+        run_id=args.baseline_run_id,
+        workdir=Path(args.workdir),
+    )
+    lighthouse_summary = summarize_swebench_run(
+        predictions_path=Path(args.lighthouse_predictions),
+        run_id=args.lighthouse_run_id,
+        workdir=Path(args.workdir),
+    )
+
+    comparison = compare_swebench_runs(
+        baseline=baseline_summary,
+        lighthouse=lighthouse_summary,
+        baseline_run_id=args.baseline_run_id,
+        lighthouse_run_id=args.lighthouse_run_id,
+        task_repo_map=task_repo_map,
+        baseline_label=args.baseline_label,
+        lighthouse_label=args.lighthouse_label,
+    )
+    print(render_swebench_comparison_tables(comparison))
+    return 0
+
+
+def _cmd_pass_at_k_swebench(args: argparse.Namespace) -> int:
+    _validate_slice_selection(args)
+
+    if len(args.predictions) != len(args.run_id):
+        raise ValueError(
+            "--predictions and --run-id must be provided the same number of times."
+        )
+
+    tasks = load_swebench_slice(
+        dataset_name=args.dataset_name,
+        split=args.split,
+        max_instances=args.max_instances,
+        instance_ids=args.instance_id,
+        repos=args.repo,
+    )
+    task_repo_map = {t.instance_id: t.repo for t in tasks}
+
+    run_summaries = []
+    for predictions_path, run_id in zip(args.predictions, args.run_id):
+        summary = summarize_swebench_run(
+            predictions_path=Path(predictions_path),
+            run_id=run_id,
+            workdir=Path(args.workdir),
+        )
+        run_summaries.append((summary, run_id))
+
+    result = compute_swebench_pass_at_k(
+        run_summaries=run_summaries,
+        k_values=args.k,
+        task_repo_map=task_repo_map,
+    )
+    print(render_swebench_pass_at_k_table(result))
+    return 0
+
+
+def _cmd_run_swebench_experiment(args: argparse.Namespace) -> int:
+    _validate_slice_selection(args)
+
+    context_source = args.context_source
+    registry_path = Path(args.repo_registry) if args.repo_registry else None
+
+    if context_source == "all":
+        result = run_swebench_experiment_suite(
+            dataset_name=args.dataset_name,
+            split=args.split,
+            max_instances=args.max_instances,
+            instance_ids=args.instance_id or None,
+            repos=args.repo or None,
+            run_prefix=args.run_prefix,
+            predictions_root=Path(args.predictions_root),
+            artifacts_root=Path(args.artifacts_root),
+            workdir=Path(args.workdir),
+            overwrite=args.overwrite,
+            skip_image_prep=args.skip_image_prep,
+            skip_index=args.skip_index,
+            skip_wiki_preparation=args.skip_wiki_preparation,
+            ingestion_url=args.ingestion_url,
+            search_service_url=args.search_url,
+            top_k=args.top_k,
+            github_token=args.github_token,
+            index_poll_interval_seconds=args.status_poll_interval,
+            index_progress_heartbeat_seconds=args.progress_heartbeat_seconds,
+            index_timeout_seconds=args.status_timeout_seconds,
+            wiki_poll_interval_seconds=args.wiki_poll_interval,
+            wiki_progress_heartbeat_seconds=args.wiki_progress_heartbeat_seconds,
+            wiki_timeout_seconds=args.wiki_timeout_seconds,
+            model_name=args.model,
+            region_name=args.region_name,
+            temperature=args.temperature,
+            max_tokens=args.max_tokens,
+            max_workers=args.max_workers,
+            timeout_seconds=args.timeout_seconds,
+            cache_level=args.cache_level,
+            repo_registry_path=registry_path,
+        )
+        print(f"Score table: {result.score_text_path}")
+        print(f"Report: {result.report_path}")
+        print("")
+        print(render_swebench_score_table(result.score_rows))
+    else:
+        result = run_swebench_experiment(
+            dataset_name=args.dataset_name,
+            split=args.split,
+            max_instances=args.max_instances,
+            instance_ids=args.instance_id or None,
+            repos=args.repo or None,
+            run_prefix=args.run_prefix,
+            predictions_root=Path(args.predictions_root),
+            artifacts_root=Path(args.artifacts_root),
+            workdir=Path(args.workdir),
+            overwrite=args.overwrite,
+            skip_image_prep=args.skip_image_prep,
+            skip_index=args.skip_index,
+            skip_wiki_preparation=args.skip_wiki_preparation,
+            ingestion_url=args.ingestion_url,
+            search_service_url=args.search_url,
+            context_source=context_source,
+            top_k=args.top_k,
+            github_token=args.github_token,
+            index_poll_interval_seconds=args.status_poll_interval,
+            index_progress_heartbeat_seconds=args.progress_heartbeat_seconds,
+            index_timeout_seconds=args.status_timeout_seconds,
+            wiki_poll_interval_seconds=args.wiki_poll_interval,
+            wiki_progress_heartbeat_seconds=args.wiki_progress_heartbeat_seconds,
+            wiki_timeout_seconds=args.wiki_timeout_seconds,
+            model_name=args.model,
+            region_name=args.region_name,
+            temperature=args.temperature,
+            max_tokens=args.max_tokens,
+            max_workers=args.max_workers,
+            timeout_seconds=args.timeout_seconds,
+            cache_level=args.cache_level,
+            repo_registry_path=registry_path,
+        )
+        print(f"Comparison: {result.comparison_text_path}")
+        print(f"Report: {result.report_path}")
+        print("")
+        print(render_swebench_comparison_tables(result.comparison))
+
     return 0
 
 
@@ -1878,6 +2168,12 @@ def main() -> int:
         return _cmd_evaluate_synthetic(args)
     if args.command == "summarize":
         return _cmd_summarize(args)
+    if args.command == "compare-swebench":
+        return _cmd_compare_swebench(args)
+    if args.command == "pass-at-k-swebench":
+        return _cmd_pass_at_k_swebench(args)
+    if args.command == "run-swebench-experiment":
+        return _cmd_run_swebench_experiment(args)
     if args.command == "summarize-synthetic":
         return _cmd_summarize_synthetic(args)
     if args.command == "compare-synthetic":

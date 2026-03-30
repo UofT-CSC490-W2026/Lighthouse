@@ -25,10 +25,17 @@ def load_swebench_slice(
     split: str = DEFAULT_SPLIT,
     max_instances: int | None = None,
     instance_ids: list[str] | None = None,
+    repos: list[str] | None = None,
 ) -> list[SWEBenchTask]:
     from datasets import load_dataset
 
     requested_ids = [value.strip() for value in (instance_ids or []) if value.strip()]
+    normalized_repos: set[str] | None = None
+    if repos:
+        normalized_repos = {r.strip().lower() for r in repos if r.strip()}
+        if not normalized_repos:
+            normalized_repos = None
+
     dataset = load_dataset(dataset_name, split=split)
 
     if requested_ids:
@@ -46,16 +53,33 @@ def load_swebench_slice(
             missing_display = ", ".join(missing)
             raise ValueError(f"Unknown SWE-bench instance id(s): {missing_display}")
 
-        return [_row_to_task(rows_by_id[instance_id]) for instance_id in requested_ids]
+        tasks = [_row_to_task(rows_by_id[instance_id]) for instance_id in requested_ids]
+        if normalized_repos:
+            tasks = [t for t in tasks if t.repo.lower() in normalized_repos]
+        if not tasks and normalized_repos:
+            repos_display = ", ".join(sorted(normalized_repos))
+            raise ValueError(
+                f"No SWE-bench tasks matched the requested repos: {repos_display}"
+            )
+        return tasks
 
     tasks: list[SWEBenchTask] = []
     for row in dataset:
         typed_row = _as_dataset_row(row)
         if typed_row is None:
             continue
-        tasks.append(_row_to_task(typed_row))
+        task = _row_to_task(typed_row)
+        if normalized_repos and task.repo.lower() not in normalized_repos:
+            continue
+        tasks.append(task)
         if max_instances is not None and len(tasks) >= max_instances:
             break
+
+    if not tasks and normalized_repos:
+        repos_display = ", ".join(sorted(normalized_repos))
+        raise ValueError(
+            f"No SWE-bench tasks matched the requested repos: {repos_display}"
+        )
     return tasks
 
 
