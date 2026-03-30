@@ -1,7 +1,7 @@
 # Lighthouse
 
 <!-- coverage:start -->
-![Test Coverage](https://img.shields.io/badge/test%20coverage-100.00%25-brightgreen)
+![Test Coverage](https://img.shields.io/badge/test%20coverage-99.52%25-brightgreen)
 <!-- coverage:end -->
 
 Better context for coding agents.
