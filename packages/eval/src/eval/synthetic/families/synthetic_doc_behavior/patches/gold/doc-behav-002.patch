@@ -1,11 +1,13 @@
 diff --git a/consumer_app/formatting.py b/consumer_app/formatting.py
 --- a/consumer_app/formatting.py
 +++ b/consumer_app/formatting.py
-@@ -10,10 +10,7 @@
+@@ -10,12 +10,7 @@
  
  def preview_text(body: str, max_words: int = 20) -> str:
      """Return a preview snippet of the article body."""
 -    words = body.split()
+-    if max_words <= 0:
+-        return body
 -    if len(words) <= max_words:
 -        return body
 -    return " ".join(words[:max_words]) + "..."

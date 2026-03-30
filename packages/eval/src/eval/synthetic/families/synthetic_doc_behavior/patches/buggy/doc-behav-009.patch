@@ -1,7 +1,7 @@
 diff --git a/consumer_app/reporting.py b/consumer_app/reporting.py
 --- a/consumer_app/reporting.py
 +++ b/consumer_app/reporting.py
-@@ -25,4 +25,10 @@
+@@ -23,4 +23,10 @@
  
  def next_review_date(start: date, business_days: int) -> date:
      """Compute the next review date by adding business days."""
