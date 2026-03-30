@@ -22,6 +22,10 @@ class SyntheticPredictionRecord:
     context_source: str
     model_patch: str
     full_output: str
+    generation_input_tokens: int | None = None
+    generation_output_tokens: int | None = None
+    generation_total_tokens: int | None = None
+    generation_latency_ms: float | None = None
 
 
 SyntheticPromptBuilder = Callable[[PreparedSyntheticTask], str]
@@ -75,10 +79,11 @@ def generate_synthetic_predictions(
             for index, prepared in enumerate(tasks, start=1):
                 task = prepared.task
                 print(f"[{index}/{len(tasks)}] {progress_label} {task.task_id}")
-                raw_output = generator.generate_text(
+                generation = generator.generate(
                     system=system_message,
                     user=build_user_message(prepared),
                 )
+                raw_output = generation.text
                 model_patch = extract_model_patch(raw_output)
 
                 record = SyntheticPredictionRecord(
@@ -88,6 +93,10 @@ def generate_synthetic_predictions(
                     context_source=context_source,
                     model_patch=model_patch,
                     full_output=raw_output,
+                    generation_input_tokens=generation.input_tokens,
+                    generation_output_tokens=generation.output_tokens,
+                    generation_total_tokens=generation.total_tokens,
+                    generation_latency_ms=generation.latency_ms,
                 )
                 handle.write(json.dumps(asdict(record)))
                 handle.write("\n")
@@ -121,6 +130,10 @@ def load_synthetic_predictions(path: Path) -> dict[str, SyntheticPredictionRecor
             context_source=str(raw_record.get("context_source", "")).strip(),
             model_patch=str(raw_record.get("model_patch", "")),
             full_output=str(raw_record.get("full_output", "")),
+            generation_input_tokens=_optional_int(raw_record.get("generation_input_tokens")),
+            generation_output_tokens=_optional_int(raw_record.get("generation_output_tokens")),
+            generation_total_tokens=_optional_int(raw_record.get("generation_total_tokens")),
+            generation_latency_ms=_optional_float(raw_record.get("generation_latency_ms")),
         )
         if not record.task_id:
             raise ValueError(f"Synthetic prediction on line {line_number} is missing task_id.")
@@ -128,3 +141,25 @@ def load_synthetic_predictions(path: Path) -> dict[str, SyntheticPredictionRecor
     if not predictions:
         raise ValueError(f"Synthetic predictions file is empty: {path}")
     return predictions
+
+
+def _optional_int(value: object) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.strip():
+        return int(value)
+    return None
+
+
+def _optional_float(value: object) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str) and value.strip():
+        return float(value)
+    return None

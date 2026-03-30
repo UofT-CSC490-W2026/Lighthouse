@@ -1873,6 +1873,8 @@ def _cmd_run_synthetic_matrix(args: argparse.Namespace) -> int:
     )
     print(f"Matrix rows JSON: {result.rows_json_path.resolve()}")
     print(f"Matrix rows table: {result.rows_markdown_path.resolve()}")
+    print(f"Matrix efficiency JSON: {result.efficiency_json_path.resolve()}")
+    print(f"Matrix efficiency table: {result.efficiency_text_path.resolve()}")
     if result.heatmap_paths:
         print("Heatmaps:")
         for path in result.heatmap_paths:

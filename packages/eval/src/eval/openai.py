@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 import os
+from time import perf_counter
 from typing import Any, cast
 
 import httpx
+from eval.generator import GenerationResult
 
 DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1"
 
@@ -45,7 +47,8 @@ class OpenAIPatchGenerator:
             },
         )
 
-    def generate_text(self, *, system: str, user: str) -> str:
+    def generate(self, *, system: str, user: str) -> GenerationResult:
+        started = perf_counter()
         response = self._client.post(
             "/chat/completions",
             json={
@@ -60,7 +63,24 @@ class OpenAIPatchGenerator:
         )
         response.raise_for_status()
         payload = response.json()
-        return _extract_text(payload)
+        text = _extract_text(payload)
+        usage = payload.get("usage", {})
+        if not isinstance(usage, Mapping):
+            usage = {}
+        input_tokens = int(usage.get("prompt_tokens", 0) or 0)
+        output_tokens = int(usage.get("completion_tokens", 0) or 0)
+        total_tokens = int(usage.get("total_tokens", input_tokens + output_tokens) or 0)
+        latency_ms = (perf_counter() - started) * 1000.0
+        return GenerationResult(
+            text=text,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            total_tokens=total_tokens,
+            latency_ms=latency_ms,
+        )
+
+    def generate_text(self, *, system: str, user: str) -> str:
+        return self.generate(system=system, user=user).text
 
 
 def _extract_text(payload: Mapping[str, object]) -> str:

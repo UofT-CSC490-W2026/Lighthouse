@@ -69,6 +69,11 @@ def test_run_synthetic_matrix_dry_run_writes_plan_artifacts(tmp_path: Path) -> N
     )
     assert result.rows_json_path.is_file()
     assert result.rows_markdown_path.is_file()
+    assert result.efficiency_json_path.is_file()
+    assert result.efficiency_text_path.is_file()
+    rows_text = result.rows_markdown_path.read_text(encoding="utf-8")
+    assert "Scores and Pass@k" in rows_text
+    assert "Efficiency" in rows_text
     assert result.heatmap_paths == ()
     assert len(result.cell_results) == 1
     assert len(result.cell_results[0].run_ids) == 2
@@ -111,6 +116,13 @@ def test_run_synthetic_matrix_collects_pass_at_k_and_score(
                 resolved_instances=resolved,
             ),
             baseline_summary=SimpleNamespace(run_id=f"run-{run_counter['count']}-baseline"),
+            lighthouse_efficiency=SimpleNamespace(
+                total_duration_seconds=3.0,
+                generation=SimpleNamespace(
+                    total_tokens=400,
+                    estimated_cost_usd=0.012,
+                ),
+            ),
         )
 
     def fake_compute_pass_at_k(**kwargs: object):
@@ -140,3 +152,6 @@ def test_run_synthetic_matrix_collects_pass_at_k_and_score(
     assert dict(cell.pass_at_k)[2] == pytest.approx(1.0)
     assert cell.pass_at_k_table_path is not None
     assert cell.pass_at_k_table_path.is_file()
+    assert cell.mean_total_duration_seconds == pytest.approx(3.0)
+    assert cell.mean_generation_total_tokens == pytest.approx(400.0)
+    assert cell.mean_generation_cost_usd == pytest.approx(0.012)
