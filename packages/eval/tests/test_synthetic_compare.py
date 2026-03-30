@@ -231,7 +231,7 @@ def test_list_synthetic_run_ids_discovers_summary_directories(tmp_path) -> None:
 
 
 @pytest.mark.unit
-def test_render_synthetic_score_table_includes_baseline_code_wiki_ast_and_combined_rows(
+def test_render_synthetic_score_table_includes_baseline_code_wiki_ast_combined_and_grep_rows(
     tmp_path,
 ) -> None:
     runs_root = tmp_path / "runs"
@@ -315,6 +315,22 @@ def test_render_synthetic_score_table_includes_baseline_code_wiki_ast_and_combin
             "results": [],
         },
     )
+    _write_summary(
+        runs_root / "grep" / "summary.json",
+        {
+            "family_name": "synthetic-ab-contracts",
+            "family_version": "1",
+            "run_id": "grep",
+            "run_dir": str((runs_root / "grep").resolve()),
+            "predictions_path": "grep.jsonl",
+            "total_tasks": 10,
+            "resolved_tasks": 5,
+            "unresolved_tasks": 5,
+            "patch_apply_failures": 0,
+            "error_tasks": 5,
+            "results": [],
+        },
+    )
 
     baseline = compare_synthetic_runs(
         baseline_run_id="baseline",
@@ -341,6 +357,11 @@ def test_render_synthetic_score_table_includes_baseline_code_wiki_ast_and_combin
         lighthouse_run_id="combined",
         runs_root=runs_root,
     ).lighthouse
+    grep = compare_synthetic_runs(
+        baseline_run_id="baseline",
+        lighthouse_run_id="grep",
+        runs_root=runs_root,
+    ).lighthouse
 
     rows = build_synthetic_score_rows(
         baseline=baseline,
@@ -349,6 +370,7 @@ def test_render_synthetic_score_table_includes_baseline_code_wiki_ast_and_combin
             "wiki": wiki,
             "ast": ast,
             "combined": combined,
+            "grep": grep,
         },
     )
     text = render_synthetic_score_table(rows)
@@ -359,11 +381,13 @@ def test_render_synthetic_score_table_includes_baseline_code_wiki_ast_and_combin
     assert "wiki" in text
     assert "ast" in text
     assert "combined" in text
+    assert "grep" in text
     assert "20.0%" in text
     assert "80.0%" in text
     assert "70.0%" in text
     assert "60.0%" in text
     assert "90.0%" in text
+    assert "50.0%" in text
 
 
 @pytest.mark.unit
