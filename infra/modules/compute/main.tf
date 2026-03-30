@@ -661,11 +661,17 @@ locals {
     set -euxo pipefail
 
     dnf update -y
-    dnf install -y docker docker-compose-plugin
+    dnf install -y docker curl
     systemctl enable amazon-ssm-agent
     systemctl start amazon-ssm-agent
     systemctl enable docker
     systemctl start docker
+
+    mkdir -p /usr/local/libexec/docker/cli-plugins
+    curl -SL "https://github.com/docker/compose/releases/download/v2.29.7/docker-compose-linux-x86_64" \
+      -o /usr/local/libexec/docker/cli-plugins/docker-compose
+    chmod +x /usr/local/libexec/docker/cli-plugins/docker-compose
+    docker compose version
 
     mkdir -p /opt/milvus
     cat >/opt/milvus/docker-compose.yml <<'YML'
