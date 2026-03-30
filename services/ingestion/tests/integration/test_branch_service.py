@@ -74,3 +74,16 @@ class TestBranchService:
         svc = BranchService(db_manager)
         result = svc.get_github_token(repo.id, "nonexistent")
         assert result is None
+
+    def test_stale_failed_update_does_not_overwrite_newer_target(self, db_manager):
+        """When status=failed but latest_commit != target_commit, preserve existing status."""
+        repo = create_repository(db_manager)
+        svc = BranchService(db_manager)
+        # Set target_commit to "new123"
+        svc.update_status(repo.id, "main", "indexing", target_commit="new123")
+        # Fail with an old commit — should not update status
+        result = svc.update_status(repo.id, "main", "failed", latest_commit="old_commit")
+        with db_manager.connection_context():
+            ib = IndexedBranch.get(IndexedBranch.repository == repo.id)
+            assert result == "indexing"
+            assert ib.status == "indexing"

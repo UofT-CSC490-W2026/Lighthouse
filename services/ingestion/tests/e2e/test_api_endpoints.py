@@ -212,7 +212,11 @@ class TestIngestionEndpoints:
             "ref": "refs/heads/main",
             "before": "aaa",
             "after": "bbb",
-            "repository": {"id": 123, "full_name": "owner/repo"},
+            "repository": {
+                "id": 123,
+                "full_name": "owner/repo",
+                "clone_url": "https://github.com/owner/repo",
+            },
         }
         body = json.dumps(payload).encode()
         sig = (
@@ -252,7 +256,11 @@ class TestIngestionEndpoints:
             "ref": "refs/heads/main",
             "before": "aaa",
             "after": "bbb",
-            "repository": {"id": 123, "full_name": "owner/repo"},
+            "repository": {
+                "id": 123,
+                "full_name": "owner/repo",
+                "clone_url": "https://github.com/owner/repo",
+            },
         }
         body = json.dumps(payload).encode()
         sig = (

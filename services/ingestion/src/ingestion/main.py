@@ -47,9 +47,25 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     settings = IngestionSettings()
     app.state.settings = settings
-    logger.info(f"Currently using {settings.chunker_strategy} chunking strategy.")
-    app.state.temporal_client = await Client.connect(settings.temporal_address)
-    logger.info("Connected to Temporal at %s", settings.temporal_address)
+    logger.info(
+        "Ingestion startup: temporal=%s namespace=%s task_queue=%s postgres_configured=%s milvus_uri=%s",
+        settings.temporal_address,
+        settings.resolved_temporal_namespace(),
+        getattr(settings, "temporal_task_queue", "<unknown>"),
+        bool(settings.postgres_dsn.strip()),
+        settings.milvus_uri,
+    )
+    logger.info("Currently using %s chunking strategy.", settings.chunker_strategy)
+    logger.info("Ingestion startup: connecting to Temporal")
+    app.state.temporal_client = await Client.connect(
+        settings.temporal_address,
+        **settings.temporal_connect_kwargs(),
+    )
+    logger.info(
+        "Connected to Temporal at %s in namespace %s",
+        settings.temporal_address,
+        settings.resolved_temporal_namespace(),
+    )
     yield
 
 
@@ -156,6 +172,7 @@ async def index_repos(request: IndexRequest):
                         or settings.chunker_strategy,
                         embedding_strategy=embedding_strategy,
                         embedding_model=embedding_model,
+                        llm_strategy=settings.resolved_llm_strategy(),
                     ),
                     id=workflow_id,
                     task_queue=settings.temporal_task_queue,
@@ -214,10 +231,11 @@ async def github_webhook(request: Request):
     repo_data = payload.get("repository", {})
     github_repo_id = repo_data.get("id")
     full_name = repo_data.get("full_name", "").lower()
+    repo_url = repo_data.get("clone_url", "")
     before_commit = payload.get("before", "")
     after_commit = payload.get("after", "")
 
-    if not github_repo_id or not full_name or not before_commit or not after_commit:
+    if not github_repo_id or not full_name or not repo_url or not before_commit or not after_commit:
         raise HTTPException(status_code=400, detail="Missing required webhook fields")
 
     # Start incremental indexing workflow
@@ -229,8 +247,10 @@ async def github_webhook(request: Request):
         branch=branch,
         before_commit=before_commit,
         after_commit=after_commit,
+        repo_url=repo_url,
         chunker_strategy=settings.chunker_strategy,
         embedding_strategy=settings.embedding_strategy,
+        llm_strategy=settings.resolved_llm_strategy(),
     )
     signal_input = IncrementalPushSignalInput(
         github_repo_id=github_repo_id,
@@ -238,8 +258,10 @@ async def github_webhook(request: Request):
         branch=branch,
         before_commit=before_commit,
         after_commit=after_commit,
+        repo_url=repo_url,
         chunker_strategy=settings.chunker_strategy,
         embedding_strategy=settings.embedding_strategy,
+        llm_strategy=settings.resolved_llm_strategy(),
     )
 
     try:

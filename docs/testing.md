@@ -31,8 +31,6 @@ Tests are generally organized by scope:
 - `integration/`: tests that rely on Postgres and/or Milvus testcontainers
 - `e2e/`: higher-level API or workflow tests, including FastAPI and Temporal flows
 
-As of March 26, 2026, the suite collects `234` tests.
-
 ## Test Markers
 
 The repo defines three markers in [`pyproject.toml`](../pyproject.toml):
@@ -146,8 +144,6 @@ The workflow also:
 - Generates a coverage summary from `coverage.xml`
 - Updates the coverage section in [`README.md`](../README.md) on pushes to `main`
 - Posts or updates a PR comment with the current total coverage on pull requests
-
-There is currently no minimum coverage gate because CI uses `--cov-fail-under=0`.
 
 ## Practical Conventions
 

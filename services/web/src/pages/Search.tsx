@@ -4,6 +4,7 @@ import { apiFetch, type CodeContextRequest, type CodeContextResponse, type UserR
 import { Navbar } from "@/components/Navbar";
 import { useUser } from "@/lib/hooks";
 import { SnippetCard } from "@/components/SnippetCard";
+import { WikiCard } from "@/components/WikiCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -73,7 +74,7 @@ export default function Search() {
     if (normalizedFilePath) payload.file_path = normalizedFilePath;
 
     try {
-      const response = await apiFetch<CodeContextResponse>("/v1/search/code-context", {
+      const response = await apiFetch<CodeContextResponse>("/v1/search/search-code", {
         method: "POST",
         body: payload,
       });
@@ -89,7 +90,7 @@ export default function Search() {
 
   const canSubmit = !!repositoryName.trim() && !!query.trim() && !reposLoading && !submitting;
   const selectedRepo = repos.find((r) => r.full_name === repositoryName) ?? null;
-  const availableBranches = (selectedRepo?.branches ?? []).filter((b) => b.status === "INDEXED");
+  const availableBranches = selectedRepo?.branches ?? [];
 
   return (
     <>
@@ -205,11 +206,24 @@ export default function Search() {
             )}
 
             {/* Submit */}
-            <div className="flex justify-end">
+            <div className="flex justify-end gap-2">
               <Button type="submit" disabled={!canSubmit} size="lg" className="gap-2">
                 <SearchIcon className="size-4" />
                 {submitting ? "Searching..." : "Run Search"}
               </Button>
+              {result && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="lg"
+                  onClick={() => {
+                    setResult(null);
+                    setError(null);
+                  }}
+                >
+                  Clear
+                </Button>
+              )}
             </div>
           </form>
         </div>
@@ -249,13 +263,17 @@ export default function Search() {
                     No snippets returned.
                   </div>
                 ) : (
-                  result.snippets.map((snippet, index) => (
-                    <SnippetCard
-                      key={`${snippet.file_path}-${snippet.start_line}-${index}`}
-                      snippet={snippet}
-                      branch={result.branch}
-                    />
-                  ))
+                  result.snippets.map((snippet, index) =>
+                    snippet.context_source === "wiki" ? (
+                      <WikiCard key={`wiki-${snippet.slug}-${index}`} snippet={snippet} />
+                    ) : (
+                      <SnippetCard
+                        key={`${snippet.file_path}-${snippet.start_line}-${index}`}
+                        snippet={snippet}
+                        branch={result.branch}
+                      />
+                    ),
+                  )
                 )}
               </div>
 

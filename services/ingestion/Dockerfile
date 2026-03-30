@@ -24,6 +24,8 @@ FROM python:3.11-slim-bookworm
 
 WORKDIR /app
 
+COPY packages/db/alembic.ini packages/db/alembic.ini
+COPY packages/db/alembic packages/db/alembic
 COPY --from=builder /app/.venv /app/.venv
 
 ENV PATH="/app/.venv/bin:$PATH"

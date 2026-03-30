@@ -21,6 +21,15 @@ if TYPE_CHECKING:
 class WikiEngine:
     """Expose wiki generation and retrieval entrypoints for agents."""
 
+    GET_WIKI_DESCRIPTION = (
+        "Retrieve generated wiki pages for a repository."
+        " Use when repository-level documentation context is needed."
+    )
+    SEARCH_WIKI_DESCRIPTION = (
+        "Search generated wiki documentation for targeted repository knowledge."
+        " Use top_k=5 for typical lookups and keep top_k<=15."
+    )
+
     log: logging.Logger
 
     def __init__(self, engine: Engine) -> None:
@@ -31,10 +40,6 @@ class WikiEngine:
         "POST",
         "/v1/wiki/generate",
         name="generate_wiki",
-        description="Generate wiki documentation for an indexed repository.",
-    )
-    @toolcall(
-        "generate_wiki",
         description="Generate wiki documentation for an indexed repository.",
     )
     async def generate_wiki(
@@ -58,9 +63,11 @@ class WikiEngine:
             github_repo_id=github_repo_id,
             branch=branch.strip() or "main",
         )
+        token = self.engine.app.settings.internal_service_token
+        headers = {"Authorization": f"Bearer {token}"} if token else {}
 
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=30.0, headers=headers) as client:
                 resp = await client.post(
                     f"{ingestion_url}/generate-wiki",
                     json=request.model_dump(),
@@ -92,11 +99,11 @@ class WikiEngine:
         "GET",
         "/v1/wiki/{repository_name:path}",
         name="get_wiki",
-        description="Retrieve generated wiki pages for a repository.",
+        description=GET_WIKI_DESCRIPTION,
     )
     @toolcall(
         "get_wiki",
-        description="Retrieve generated wiki pages for a repository.",
+        description=GET_WIKI_DESCRIPTION,
     )
     async def get_wiki(
         self,
@@ -115,19 +122,45 @@ class WikiEngine:
         "POST",
         "/v1/wiki/search",
         name="search_wiki",
-        description="Search generated wiki documentation.",
+        description=SEARCH_WIKI_DESCRIPTION,
     )
     @toolcall(
         "search_wiki",
-        description="Search generated wiki documentation.",
+        description=SEARCH_WIKI_DESCRIPTION,
     )
     async def search_wiki(
         self,
         auth: AuthenticatedUser,
-        repository_name: Annotated[str, Body(...)],
-        query: Annotated[str, Body(...)],
-        branch: Annotated[str, Body()] = "main",
-        top_k: Annotated[int, Body()] = 5,
+        repository_name: Annotated[
+            str,
+            Body(
+                ...,
+                description="Target repository full name, for example 'owner/repo'.",
+            ),
+        ],
+        query: Annotated[
+            str,
+            Body(
+                ...,
+                description=(
+                    "Documentation-oriented query. Include concepts, module names, or architecture terms."
+                ),
+            ),
+        ],
+        branch: Annotated[
+            str,
+            Body(description="Repository branch to search. Defaults to 'main'."),
+        ] = "main",
+        top_k: Annotated[
+            int,
+            Body(
+                ge=1,
+                le=15,
+                description=(
+                    "Maximum wiki snippets to return. Use 5 for typical searches; increase only for broad topics."
+                ),
+            ),
+        ] = 5,
     ) -> "SearchWikiResponse":
         """Search wiki pages by calling the search service."""
         normalized_repo_name = repository_name.strip().lower()
@@ -150,9 +183,11 @@ class WikiEngine:
             raise RequestError(str(exc), status_code=422) from exc
 
         search_url = self.engine.app.settings.search_service_url
+        token = self.engine.app.settings.internal_service_token
+        headers = {"Authorization": f"Bearer {token}"} if token else {}
 
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=30.0, headers=headers) as client:
                 resp = await client.post(
                     f"{search_url}/search",
                     json=search_request.model_dump(),

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from enum import Enum
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -13,6 +14,7 @@ class SearchContextSource(str, Enum):
     code = "code"
     wiki = "wiki"
     ast = "ast"
+    llm_combined = "llm_combined"
 
 
 class SearchRequest(BaseModel):
@@ -69,6 +71,7 @@ class RetrievalMetrics(BaseModel):
 class SearchResult(BaseModel):
     """Response payload from the search service."""
 
+    type: Literal["code"] = "code"
     snippets: list[CodeSnippet] = Field(default_factory=list)
     query: str
     total_results: int = 0
@@ -94,6 +97,7 @@ class WikiSnippet(BaseModel):
 class WikiSearchResult(BaseModel):
     """Response payload from wiki search."""
 
+    type: Literal["wiki"] = "wiki"
     snippets: list[WikiSnippet] = Field(default_factory=list)
     query: str
     total_results: int = 0
@@ -118,6 +122,7 @@ class CombinedSnippet(BaseModel):
 class CombinedSearchResult(BaseModel):
     """Response payload when multiple retrieval corpora are fused together."""
 
+    type: Literal["combined"] = "combined"
     snippets: list[CombinedSnippet] = Field(default_factory=list)
     query: str
     total_results: int = 0

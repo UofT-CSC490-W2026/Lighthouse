@@ -2,42 +2,58 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import json
+import logging
 import typing
 from typing import TYPE_CHECKING, Any
 
 from fastmcp import Context, FastMCP
 
 from ...utilities.decorators import BoundToolCall, collect_toolcalls, params_to_model
-from ...utilities import RequestError
+from ...utilities import RequestError, log_error, to_public_error
 
 if TYPE_CHECKING:
     from ...main import App
 
 
+def _safe_log(app: Any, exc: Exception, envelope) -> None:
+    logger = getattr(app, "log", None)
+    if logger is None:
+        logger = logging.getLogger(__name__)
+    log_error(logger, exc, envelope)
+
+
 MCP_INSTRUCTIONS = """
 Lighthouse is a retrieval-focused MCP server for coding agents.
 
-Use this server when you need better context for a coding task than is available from the
-current file or local workspace alone. The goal is to surface the broader understanding
-needed to make correct changes, such as architectural decisions, important invariants,
-cross-file relationships, repository conventions, and deeper codebase context.
+Prefer using this server when a coding task likely depends on information outside the currently open
+files or local workspace snapshot, especially information that may already be indexed in
+Lighthouse (for example shared services, internal packages, dependencies, or docs-like context).
+The goal is to surface broader understanding needed to make correct changes: architecture,
+invariants, cross-file relationships, conventions, and non-local dependencies.
 
-The primary retrieval entrypoint is `get_code_context`.
+Use Lighthouse when:
+- the user asks for context from parts of the codebase not currently visible
+- the task references a service/module/package/dependency outside the open workspace context
+- you need broader architecture or convention knowledge before making edits
 
-When calling `get_code_context`, provide:
-- the repository you are working in
-- the search query or task you are trying to complete
-- the branch you want to search
-- an optional file path when you want to narrow the search to a specific file
+Avoid Lighthouse when:
+- the task is fully local and can be completed confidently from currently visible files
+- retrieval would not change your plan or decisions
+
+The primary retrieval entrypoint is `search_code`.
+
+Recommended call order:
+1. `list_user_repos` when repository visibility or exact repository names are uncertain
+2. `search_code` for coding-context retrieval
+3. `search_wiki` or `get_wiki` when generated repository docs are likely useful and relevant doc
+snippets were not produced from the search_code call
 
 Use Lighthouse to answer questions like:
 - What context is missing for this change?
 - What parts of the codebase or architecture matter for this task?
 - Are there conventions, historical constraints, or non-local dependencies I should know?
 - What additional files or code regions should I inspect before editing?
-
-Prefer Lighthouse when the task likely depends on broader repository understanding rather
-than only the code already visible in the editor.
 """.strip()
 
 
@@ -126,7 +142,7 @@ class MCPToolHandler:
         # the module globals of the underlying function.
         fn = getattr(method, "__func__", method)
         try:
-            resolved_hints = typing.get_type_hints(fn)
+            resolved_hints = typing.get_type_hints(fn, include_extras=True)
         except Exception:
             resolved_hints = {}
 
@@ -163,19 +179,39 @@ class MCPToolHandler:
                 try:
                     auth = await self.app.authenticator.require_mcp_context(ctx)
                 except RequestError as exc:
-                    raise PermissionError(exc.detail) from exc
+                    _, envelope = to_public_error(exc)
+                    _safe_log(self.app, exc, envelope)
+                    raise PermissionError(
+                        json.dumps(envelope.model_dump(mode="json"))
+                    ) from exc
                 if expects_auth:
                     call_kwargs["auth"] = auth
 
             try:
                 result = method(**call_kwargs)
             except RequestError as exc:
-                raise ValueError(exc.detail) from exc
+                _, envelope = to_public_error(exc)
+                _safe_log(self.app, exc, envelope)
+                raise ValueError(json.dumps(envelope.model_dump(mode="json"))) from exc
+            except Exception as exc:
+                _, envelope = to_public_error(exc)
+                _safe_log(self.app, exc, envelope)
+                raise ValueError(json.dumps(envelope.model_dump(mode="json"))) from exc
             if asyncio.iscoroutine(result):
                 try:
                     result = await result
                 except RequestError as exc:
-                    raise ValueError(exc.detail) from exc
+                    _, envelope = to_public_error(exc)
+                    _safe_log(self.app, exc, envelope)
+                    raise ValueError(
+                        json.dumps(envelope.model_dump(mode="json"))
+                    ) from exc
+                except Exception as exc:
+                    _, envelope = to_public_error(exc)
+                    _safe_log(self.app, exc, envelope)
+                    raise ValueError(
+                        json.dumps(envelope.model_dump(mode="json"))
+                    ) from exc
             if hasattr(result, "model_dump"):
                 return result.model_dump(mode="json")
             if isinstance(result, list) and result and hasattr(result[0], "model_dump"):

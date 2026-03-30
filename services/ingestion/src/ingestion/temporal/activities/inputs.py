@@ -121,6 +121,7 @@ class IndexBranchInput:
     chunker_strategy: str = "sliding_window"
     embedding_strategy: str = "openai"
     embedding_model: str = ""
+    llm_strategy: str = "openai"
 
 
 @dataclass
@@ -130,9 +131,11 @@ class IncrementalIndexInput:
     branch: str
     before_commit: str
     after_commit: str
+    repo_url: str = ""
     chunker_strategy: str = "sliding_window"
     embedding_strategy: str = "openai"
     embedding_model: str = ""
+    llm_strategy: str = "openai"
 
 
 @dataclass
@@ -142,6 +145,8 @@ class IncrementalPushSignalInput:
     branch: str
     before_commit: str
     after_commit: str
+    repo_url: str = ""
     chunker_strategy: str = "sliding_window"
     embedding_strategy: str = "openai"
     embedding_model: str = ""
+    llm_strategy: str = "openai"

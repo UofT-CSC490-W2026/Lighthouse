@@ -869,6 +869,7 @@ version = "0.1.0"
 source = { editable = "packages/db" }
 dependencies = [
     { name = "alembic" },
+    { name = "asyncpg" },
     { name = "greenlet" },
     { name = "peewee" },
     { name = "psycopg2-binary" },
@@ -878,6 +879,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "alembic", specifier = ">=1.13" },
+    { name = "asyncpg", specifier = ">=0.29" },
     { name = "greenlet", specifier = ">=3.0" },
     { name = "peewee", specifier = ">=3.17" },
     { name = "psycopg2-binary", specifier = ">=2.9" },
@@ -2029,10 +2031,6 @@ wheels = [
 name = "lighthouse"
 version = "0.1.0"
 source = { virtual = "." }
-dependencies = [
-    { name = "astchunk" },
-    { name = "xxhash" },
-]
 
 [package.dev-dependencies]
 dev = [
@@ -2046,10 +2044,6 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [
-    { name = "astchunk", specifier = ">=0.1.0" },
-    { name = "xxhash", specifier = ">=3.6.0" },
-]
 
 [package.metadata.requires-dev]
 dev = [
@@ -3851,6 +3845,7 @@ dependencies = [
     { name = "db" },
     { name = "embedding" },
     { name = "fastapi", extra = ["standard"] },
+    { name = "llm" },
     { name = "pydantic-settings" },
     { name = "shared" },
     { name = "temporalio" },
@@ -3863,6 +3858,7 @@ requires-dist = [
     { name = "db", editable = "packages/db" },
     { name = "embedding", editable = "packages/embedding" },
     { name = "fastapi", extras = ["standard"], specifier = ">=0.115" },
+    { name = "llm", editable = "packages/llm" },
     { name = "pydantic-settings", specifier = ">=2.0" },
     { name = "shared", editable = "packages/shared" },
     { name = "temporalio", specifier = ">=1.7" },

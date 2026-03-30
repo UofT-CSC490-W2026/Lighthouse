@@ -29,6 +29,7 @@ from .helpers import get_settings, make_db, make_milvus, make_wiki_milvus
 logger = logging.getLogger(__name__)
 
 WIKI_EMBED_BATCH_SIZE = 512
+WIKI_PAGE_GENERATION_BATCH_SIZE = 8
 
 # Limits for the structure generation prompt
 MAX_FILE_PATHS = 500
@@ -172,7 +173,10 @@ async def generate_wiki_structure(
         # Call LLM to generate wiki structure
         messages = build_structure_prompt(file_paths, sample_chunks, input.full_name)
         try:
-            structure_dict = llm.complete_json(messages)
+            structure_dict = llm.complete_json(
+                messages,
+                **_build_llm_request_kwargs(settings, llm_strategy),
+            )
         except Exception as exc:
             _raise_non_retryable_wiki_error(exc, phase="structure generation")
             raise
@@ -279,7 +283,10 @@ async def generate_wiki_page(input: GenerateWikiPageInput) -> str:
             input.page_title, input.page_description, context_chunks
         )
         try:
-            content = llm.complete(messages)
+            content = llm.complete(
+                messages,
+                **_build_llm_request_kwargs(settings, llm_strategy),
+            )
         except Exception as exc:
             _raise_non_retryable_wiki_error(exc, phase="wiki page generation")
             raise
@@ -421,6 +428,17 @@ def _build_llm_provider(settings, strategy: LLMStrategy):
     if strategy == LLMStrategy.OPENAI:
         provider_kwargs["api_key"] = settings.openai_api_key
     return get_llm_provider(strategy, **provider_kwargs)
+
+
+def _build_llm_request_kwargs(settings, strategy: LLMStrategy) -> dict[str, str]:
+    if strategy != LLMStrategy.OPENAI:
+        return {}
+
+    reasoning_effort = settings.resolved_llm_reasoning_effort()
+    if not reasoning_effort:
+        return {}
+
+    return {"reasoning_effort": reasoning_effort}
 
 
 def _raise_non_retryable_wiki_error(exc: Exception, *, phase: str) -> None:

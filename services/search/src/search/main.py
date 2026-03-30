@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from contextlib import asynccontextmanager
+from urllib.parse import urlparse
 
 from db import DatabaseManager
 from fastapi import Depends, FastAPI, HTTPException
@@ -25,13 +27,24 @@ from shared.schemas.search import (
 )
 from vectordb import MilvusClient
 
+from llm import OpenAILLMProvider
 from search.config import SearchSettings
+from search.reranker.cohere_reranker import CohereReranker
 from search.strategies.hybrid_strategy import BranchNotIndexedError, HybridSearchStrategy
+from search.strategies.llm_combined_strategy import LLMCombinedSearchStrategy
 from search.strategies.search_strategy import SearchStrategy
 from search.strategies.wiki_search_strategy import HybridWikiSearchStrategy
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+def _dsn_target(dsn: str) -> str:
+    parsed = urlparse(dsn)
+    host = parsed.hostname or "<missing-host>"
+    port = parsed.port or "<default-port>"
+    db_name = parsed.path.lstrip("/") or "<missing-db>"
+    return f"{host}:{port}/{db_name}"
 
 
 def _build_embedder(
@@ -75,20 +88,36 @@ def create_app(
         s = _settings or SearchSettings()
         app.state.settings = s
 
+        logger.info(
+            "Search startup: resolved config postgres=%s milvus=%s embedding_strategy=%s ssm_parameter=%s",
+            _dsn_target(s.postgres_dsn),
+            s.milvus_uri,
+            s.embedding_strategy,
+            "set" if os.getenv("SEARCH_SETTINGS_SSM_PARAMETER", "").strip() else "unset",
+        )
+
+        logger.info("Search startup: connecting to Postgres")
         db_manager = DatabaseManager(s.postgres_dsn)
         db_manager.connect()
+        logger.info("Search startup: Postgres connection established")
 
+        logger.info("Search startup: creating Milvus client for %s", MILVUS_COLLECTION_NAME)
         milvus = MilvusClient(
             uri=s.milvus_uri,
             collection_name=MILVUS_COLLECTION_NAME,
         )
+        logger.info("Search startup: Milvus client ready for %s", MILVUS_COLLECTION_NAME)
 
+        logger.info("Search startup: building embedder")
         emb = _build_embedder(s, _embedder)
+        logger.info("Search startup: embedder ready")
 
+        logger.info("Search startup: creating Milvus client for %s", WIKI_MILVUS_COLLECTION_NAME)
         wiki_milvus = MilvusClient(
             uri=s.milvus_uri,
             collection_name=WIKI_MILVUS_COLLECTION_NAME,
         )
+        logger.info("Search startup: Milvus client ready for %s", WIKI_MILVUS_COLLECTION_NAME)
 
         app.state.strategy = HybridSearchStrategy(
             db_manager=db_manager,
@@ -99,6 +128,18 @@ def create_app(
             db_manager=db_manager,
             milvus=wiki_milvus,
             embedder=emb,
+        )
+
+        llm_provider = OpenAILLMProvider(api_key=s.openai_api_key, model=s.llm_model)
+        reranker = CohereReranker(api_key=s.cohere_api_key, model=s.rerank_model)
+        app.state.llm_combined_strategy = LLMCombinedSearchStrategy(
+            db_manager=db_manager,
+            milvus_code=milvus,
+            milvus_wiki=wiki_milvus,
+            embedder=emb,
+            llm=llm_provider,
+            reranker=reranker,
+            llm_reasoning_effort=s.llm_reasoning_effort,
         )
 
         logger.info("Search service initialized")
@@ -138,6 +179,10 @@ async def _search_impl(
         )
 
     requested_sources = request.requested_context_sources()
+    if len(requested_sources) == 1 and requested_sources[0] is SearchContextSource.llm_combined:
+        llm_strategy: LLMCombinedSearchStrategy = app.state.llm_combined_strategy
+        return await llm_strategy.search(request)
+
     if len(requested_sources) == 1 and requested_sources[0] is SearchContextSource.wiki:
         wiki_request = WikiSearchRequest.model_validate(request.model_dump(mode="json"))
         return await wiki_strategy.search(wiki_request)
@@ -272,7 +317,18 @@ async def search(request: SearchRequest) -> SearchResult | WikiSearchResult | Co
     try:
         return await _search_impl(request)
     except BranchNotIndexedError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "code": "BRANCH_UNAVAILABLE",
+                "message": str(exc),
+                "recoverable": True,
+                "context": {
+                    "requested_branch": exc.branch,
+                    "indexed_branches": exc.indexed_branches,
+                },
+            },
+        ) from exc
 
 @app.post("/search/wiki", response_model=WikiSearchResult, dependencies=[Depends(verify_internal_token)])
 async def search_wiki(request: WikiSearchRequest) -> WikiSearchResult:
@@ -280,7 +336,18 @@ async def search_wiki(request: WikiSearchRequest) -> WikiSearchResult:
         result = await _search_impl(request)
         return WikiSearchResult.model_validate(result.model_dump(mode="json"))
     except BranchNotIndexedError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "code": "BRANCH_UNAVAILABLE",
+                "message": str(exc),
+                "recoverable": True,
+                "context": {
+                    "requested_branch": exc.branch,
+                    "indexed_branches": exc.indexed_branches,
+                },
+            },
+        ) from exc
 
 
 @app.get("/health")

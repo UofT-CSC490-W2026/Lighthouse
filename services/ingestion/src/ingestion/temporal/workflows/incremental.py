@@ -7,6 +7,8 @@ from temporalio import workflow
 from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
+    from .generate_wiki import GenerateWikiWorkflow
+    from ..activities.wiki import GenerateWikiInput
     from ..activities import (
         EMBED_BATCH_SIZE,
         CleanupInactiveChunksInput,
@@ -76,6 +78,7 @@ class IncrementalIndexWorkflow:
             branch=input.branch,
             before_commit=input.before_commit,
             after_commit=input.after_commit,
+            repo_url=input.repo_url,
             chunker_strategy=input.chunker_strategy,
             embedding_strategy=input.embedding_strategy,
         )
@@ -84,7 +87,7 @@ class IncrementalIndexWorkflow:
             ensure_repository_record,
             EnsureRepoInput(
                 github_repo_id=input.github_repo_id,
-                repo_url="",
+                repo_url=input.repo_url,
                 full_name=input.full_name,
             ),
             start_to_close_timeout=timedelta(seconds=30),
@@ -134,7 +137,7 @@ class IncrementalIndexWorkflow:
             git_result: GitCloneFetchOutput = await workflow.execute_activity(
                 git_clone_or_fetch,
                 GitCloneFetchInput(
-                    repo_url="",
+                    repo_url=input.repo_url,
                     repo_dir_name=str(input.github_repo_id),
                     branch=input.branch,
                 ),
@@ -226,6 +229,25 @@ class IncrementalIndexWorkflow:
                 start_to_close_timeout=timedelta(seconds=30),
                 retry_policy=_DB_RETRY,
             )
+
+            # Best-effort wiki generation as a child workflow
+            try:
+                await workflow.execute_child_workflow(
+                    GenerateWikiWorkflow.run,
+                    GenerateWikiInput(
+                        repository_id=repository_id,
+                        github_repo_id=input.github_repo_id,
+                        full_name=input.full_name,
+                        branch=input.branch,
+                        llm_strategy=input.llm_strategy,
+                        embedding_strategy=input.embedding_strategy,
+                    ),
+                    id=f"wiki-{input.github_repo_id}-{input.branch}",
+                )
+            except Exception:
+                workflow.logger.warning(
+                    "Wiki generation failed for %s/%s", input.full_name, input.branch
+                )
 
             if publish_result.cleanup_targets:
                 try:

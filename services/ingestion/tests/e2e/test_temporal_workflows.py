@@ -10,7 +10,7 @@ import uuid
 from dataclasses import dataclass, field
 
 import pytest
-from temporalio import activity
+from temporalio import activity, workflow
 from temporalio.client import WorkflowFailureError
 from temporalio.worker import UnsandboxedWorkflowRunner, Worker
 
@@ -34,8 +34,18 @@ from ingestion.temporal.activities.inputs import (
     PublishStagedChunksOutput,
     UpdateBranchStatusInput,
 )
+from ingestion.temporal.activities.wiki import GenerateWikiInput
 from ingestion.temporal.workflows.index_branch import IndexBranchWorkflow
 from ingestion.temporal.workflows.incremental import IncrementalIndexWorkflow
+
+
+@workflow.defn(name="GenerateWikiWorkflow")
+class _StubGenerateWikiWorkflow:
+    """Minimal stand-in for GenerateWikiWorkflow — completes instantly in tests."""
+
+    @workflow.run
+    async def run(self, input: GenerateWikiInput) -> str:
+        return "wiki stub"
 
 
 # ---------------------------------------------------------------------------
@@ -175,7 +185,7 @@ class TestIndexBranchWorkflow:
         async with Worker(
             workflow_environment.client,
             task_queue=queue,
-            workflows=[IndexBranchWorkflow],
+            workflows=[IndexBranchWorkflow, _StubGenerateWikiWorkflow],
             activities=make_mock_activities(tracker),
             workflow_runner=UnsandboxedWorkflowRunner(),
         ):
@@ -211,7 +221,7 @@ class TestIndexBranchWorkflow:
         async with Worker(
             workflow_environment.client,
             task_queue=queue,
-            workflows=[IndexBranchWorkflow],
+            workflows=[IndexBranchWorkflow, _StubGenerateWikiWorkflow],
             activities=make_mock_activities(tracker),
             workflow_runner=UnsandboxedWorkflowRunner(),
         ):
@@ -244,7 +254,7 @@ class TestIndexBranchWorkflow:
         async with Worker(
             workflow_environment.client,
             task_queue=queue,
-            workflows=[IndexBranchWorkflow],
+            workflows=[IndexBranchWorkflow, _StubGenerateWikiWorkflow],
             activities=make_mock_activities(tracker),
             workflow_runner=UnsandboxedWorkflowRunner(),
         ):
@@ -273,7 +283,7 @@ class TestIndexBranchWorkflow:
         async with Worker(
             workflow_environment.client,
             task_queue=queue,
-            workflows=[IndexBranchWorkflow],
+            workflows=[IndexBranchWorkflow, _StubGenerateWikiWorkflow],
             activities=make_mock_activities(tracker),
             workflow_runner=UnsandboxedWorkflowRunner(),
         ):
@@ -304,7 +314,7 @@ class TestIndexBranchWorkflow:
         async with Worker(
             workflow_environment.client,
             task_queue=queue,
-            workflows=[IndexBranchWorkflow],
+            workflows=[IndexBranchWorkflow, _StubGenerateWikiWorkflow],
             activities=make_mock_activities(tracker),
             workflow_runner=UnsandboxedWorkflowRunner(),
         ):
@@ -340,7 +350,7 @@ class TestIncrementalIndexWorkflow:
         async with Worker(
             workflow_environment.client,
             task_queue=queue,
-            workflows=[IncrementalIndexWorkflow],
+            workflows=[IncrementalIndexWorkflow, _StubGenerateWikiWorkflow],
             activities=make_mock_activities(tracker),
             workflow_runner=UnsandboxedWorkflowRunner(),
         ):
@@ -372,7 +382,7 @@ class TestIncrementalIndexWorkflow:
         async with Worker(
             workflow_environment.client,
             task_queue=queue,
-            workflows=[IncrementalIndexWorkflow],
+            workflows=[IncrementalIndexWorkflow, _StubGenerateWikiWorkflow],
             activities=make_mock_activities(tracker),
             workflow_runner=UnsandboxedWorkflowRunner(),
         ):
@@ -406,7 +416,7 @@ class TestIncrementalIndexWorkflow:
         async with Worker(
             workflow_environment.client,
             task_queue=queue,
-            workflows=[IncrementalIndexWorkflow],
+            workflows=[IncrementalIndexWorkflow, _StubGenerateWikiWorkflow],
             activities=make_mock_activities(tracker),
             workflow_runner=UnsandboxedWorkflowRunner(),
         ):
@@ -446,7 +456,7 @@ class TestIncrementalIndexWorkflow:
         async with Worker(
             workflow_environment.client,
             task_queue=queue,
-            workflows=[IncrementalIndexWorkflow],
+            workflows=[IncrementalIndexWorkflow, _StubGenerateWikiWorkflow],
             activities=make_mock_activities(tracker),
             workflow_runner=UnsandboxedWorkflowRunner(),
         ):
@@ -476,7 +486,7 @@ class TestIncrementalIndexWorkflow:
         async with Worker(
             workflow_environment.client,
             task_queue=queue,
-            workflows=[IncrementalIndexWorkflow],
+            workflows=[IncrementalIndexWorkflow, _StubGenerateWikiWorkflow],
             activities=make_mock_activities(tracker),
             workflow_runner=UnsandboxedWorkflowRunner(),
         ):
@@ -510,7 +520,7 @@ class TestIncrementalIndexWorkflow:
         async with Worker(
             workflow_environment.client,
             task_queue=queue,
-            workflows=[IncrementalIndexWorkflow],
+            workflows=[IncrementalIndexWorkflow, _StubGenerateWikiWorkflow],
             activities=make_mock_activities(tracker),
             workflow_runner=UnsandboxedWorkflowRunner(),
         ):
@@ -547,7 +557,7 @@ class TestIncrementalIndexWorkflow:
         async with Worker(
             workflow_environment.client,
             task_queue=queue,
-            workflows=[IncrementalIndexWorkflow],
+            workflows=[IncrementalIndexWorkflow, _StubGenerateWikiWorkflow],
             activities=make_mock_activities(tracker),
             workflow_runner=UnsandboxedWorkflowRunner(),
         ):

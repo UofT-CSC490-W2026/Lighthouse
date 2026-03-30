@@ -58,7 +58,9 @@ async def chunk_files(input: ChunkFilesInput) -> ChunkFilesOutput:
 
             chunker = chunkers_by_language.get(language)
             if chunker is None:
-                if strategy is ChunkerStrategy.AST_CODE:
+                if strategy is ChunkerStrategy.AST_CODE and language is None:
+                    chunker = get_chunker(ChunkerStrategy.SLIDING_WINDOW)
+                elif strategy is ChunkerStrategy.AST_CODE:
                     try:
                         chunker = get_chunker(strategy, language=language)
                     except Exception:

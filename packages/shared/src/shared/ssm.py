@@ -125,6 +125,23 @@ def _load_parameter_payload(
     return payload
 
 
+def _lookup_payload_value(payload: dict[str, Any], candidate_key: str) -> tuple[bool, Any]:
+    """Return a payload value, matching keys case-insensitively when needed."""
+    if candidate_key in payload:
+        return True, payload[candidate_key]
+
+    lowered_map = {
+        key.lower(): value
+        for key, value in payload.items()
+        if isinstance(key, str)
+    }
+    lowered_key = candidate_key.lower()
+    if lowered_key in lowered_map:
+        return True, lowered_map[lowered_key]
+
+    return False, None
+
+
 class SSMSettingsSource(PydanticBaseSettingsSource):
     """Load settings defaults from a single JSON blob stored in AWS SSM.
 
@@ -158,10 +175,10 @@ class SSMSettingsSource(PydanticBaseSettingsSource):
 
         for field_name, field in self.settings_cls.model_fields.items():
             for key in _field_keys(field_name, field):
-                if key not in payload:
+                found, value = _lookup_payload_value(payload, key)
+                if not found:
                     continue
 
-                value = payload[key]
                 if isinstance(value, str) and self.field_is_complex(field):
                     value = self.prepare_field_value(field_name, field, value, True)
 

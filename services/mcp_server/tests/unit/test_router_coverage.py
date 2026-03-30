@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import inspect
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from pydantic import BaseModel
 
+from fastapi import Request
 from mcp_server.routers.http.handler import HTTPRouteHandler, _make_route_fn, build_router
 from mcp_server.routers.mcp.handler import MCPToolHandler
 from mcp_server.utilities import RequestError, httproute, toolcall
@@ -75,6 +77,12 @@ class SyncErrorRoute:
         raise RequestError("sync-http", status_code=409)
 
 
+class BodyRequestRoute:
+    @httproute("POST", "/body-request", name="body_request")
+    async def body_request(self, auth, request: EchoModel) -> dict[str, str]:
+        return {"value": request.value, "user": auth.id}
+
+
 class ForwardTool:
     @toolcall("forward_tool", auth_required=False)
     def forward_tool(self, value: "MissingType") -> str:
@@ -100,6 +108,9 @@ async def test_http_route_handler_auth_and_error_paths(monkeypatch):
     with pytest.raises(Exception) as exc_info:
         await route.endpoint(request=request, value="bad")
     assert exc_info.value.status_code == 422
+    assert exc_info.value.detail["message"] == "bad request"
+    assert exc_info.value.detail["error_code"] == "INVALID_ARGUMENT"
+    assert "error_id" in exc_info.value.detail
 
     app.authenticator.require_http_request = AsyncMock(
         side_effect=RequestError("denied", status_code=401)
@@ -107,6 +118,8 @@ async def test_http_route_handler_auth_and_error_paths(monkeypatch):
     with pytest.raises(Exception) as exc_info:
         await route.endpoint(request=request, value="ok")
     assert exc_info.value.status_code == 401
+    assert exc_info.value.detail["message"] == "denied"
+    assert exc_info.value.detail["error_code"] == "AUTH_REQUIRED"
 
 
 @pytest.mark.unit
@@ -197,6 +210,200 @@ async def test_make_route_fn_handles_sync_request_errors():
         route_fn = handler.make_route_fn(bound)
     assert "value" in inspect.signature(route_fn).parameters
 
+    app = SimpleNamespace(
+        engine=SimpleNamespace(registries=lambda: ()),
+        authenticator=SimpleNamespace(require_http_request=AsyncMock(return_value=SimpleNamespace(id="user-1"))),
+    )
+    bound = BoundRoute(
+        meta=RouteMeta(method="POST", path="/body-request", name="body_request", auth_required=True),
+        method=BodyRequestRoute().body_request,
+        owner=BodyRequestRoute(),
+    )
+    route_fn = HTTPRouteHandler(app).make_route_fn(bound)
+    result = await route_fn(_http_request=SimpleNamespace(state=SimpleNamespace()), request=EchoModel(value="x"))
+    assert result == {"value": "x", "user": "user-1"}
+
+
+class NativeRequestRoute:
+    """Route that expects a FastAPI Request object directly."""
+
+    @httproute("GET", "/native-request", name="native_request")
+    async def native_request(self, auth, request: Request, value: str) -> dict[str, str]:
+        return {"value": value, "user": auth.id}
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_http_route_handler_native_request_param(monkeypatch):
+    """Cover line 139: expects_http_request=True path."""
+    from fastapi import Request
+
+    app = SimpleNamespace(
+        engine=SimpleNamespace(registries=lambda: ()),
+        authenticator=SimpleNamespace(
+            require_http_request=AsyncMock(return_value=SimpleNamespace(id="user-1"))
+        ),
+    )
+    bound = BoundRoute(
+        meta=RouteMeta(method="GET", path="/native-request", name="native_request", auth_required=True),
+        method=NativeRequestRoute().native_request,
+        owner=NativeRequestRoute(),
+    )
+    route_fn = HTTPRouteHandler(app).make_route_fn(bound)
+    mock_request = SimpleNamespace(state=SimpleNamespace())
+    result = await route_fn(request=mock_request, value="hello")
+    assert result == {"value": "hello", "user": "user-1"}
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_http_route_handler_generic_exception_during_auth():
+    """Cover lines 161-164: non-RequestError during authentication."""
+    app = SimpleNamespace(
+        engine=SimpleNamespace(registries=lambda: ()),
+        authenticator=SimpleNamespace(
+            require_http_request=AsyncMock(side_effect=RuntimeError("auth system crashed"))
+        ),
+    )
+    bound = BoundRoute(
+        meta=RouteMeta(method="GET", path="/private", name="private", auth_required=True),
+        method=DemoRoutes().private,
+        owner=DemoRoutes(),
+    )
+    route_fn = HTTPRouteHandler(app).make_route_fn(bound)
+    with pytest.raises(Exception) as exc_info:
+        await route_fn(request=SimpleNamespace(state=SimpleNamespace()), value="ok")
+    assert exc_info.value.status_code == 500
+    assert exc_info.value.detail["error_code"] == "INTERNAL_ERROR"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_http_route_handler_generic_exception_from_sync_method():
+    """Cover lines 186-189: non-RequestError from synchronous method."""
+
+    class BoomSyncRoute:
+        @httproute("GET", "/boom-sync", name="boom_sync", auth_required=False)
+        def boom_sync(self, value: str) -> dict[str, str]:
+            raise RuntimeError("sync boom")
+
+    app = SimpleNamespace(engine=SimpleNamespace(registries=lambda: ()))
+    bound = BoundRoute(
+        meta=RouteMeta(method="GET", path="/boom-sync", name="boom_sync", auth_required=False),
+        method=BoomSyncRoute().boom_sync,
+        owner=BoomSyncRoute(),
+    )
+    route_fn = HTTPRouteHandler(app).make_route_fn(bound)
+    with pytest.raises(Exception) as exc_info:
+        await route_fn(value="x")
+    assert exc_info.value.status_code == 500
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_http_route_handler_generic_exception_from_async_method():
+    """Cover lines 203-206: non-RequestError from awaited method."""
+
+    class BoomAsyncRoute:
+        @httproute("GET", "/boom-async", name="boom_async", auth_required=False)
+        async def boom_async(self, value: str) -> dict[str, str]:
+            raise RuntimeError("async boom")
+
+    app = SimpleNamespace(engine=SimpleNamespace(registries=lambda: ()))
+    bound = BoundRoute(
+        meta=RouteMeta(method="GET", path="/boom-async", name="boom_async", auth_required=False),
+        method=BoomAsyncRoute().boom_async,
+        owner=BoomAsyncRoute(),
+    )
+    route_fn = HTTPRouteHandler(app).make_route_fn(bound)
+    with pytest.raises(Exception) as exc_info:
+        await route_fn(value="x")
+    assert exc_info.value.status_code == 500
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_mcp_tool_handler_generic_exception_from_sync_method():
+    """Cover lines 196-199 in mcp/handler.py: generic Exception from sync method."""
+
+    class BoomSyncTool:
+        @toolcall("boom_sync", auth_required=False)
+        def boom_sync(self, value: str) -> str:
+            raise RuntimeError("sync crash")
+
+    app = SimpleNamespace(
+        engine=SimpleNamespace(registries=lambda: (BoomSyncTool(),)),
+        authenticator=SimpleNamespace(require_mcp_context=AsyncMock()),
+    )
+    handler = MCPToolHandler(app)
+    tool = BoundToolCall(
+        meta=ToolCallMeta(name="boom_sync", auth_required=False),
+        method=BoomSyncTool().boom_sync,
+        owner=BoomSyncTool(),
+    )
+    tool_fn = handler._make_tool_fn(tool)
+    with pytest.raises(ValueError) as exc_info:
+        await tool_fn(SimpleNamespace(), value="x")
+    import json
+    payload = json.loads(str(exc_info.value))
+    assert payload["error_code"] == "INTERNAL_ERROR"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_mcp_tool_handler_generic_exception_from_async_method():
+    """Cover lines 209-212 in mcp/handler.py: generic Exception from async method."""
+
+    class BoomAsyncTool:
+        @toolcall("boom_async", auth_required=False)
+        async def boom_async(self, value: str) -> str:
+            raise RuntimeError("async crash")
+
+    app = SimpleNamespace(
+        engine=SimpleNamespace(registries=lambda: (BoomAsyncTool(),)),
+        authenticator=SimpleNamespace(require_mcp_context=AsyncMock()),
+    )
+    handler = MCPToolHandler(app)
+    tool = BoundToolCall(
+        meta=ToolCallMeta(name="boom_async", auth_required=False),
+        method=BoomAsyncTool().boom_async,
+        owner=BoomAsyncTool(),
+    )
+    tool_fn = handler._make_tool_fn(tool)
+    with pytest.raises(ValueError) as exc_info:
+        await tool_fn(SimpleNamespace(), value="x")
+    import json
+    payload = json.loads(str(exc_info.value))
+    assert payload["error_code"] == "INTERNAL_ERROR"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_mcp_tool_handler_request_error_from_async_method():
+    """Cover lines 203-208 in mcp/handler.py: RequestError from async method."""
+
+    class FailAsyncTool:
+        @toolcall("fail_async", auth_required=False)
+        async def fail_async(self, value: str) -> str:
+            raise RequestError("fail", status_code=400)
+
+    app = SimpleNamespace(
+        engine=SimpleNamespace(registries=lambda: (FailAsyncTool(),)),
+        authenticator=SimpleNamespace(require_mcp_context=AsyncMock()),
+    )
+    handler = MCPToolHandler(app)
+    tool = BoundToolCall(
+        meta=ToolCallMeta(name="fail_async", auth_required=False),
+        method=FailAsyncTool().fail_async,
+        owner=FailAsyncTool(),
+    )
+    tool_fn = handler._make_tool_fn(tool)
+    with pytest.raises(ValueError) as exc_info:
+        await tool_fn(SimpleNamespace(), value="x")
+    import json
+    payload = json.loads(str(exc_info.value))
+    assert payload["message"] == "fail"
+
 
 @pytest.mark.unit
 @pytest.mark.asyncio
@@ -227,14 +434,21 @@ async def test_mcp_tool_handler_startup_shutdown_and_wrappers(monkeypatch):
     result = await tool_fn(SimpleNamespace(), value="ok")
     assert result == {"value": "user-1:ok"}
 
-    with pytest.raises(ValueError, match="bad tool"):
+    with pytest.raises(ValueError) as exc_info:
         await tool_fn(SimpleNamespace(), value="bad")
+    payload = json.loads(str(exc_info.value))
+    assert payload["message"] == "bad tool"
+    assert payload["error_code"] == "INVALID_ARGUMENT"
+    assert "error_id" in payload
 
     app.authenticator.require_mcp_context = AsyncMock(
         side_effect=RequestError("forbidden", status_code=403)
     )
-    with pytest.raises(PermissionError, match="forbidden"):
+    with pytest.raises(PermissionError) as exc_info:
         await tool_fn(SimpleNamespace(), value="ok")
+    payload = json.loads(str(exc_info.value))
+    assert payload["message"] == "forbidden"
+    assert payload["error_code"] == "FORBIDDEN"
     app.authenticator.require_mcp_context = AsyncMock(
         return_value=SimpleNamespace(id="user-1")
     )
@@ -261,8 +475,11 @@ async def test_mcp_tool_handler_startup_shutdown_and_wrappers(monkeypatch):
         owner=CtxTools(),
     )
     sync_fail_tool_fn = handler._make_tool_fn(sync_fail_tool)
-    with pytest.raises(ValueError, match="bad:x"):
+    with pytest.raises(ValueError) as exc_info:
         await sync_fail_tool_fn(SimpleNamespace(), value="x")
+    payload = json.loads(str(exc_info.value))
+    assert payload["message"] == "bad:x"
+    assert payload["error_code"] == "INVALID_ARGUMENT"
 
     forward_tool = BoundToolCall(
         meta=ToolCallMeta(name="forward_tool", auth_required=False),

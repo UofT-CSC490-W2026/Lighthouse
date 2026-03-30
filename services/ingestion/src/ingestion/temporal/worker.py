@@ -44,10 +44,14 @@ logger = logging.getLogger(__name__)
 async def main() -> None:
     settings = IngestionSettings()
 
-    client = await Client.connect(settings.temporal_address)
-    logger.info(
-        "Connected to Temporal at %s, starting worker on queue %s",
+    client = await Client.connect(
         settings.temporal_address,
+        **settings.temporal_connect_kwargs(),
+    )
+    logger.info(
+        "Connected to Temporal at %s in namespace %s, starting worker on queue %s",
+        settings.temporal_address,
+        settings.resolved_temporal_namespace(),
         settings.temporal_task_queue,
     )
 

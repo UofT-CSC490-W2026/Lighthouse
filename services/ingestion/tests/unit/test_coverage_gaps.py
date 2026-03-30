@@ -13,6 +13,7 @@ from fastapi import HTTPException
 
 from db.database import DatabaseManager
 from ingestion.chunking.registry import Chunker, ChunkerStrategy, get_chunker, register_chunker
+from ingestion.chunking.sliding_window_chunker import SlidingWindowChunker
 from ingestion.embedding.registry import (
     EmbeddingStrategy,
     get_embedding_provider,
@@ -51,7 +52,10 @@ def test_chunker_registry_registers_and_rejects_unknown():
         get_chunker("missing")  # type: ignore[arg-type]
 
     register_chunker(ChunkerStrategy.SLIDING_WINDOW, DummyChunker)
-    assert isinstance(get_chunker(ChunkerStrategy.SLIDING_WINDOW), DummyChunker)
+    try:
+        assert isinstance(get_chunker(ChunkerStrategy.SLIDING_WINDOW), DummyChunker)
+    finally:
+        register_chunker(ChunkerStrategy.SLIDING_WINDOW, SlidingWindowChunker)
 
 
 @pytest.mark.unit
@@ -152,6 +156,96 @@ def test_chunk_files_skips_blank_content(monkeypatch, tmp_path):
 
     assert result.chunk_count == 0
     service.write_staging.assert_not_called()
+
+
+@pytest.mark.unit
+def test_chunk_files_ast_falls_back_sliding_for_unsupported_ast_language(monkeypatch, tmp_path):
+    """astchunk rejects some detected languages (e.g. toml); chunk_file fallback must run."""
+    repo_path = tmp_path / "repo"
+    repo_path.mkdir()
+    toml_file = repo_path / "pyproject.toml"
+    toml_file.write_text("[project]\nname = \"x\"\n", encoding="utf-8")
+
+    service = SimpleNamespace(write_staging=MagicMock())
+    closed: list[bool] = []
+
+    monkeypatch.setattr(
+        "ingestion.temporal.activities.chunking.get_settings",
+        MagicMock(return_value=SimpleNamespace(clone_base_dir=str(tmp_path))),
+    )
+    monkeypatch.setattr(
+        "ingestion.temporal.activities.chunking.make_db",
+        MagicMock(return_value=SimpleNamespace(close=lambda: closed.append(True))),
+    )
+    monkeypatch.setattr(
+        "ingestion.temporal.activities.chunking.ChunkService",
+        MagicMock(return_value=service),
+    )
+
+    result = asyncio.run(
+        chunk_files(
+            ChunkFilesInput(
+                repository_id="repo-id",
+                branch="main",
+                repo_path=str(repo_path),
+                chunker_strategy="ast_code",
+                file_filter=["pyproject.toml"],
+            )
+        )
+    )
+
+    assert result.chunk_count >= 1
+    service.write_staging.assert_called_once()
+    assert closed == [True]
+
+
+@pytest.mark.unit
+def test_chunk_files_ast_falls_back_when_get_chunker_raises(monkeypatch, tmp_path):
+    repo_path = tmp_path / "repo"
+    repo_path.mkdir()
+    py_file = repo_path / "a.py"
+    py_file.write_text("x = 1\n", encoding="utf-8")
+
+    service = SimpleNamespace(write_staging=MagicMock())
+    closed: list[bool] = []
+
+    def boom_get_chunker(strategy, language=None, chunker_config=None):
+        if strategy is ChunkerStrategy.AST_CODE:
+            raise ValueError("AST chunker construction failed")
+        return get_chunker(strategy, language=language, chunker_config=chunker_config)
+
+    monkeypatch.setattr(
+        "ingestion.temporal.activities.chunking.get_settings",
+        MagicMock(return_value=SimpleNamespace(clone_base_dir=str(tmp_path))),
+    )
+    monkeypatch.setattr(
+        "ingestion.temporal.activities.chunking.make_db",
+        MagicMock(return_value=SimpleNamespace(close=lambda: closed.append(True))),
+    )
+    monkeypatch.setattr(
+        "ingestion.temporal.activities.chunking.get_chunker",
+        boom_get_chunker,
+    )
+    monkeypatch.setattr(
+        "ingestion.temporal.activities.chunking.ChunkService",
+        MagicMock(return_value=service),
+    )
+
+    result = asyncio.run(
+        chunk_files(
+            ChunkFilesInput(
+                repository_id="repo-id",
+                branch="main",
+                repo_path=str(repo_path),
+                chunker_strategy="ast_code",
+                file_filter=["a.py"],
+            )
+        )
+    )
+
+    assert result.chunk_count >= 1
+    service.write_staging.assert_called_once()
+    assert closed == [True]
 
 
 @pytest.mark.unit
@@ -405,17 +499,24 @@ async def test_webhook_ignores_non_branch_push(monkeypatch):
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_temporal_worker_main(monkeypatch):
-    settings = SimpleNamespace(temporal_address="temporal:7233", temporal_task_queue="queue")
+    settings = SimpleNamespace(
+        temporal_address="temporal:7233",
+        temporal_task_queue="queue",
+        temporal_connect_kwargs=lambda: {"namespace": "default"},
+        resolved_temporal_namespace=lambda: "default",
+    )
     client = object()
     worker = SimpleNamespace(run=AsyncMock())
     worker_cls = MagicMock(return_value=worker)
+    connect = AsyncMock(return_value=client)
 
     monkeypatch.setattr("ingestion.temporal.worker.IngestionSettings", MagicMock(return_value=settings))
-    monkeypatch.setattr("ingestion.temporal.worker.Client.connect", AsyncMock(return_value=client))
+    monkeypatch.setattr("ingestion.temporal.worker.Client.connect", connect)
     monkeypatch.setattr("ingestion.temporal.worker.Worker", worker_cls)
 
     await worker_main()
 
+    connect.assert_awaited_once_with("temporal:7233", namespace="default")
     worker_cls.assert_called_once()
     worker.run.assert_awaited_once()
 
@@ -425,6 +526,8 @@ async def test_temporal_worker_main(monkeypatch):
 async def test_ingestion_lifespan_and_activity_helpers(monkeypatch):
     settings = SimpleNamespace(
         temporal_address="temporal:7233",
+        temporal_connect_kwargs=lambda: {"namespace": "default"},
+        resolved_temporal_namespace=lambda: "default",
         postgres_dsn="postgres://db",
         milvus_uri="http://milvus",
         embedding_strategy="openai",
@@ -437,11 +540,13 @@ async def test_ingestion_lifespan_and_activity_helpers(monkeypatch):
     milvus = MagicMock()
 
     monkeypatch.setattr("ingestion.main.IngestionSettings", MagicMock(return_value=settings))
-    monkeypatch.setattr("ingestion.main.Client.connect", AsyncMock(return_value=client))
+    connect = AsyncMock(return_value=client)
+    monkeypatch.setattr("ingestion.main.Client.connect", connect)
 
     async with ingestion_lifespan(app):
         assert app.state.settings is settings
         assert app.state.temporal_client is client
+    connect.assert_awaited_once_with("temporal:7233", namespace="default")
 
     set_settings_factory(lambda: settings)
     assert activity_get_settings() is settings
@@ -456,6 +561,246 @@ async def test_ingestion_lifespan_and_activity_helpers(monkeypatch):
     monkeypatch.setattr("ingestion.temporal.activities.helpers.MilvusClient", MagicMock(return_value=milvus))
     assert make_milvus(settings) is milvus
     milvus.ensure_collection.assert_called_once()
+
+
+@pytest.mark.unit
+def test_llm_registry_raises_for_unknown_strategy():
+    from ingestion.llm.registry import LLMStrategy, get_llm_provider, register_llm_provider
+    from llm import OpenAILLMProvider
+
+    with pytest.raises(ValueError, match="Unknown LLM strategy"):
+        get_llm_provider("__not_a_strategy__")  # type: ignore[arg-type]
+
+
+@pytest.mark.unit
+def test_llm_registry_register_and_retrieve():
+    from ingestion.llm.registry import LLMStrategy, get_llm_provider, register_llm_provider
+    from llm import OpenAILLMProvider
+
+    class FakeLLMProvider:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        def complete(self, messages, **kwargs):
+            return ""
+
+        def complete_json(self, messages, **kwargs):
+            return {}
+
+    register_llm_provider(LLMStrategy.OPENAI, FakeLLMProvider)  # type: ignore[arg-type]
+    try:
+        provider = get_llm_provider(LLMStrategy.OPENAI, model="gpt-x")
+        assert isinstance(provider, FakeLLMProvider)
+    finally:
+        register_llm_provider(LLMStrategy.OPENAI, OpenAILLMProvider)
+
+
+@pytest.mark.unit
+def test_validate_wiki_settings_raises_for_invalid_llm_strategy():
+    from ingestion.main import _validate_wiki_generation_settings
+    from ingestion.utilities.config import IngestionSettings
+
+    settings = IngestionSettings(llm_strategy="not_a_real_strategy")
+    with pytest.raises(HTTPException) as exc_info:
+        _validate_wiki_generation_settings(settings)
+    assert exc_info.value.status_code == 400
+    assert "Unsupported wiki LLM strategy" in exc_info.value.detail
+
+
+@pytest.mark.unit
+def test_validate_wiki_settings_raises_for_invalid_embedding_strategy():
+    from ingestion.main import _validate_wiki_generation_settings
+    from ingestion.utilities.config import IngestionSettings
+
+    settings = IngestionSettings(llm_strategy="bedrock", embedding_strategy="bad_strategy")
+    with pytest.raises(HTTPException) as exc_info:
+        _validate_wiki_generation_settings(settings)
+    assert exc_info.value.status_code == 400
+    assert "Unsupported wiki embedding strategy" in exc_info.value.detail
+
+
+@pytest.mark.unit
+def test_validate_wiki_settings_raises_when_openai_embedding_key_missing():
+    from ingestion.main import _validate_wiki_generation_settings
+    from ingestion.utilities.config import IngestionSettings
+
+    settings = IngestionSettings(llm_strategy="bedrock", embedding_strategy="openai", openai_api_key="")
+    with pytest.raises(HTTPException) as exc_info:
+        _validate_wiki_generation_settings(settings)
+    assert exc_info.value.status_code == 400
+    assert "OPENAI_API_KEY" in exc_info.value.detail
+
+
+@pytest.mark.unit
+def test_ingestion_settings_resolved_llm_strategy_falls_back_to_embedding():
+    from ingestion.utilities.config import IngestionSettings
+
+    # When llm_strategy is blank but embedding_strategy is set, use embedding_strategy
+    settings = IngestionSettings(llm_strategy="", embedding_strategy="openai")
+    assert settings.resolved_llm_strategy() == "openai"
+
+
+@pytest.mark.unit
+def test_ingestion_settings_resolved_llm_model_uses_configured_value():
+    from ingestion.utilities.config import IngestionSettings
+
+    settings = IngestionSettings(llm_strategy="openai", llm_model="gpt-4o-mini")
+    assert settings.resolved_llm_model() == "gpt-4o-mini"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_make_wiki_milvus(monkeypatch):
+    from ingestion.temporal.activities.helpers import make_wiki_milvus
+    from ingestion.utilities.config import IngestionSettings
+
+    milvus = MagicMock()
+    monkeypatch.setattr("ingestion.temporal.activities.helpers.MilvusClient", MagicMock(return_value=milvus))
+
+    settings = IngestionSettings(milvus_uri="http://milvus", embedding_strategy="openai", embedding_dimension=1024)
+    result = make_wiki_milvus(settings)
+
+    assert result is milvus
+    milvus.ensure_collection.assert_called_once_with(dimension=1024)
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_generate_wiki_endpoint_raises_404_when_repo_not_found(monkeypatch):
+    from ingestion.main import generate_wiki
+    from shared.schemas.wiki import GenerateWikiRequest
+
+    settings = SimpleNamespace(
+        postgres_dsn="postgres://db",
+        temporal_task_queue="q",
+        resolved_llm_strategy=lambda: "bedrock",
+        embedding_strategy="openai",
+        openai_api_key="key",
+    )
+
+    class FakeContextManager:
+        def __enter__(self):
+            return self
+        def __exit__(self, *a):
+            pass
+
+    db = MagicMock()
+    db.connect = MagicMock()
+    db.close = MagicMock()
+    db.connection_context = MagicMock(return_value=FakeContextManager())
+
+    app_state = SimpleNamespace(settings=settings, temporal_client=MagicMock())
+    monkeypatch.setattr("ingestion.main.app", SimpleNamespace(state=app_state))
+    monkeypatch.setattr("db.DatabaseManager", MagicMock(return_value=db))
+    monkeypatch.setattr("ingestion.main._validate_wiki_generation_settings", MagicMock())
+    monkeypatch.setattr("db.models.indexing.Repository.get_or_none", MagicMock(return_value=None))
+
+    with pytest.raises(HTTPException) as exc_info:
+        await generate_wiki(GenerateWikiRequest(github_repo_id=999, branch="main"))
+    assert exc_info.value.status_code == 404
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_get_wiki_status_endpoint_404_when_repo_not_found(monkeypatch):
+    from ingestion.main import get_wiki_status
+
+    settings = SimpleNamespace(postgres_dsn="postgres://db")
+
+    class FakeContextManager:
+        def __enter__(self):
+            return self
+        def __exit__(self, *a):
+            pass
+
+    db = MagicMock()
+    db.connect = MagicMock()
+    db.close = MagicMock()
+    db.connection_context = MagicMock(return_value=FakeContextManager())
+
+    app_state = SimpleNamespace(settings=settings)
+    monkeypatch.setattr("ingestion.main.app", SimpleNamespace(state=app_state))
+    monkeypatch.setattr("db.DatabaseManager", MagicMock(return_value=db))
+    monkeypatch.setattr("db.models.indexing.Repository.get_or_none", MagicMock(return_value=None))
+
+    with pytest.raises(HTTPException) as exc_info:
+        await get_wiki_status(github_repo_id=999, branch="main")
+    assert exc_info.value.status_code == 404
+    assert "not found" in exc_info.value.detail.lower()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_get_wiki_status_endpoint_404_when_no_generation(monkeypatch):
+    from ingestion.main import get_wiki_status
+
+    settings = SimpleNamespace(postgres_dsn="postgres://db")
+
+    class FakeContextManager:
+        def __enter__(self):
+            return self
+        def __exit__(self, *a):
+            pass
+
+    db = MagicMock()
+    db.connect = MagicMock()
+    db.close = MagicMock()
+    db.connection_context = MagicMock(return_value=FakeContextManager())
+
+    fake_repo = SimpleNamespace(id="repo-1")
+    app_state = SimpleNamespace(settings=settings)
+    monkeypatch.setattr("ingestion.main.app", SimpleNamespace(state=app_state))
+    monkeypatch.setattr("db.DatabaseManager", MagicMock(return_value=db))
+    monkeypatch.setattr("db.models.indexing.Repository.get_or_none", MagicMock(return_value=fake_repo))
+
+    wiki_gen_query = MagicMock()
+    wiki_gen_query.where.return_value = wiki_gen_query
+    wiki_gen_query.order_by.return_value = wiki_gen_query
+    wiki_gen_query.first.return_value = None
+    monkeypatch.setattr("db.models.wiki.WikiGeneration.select", MagicMock(return_value=wiki_gen_query))
+
+    with pytest.raises(HTTPException) as exc_info:
+        await get_wiki_status(github_repo_id=1, branch="main")
+    assert exc_info.value.status_code == 404
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_get_wiki_status_endpoint_returns_status(monkeypatch):
+    from ingestion.main import get_wiki_status
+    from shared.schemas.wiki import WikiStatusResponse
+
+    settings = SimpleNamespace(postgres_dsn="postgres://db")
+
+    class FakeContextManager:
+        def __enter__(self):
+            return self
+        def __exit__(self, *a):
+            pass
+
+    db = MagicMock()
+    db.connect = MagicMock()
+    db.close = MagicMock()
+    db.connection_context = MagicMock(return_value=FakeContextManager())
+
+    fake_repo = SimpleNamespace(id="repo-1")
+    fake_generation = SimpleNamespace(status="completed", wiki_title="My Wiki", page_count=5)
+    app_state = SimpleNamespace(settings=settings)
+    monkeypatch.setattr("ingestion.main.app", SimpleNamespace(state=app_state))
+    monkeypatch.setattr("db.DatabaseManager", MagicMock(return_value=db))
+    monkeypatch.setattr("db.models.indexing.Repository.get_or_none", MagicMock(return_value=fake_repo))
+
+    wiki_gen_query = MagicMock()
+    wiki_gen_query.where.return_value = wiki_gen_query
+    wiki_gen_query.order_by.return_value = wiki_gen_query
+    wiki_gen_query.first.return_value = fake_generation
+    monkeypatch.setattr("db.models.wiki.WikiGeneration.select", MagicMock(return_value=wiki_gen_query))
+
+    result = await get_wiki_status(github_repo_id=1, branch="main")
+    assert isinstance(result, WikiStatusResponse)
+    assert result.status == "completed"
+    assert result.wiki_title == "My Wiki"
+    assert result.page_count == 5
 
 
 @pytest.mark.unit

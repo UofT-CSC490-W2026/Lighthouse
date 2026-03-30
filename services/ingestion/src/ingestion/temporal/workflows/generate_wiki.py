@@ -10,6 +10,7 @@ from temporalio.common import RetryPolicy
 with workflow.unsafe.imports_passed_through():
     from ..activities.wiki import (
         WIKI_EMBED_BATCH_SIZE,
+        WIKI_PAGE_GENERATION_BATCH_SIZE,
         CleanupStagingWikiInput,
         EmbedWikiPagesInput,
         GenerateWikiInput,
@@ -70,10 +71,10 @@ class GenerateWikiWorkflow:
             structure = json.loads(structure_result.structure_json)
             pages = _flatten_structure_pages(structure)
 
-            # 2. Generate each page in parallel (RAG + LLM)
-            page_futures = []
-            for page_def in pages:
-                page_futures.append(
+            # 2. Generate pages in batches (RAG + LLM), WIKI_PAGE_GENERATION_BATCH_SIZE at a time
+            for i in range(0, len(pages), WIKI_PAGE_GENERATION_BATCH_SIZE):
+                chunk = pages[i : i + WIKI_PAGE_GENERATION_BATCH_SIZE]
+                page_futures = [
                     workflow.execute_activity(
                         generate_wiki_page,
                         GenerateWikiPageInput(
@@ -93,8 +94,9 @@ class GenerateWikiWorkflow:
                         start_to_close_timeout=timedelta(minutes=5),
                         retry_policy=_LLM_RETRY,
                     )
-                )
-            await asyncio.gather(*page_futures)
+                    for page_def in chunk
+                ]
+                await asyncio.gather(*page_futures)
 
             # 3. Embed wiki pages in batches
             embed_futures = []

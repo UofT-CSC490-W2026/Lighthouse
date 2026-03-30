@@ -10,7 +10,7 @@ import pytest
 from cryptography.fernet import Fernet
 from fastapi import Request
 
-from db import IndexedBranch, Repository, Session, User
+from db import IndexedBranch, Session, User
 from mcp_server.engine.auth import AuthEngine
 from mcp_server.engine.search import SearchEngine
 from mcp_server.engine.user import AddRepoBranchesRequest, AddUserRepoRequest, UserEngine
@@ -24,7 +24,6 @@ from mcp_server.utilities.auth import (
     ManagedToken,
     RequestError,
 )
-from shared.schemas.search import CodeSnippet
 from mcp_server.utilities.config.env import reload_settings
 
 
@@ -325,11 +324,13 @@ async def test_search_and_user_engines_cover_error_paths(monkeypatch):
 
     monkeypatch.setattr(search_engine, "_resolve_github_repo_id", MagicMock(return_value=None))
     with pytest.raises(RequestError, match="not found"):
-        await search_engine.get_code_context(auth, " owner/repo ", "fix bug")
+        await search_engine.search_code(auth, " owner/repo ", "fix bug")
 
     monkeypatch.setattr(search_engine, "_resolve_github_repo_id", MagicMock(return_value=11))
     with pytest.raises(RequestError, match="query is required"):
-        await search_engine.get_code_context(auth, "owner/repo", "   ")
+        await search_engine.search_code(auth, "owner/repo", "   ")
+    with pytest.raises(RequestError, match="Invalid search request payload"):
+        await search_engine.search_code(auth, "owner/repo", "fix bug", top_k=0)
     validation_error = Exception()
     monkeypatch.setattr(
         "mcp_server.engine.search.SearchRequest",
@@ -337,7 +338,7 @@ async def test_search_and_user_engines_cover_error_paths(monkeypatch):
     )
     monkeypatch.setattr("mcp_server.engine.search.ValidationError", Exception)
     with pytest.raises(RequestError):
-        await search_engine.get_code_context(auth, "owner/repo", "fix bug")
+        await search_engine.search_code(auth, "owner/repo", "fix bug")
     monkeypatch.undo()
     monkeypatch.setattr(search_engine, "_resolve_github_repo_id", MagicMock(return_value=11))
 
@@ -347,14 +348,14 @@ async def test_search_and_user_engines_cover_error_paths(monkeypatch):
         response=httpx.Response(500, text="oops"),
     )
     monkeypatch.setattr("mcp_server.engine.search.httpx.AsyncClient", lambda *args, **kwargs: _AsyncClient(post_error=http_status))
-    result = await search_engine.get_code_context(auth, "owner/repo", "fix bug")
+    result = await search_engine.search_code(auth, "owner/repo", "fix bug")
     assert result.status == "error"
 
     monkeypatch.setattr(
         "mcp_server.engine.search.httpx.AsyncClient",
         lambda *args, **kwargs: _AsyncClient(post_error=httpx.RequestError("down", request=httpx.Request("POST", "http://search"))),
     )
-    result = await search_engine.get_code_context(auth, "owner/repo", "fix bug")
+    result = await search_engine.search_code(auth, "owner/repo", "fix bug")
     assert result.message == "Search service unavailable."
 
     monkeypatch.setattr(
@@ -362,13 +363,14 @@ async def test_search_and_user_engines_cover_error_paths(monkeypatch):
         lambda *args, **kwargs: _AsyncClient(
             post_response=_Response(
                 json_data={
+                    "type": "combined",
                     "snippets": [
                         {
+                            "context_source": "code",
                             "file_path": "a.py",
                             "start_line": 1,
                             "end_line": 2,
                             "content": "print('hi')",
-                            "language": "python",
                             "score": 0.9,
                             "reason": "relevant",
                         }
@@ -391,13 +393,14 @@ async def test_search_and_user_engines_cover_error_paths(monkeypatch):
         lambda *args, **kwargs: _CapturingAsyncClient(
             post_response=_Response(
                 json_data={
+                    "type": "combined",
                     "snippets": [
                         {
+                            "context_source": "code",
                             "file_path": "a.py",
                             "start_line": 1,
                             "end_line": 2,
                             "content": "print('hi')",
-                            "language": "python",
                             "score": 0.9,
                             "reason": "relevant",
                         }
@@ -409,18 +412,20 @@ async def test_search_and_user_engines_cover_error_paths(monkeypatch):
         ),
     )
 
-    result = await search_engine.get_code_context(
+    result = await search_engine.search_code(
         auth,
         " owner/repo ",
         "fix bug",
         file_path=" a.py ",
+        top_k=7,
     )
     assert captured_request == {
         "query": "fix bug",
         "github_repo_id": 11,
         "branch": "main",
         "file_path": "a.py",
-        "top_k": 10,
+        "top_k": 7,
+        "context_sources": ["llm_combined"],
     }
     assert result.status == "ok"
     assert result.query == "fix bug"
