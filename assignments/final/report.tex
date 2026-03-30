@@ -294,7 +294,134 @@ course material.
 \section{Related Work (Academic and Industry)}
 \label{sec:related}
 
-% CodeRAG bench is highly relevant (they indexed public domain info)
+Lighthouse sits at the intersection of code retrieval, retrieval-augmented
+generation, and AI agent tooling.
+We survey the most relevant prior work across three dimensions: industry
+products that address adjacent problems, academic techniques that underpin our
+design, and evaluation benchmarks we use to measure system performance.\\
+
+\subsection{Industry Solutions}
+
+Several commercial products target developer productivity through code search
+or AI-assisted coding, but none provide a general-purpose, agent-native context
+retrieval layer.
+Table~\ref{tab:industry} summarizes the most relevant products and their key
+limitations relative to Lighthouse.\\
+
+\begin{table}[H]
+\centering
+\small
+\caption{Comparison of industry tools to Lighthouse.}
+\label{tab:industry}
+\begin{tabularx}{\textwidth}{R{2.4cm}YY}
+\toprule
+\textbf{Tool} & \textbf{Approach} & \textbf{Limitation vs.\ Lighthouse} \\
+\midrule
+GitHub Copilot
+  & LLM-based inline completion and chat; context scoped to open editor tabs.
+  & No cross-repository indexing; context not queryable by agents as a tool. \\
+\addlinespace
+Cursor
+  & AI code editor with codebase indexing and multi-file context.
+  & Index is local and per-session; not exposed via a standardized agent protocol. \\
+\addlinespace
+Sourcegraph / Cody
+  & Enterprise code search platform; Cody adds LLM-based Q\&A over indexed code.
+  & Search is developer-facing; no MCP interface; not designed for agent-driven retrieval. \\
+\addlinespace
+AugmentCode
+  & Codebase-aware AI coding assistant that indexes large monorepos for context.
+  & Tightly coupled to a proprietary IDE plugin; no open agent interface. \\
+\addlinespace
+Glean
+  & Enterprise knowledge retrieval across code, docs, and tickets.
+  & Not code-specific; does not perform semantic code chunking or vector search. \\
+\addlinespace
+Cognition Deep Wiki
+  & Automatically generates natural-language wiki documentation for a repository using an LLM agent.
+  & Documentation-generation only; no retrieval interface, no MCP integration, no code search. \\
+\addlinespace
+grep.app
+  & Fast regex and literal search over public GitHub repositories via a web interface.
+  & Lexical search only; no semantic/vector retrieval, no agent interface, no private repo support. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Academic Work}
+
+Lighthouse builds on several foundational techniques from the information
+retrieval and NLP literature.
+Table~\ref{tab:academic} summarizes the key works most directly relevant to
+our design.\\
+
+\begin{table}[H]
+\centering
+\small
+\caption{Academic works that inform the Lighthouse design.}
+\label{tab:academic}
+\begin{tabularx}{\textwidth}{R{2.8cm}YY}
+\toprule
+\textbf{Work} & \textbf{Contribution} & \textbf{Relevance to Lighthouse} \\
+\midrule
+RAG \cite{lewis2020rag}
+  & Augments LLM generation with non-parametric retrieval over a dense document index.
+  & Establishes the retrieval-then-generate paradigm that Lighthouse operationalizes for code. \\
+\addlinespace
+DPR \cite{karpukhin2020dpr}
+  & Dense bi-encoder retrieval using dot-product similarity over fixed-dimensional vectors.
+  & Basis for our Milvus-backed vector search stage using OpenAI \texttt{text-embedding-3-large}. \\
+\addlinespace
+CodeSearchNet \cite{husain2019codesearchnet}
+  & Large-scale code--docstring pairs across six languages for training code search models.
+  & Provides a reference approach to NL$\to$code retrieval; informs our embedding evaluation methodology. \\
+\addlinespace
+Reciprocal Rank Fusion \cite{cormack2009rrf}
+  & Score-free fusion of ranked lists by inverse rank position.
+  & Directly implemented in our hybrid search pipeline to combine vector and full-text result lists. \\
+\addlinespace
+CodeRAG-Bench \cite{wang2024coderag}
+  & Benchmark for RAG-augmented code generation covering eight task types and five retrieval corpora.
+  & Most directly comparable to our evaluation design; establishes retrieval+generation as a joint evaluation target. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Evaluation Benchmarks}
+
+Measuring whether Lighthouse actually improves agent outcomes requires
+benchmarks that capture real-world coding tasks at the repository level.
+Table~\ref{tab:benchmarks} lists the benchmarks most relevant to our
+evaluation setup, selected from a broader landscape surveyed in our earlier
+design work.\\
+
+\begin{table}[H]
+\centering
+\small
+\caption{Evaluation benchmarks used in or considered for Lighthouse experiments.}
+\label{tab:benchmarks}
+\begin{tabularx}{\textwidth}{R{2.6cm}YY}
+\toprule
+\textbf{Benchmark} & \textbf{Description} & \textbf{Role in Lighthouse Evaluation} \\
+\midrule
+SWE-bench \cite{jimenez2024swebench}
+  & 2,294 GitHub issue-resolution tasks across 12 Python repositories, each with a linked PR and test patch.
+  & Primary end-to-end evaluation: run agents with and without Lighthouse MCP and compare resolution rates. \\
+\addlinespace
+RepoBench \cite{liu2023repobench}
+  & 11K cross-file code completion instances requiring imports and related functions from other files in the same repo.
+  & Tests whether Lighthouse surfaces correct cross-file context; directly exercises our vector and FTS pipelines. \\
+\addlinespace
+CodeRAG-Bench \cite{wang2024coderag}
+  & RAG-augmented generation benchmark with five retrieval corpora and execution-based correctness metrics.
+  & Provides a controlled setting for ablating retrieval strategies (vector-only vs.\ hybrid vs.\ LLM-combined). \\
+\addlinespace
+GitChameleon 2.0 \cite{gitchameleon}
+  & 328 version-conditioned Python code-completion problems spanning 26 library versions (2014--2023).
+  & Tests whether Lighthouse can retrieve version-specific documentation to resolve API incompatibilities. \\
+\bottomrule
+\end{tabularx}
+\end{table}
 
 
 % ================================================================================
@@ -329,9 +456,46 @@ course material.
 
 % ================================================================================
 \begin{thebibliography}{9}
-% \bibitem{deepseekmath} Shao, Z., et al. (2024). DeepSeekMath: Pushing the Limits of Mathematical Reasoning in Open Language Models. arXiv preprint arXiv:2402.03300.
-% \bibitem{nanochat-discussion}
-% Karpathy, A. (2025). Nanochat Discussion \#1: Introducing nanochat: The best ChatGPT that \$100 can buy. GitHub Discussions. Available at: \url{https://github.com/karpathy/nanochat/discussions/1} (accessed March 11, 2026).
+
+\bibitem{lewis2020rag}
+Lewis, P., et al.\ (2020).
+Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks.
+\textit{Advances in Neural Information Processing Systems}, 33, 9459--9474.
+
+\bibitem{karpukhin2020dpr}
+Karpukhin, V., et al.\ (2020).
+Dense Passage Retrieval for Open-Domain Question Answering.
+\textit{Proceedings of EMNLP 2020}, 6769--6781.
+
+\bibitem{husain2019codesearchnet}
+Husain, H., et al.\ (2019).
+CodeSearchNet Challenge: Evaluating the State of Semantic Code Search.
+\textit{arXiv preprint arXiv:1909.09436}.
+
+\bibitem{cormack2009rrf}
+Cormack, G.~V., Clarke, C.~L.~A., and Buettcher, S.\ (2009).
+Reciprocal Rank Fusion Outperforms Condorcet and Individual Rank Learning Methods.
+\textit{Proceedings of SIGIR 2009}, 758--759.
+
+\bibitem{wang2024coderag}
+Wang, Z., et al.\ (2024).
+CodeRAG-Bench: Can Retrieval Augment Code Generation?
+\textit{arXiv preprint arXiv:2406.14497}.
+
+\bibitem{jimenez2024swebench}
+Jimenez, C.~E., et al.\ (2024).
+SWE-bench: Can Language Models Resolve Real-World GitHub Issues?
+\textit{Proceedings of ICLR 2024}.
+
+\bibitem{liu2023repobench}
+Liu, T., et al.\ (2023).
+RepoBench: Benchmarking Repository-Level Code Auto-Completion Systems.
+\textit{arXiv preprint arXiv:2306.03091}.
+
+\bibitem{gitchameleon}
+Zan, D., et al.\ (2024).
+GitChameleon: Unmasking the Version-Conditioned Code Generation Challenge.
+\textit{arXiv preprint arXiv:2411.05830}.
 
 \end{thebibliography}
 \end{document}
