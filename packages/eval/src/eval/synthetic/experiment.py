@@ -147,6 +147,8 @@ def run_synthetic_experiment(
             progress_heartbeat_seconds=index_progress_heartbeat_seconds,
             timeout_seconds=index_timeout_seconds,
             include_ast=context_source in {"ast", "combined"},
+            embedding_strategy=indexing_embedding_strategy,
+            embedding_model=indexing_embedding_model,
         )
     if not skip_wiki_preparation:
         prepare_synthetic_wiki(
@@ -155,6 +157,8 @@ def run_synthetic_experiment(
             poll_interval_seconds=wiki_poll_interval_seconds,
             progress_heartbeat_seconds=wiki_progress_heartbeat_seconds,
             timeout_seconds=wiki_timeout_seconds,
+            embedding_strategy=indexing_embedding_strategy,
+            embedding_model=indexing_embedding_model,
         )
 
     predictions_root = predictions_root.resolve()
@@ -183,6 +187,8 @@ def run_synthetic_experiment(
         search_service_url=search_service_url,
         top_k=top_k,
         context_source=context_source,
+        query_embedding_strategy=query_embedding_strategy,
+        query_embedding_model=query_embedding_model,
     )
     lighthouse_generator = BedrockPatchGenerator(
         model_name=model_name,
@@ -369,6 +375,8 @@ def run_synthetic_experiment_suite(
             progress_heartbeat_seconds=index_progress_heartbeat_seconds,
             timeout_seconds=index_timeout_seconds,
             include_ast=True,
+            embedding_strategy=indexing_embedding_strategy,
+            embedding_model=indexing_embedding_model,
         )
     if not skip_wiki_preparation:
         prepare_synthetic_wiki(
@@ -377,6 +385,8 @@ def run_synthetic_experiment_suite(
             poll_interval_seconds=wiki_poll_interval_seconds,
             progress_heartbeat_seconds=wiki_progress_heartbeat_seconds,
             timeout_seconds=wiki_timeout_seconds,
+            embedding_strategy=indexing_embedding_strategy,
+            embedding_model=indexing_embedding_model,
         )
 
     predictions_root = predictions_root.resolve()
@@ -431,6 +441,8 @@ def run_synthetic_experiment_suite(
             search_service_url=search_service_url,
             top_k=top_k,
             context_source=context_source,
+            query_embedding_strategy=query_embedding_strategy,
+            query_embedding_model=query_embedding_model,
         )
         lighthouse_generator = BedrockPatchGenerator(
             model_name=model_name,

@@ -37,17 +37,24 @@ logger = logging.getLogger(__name__)
 def _build_embedder(
     settings: SearchSettings,
     embedder: EmbeddingProvider | None,
+    *,
+    strategy_override: str | None = None,
+    model_override: str | None = None,
 ) -> EmbeddingProvider:
     if embedder is not None:
         return embedder
 
-    normalized_strategy = settings.embedding_strategy.strip().lower()
+    normalized_strategy = (strategy_override or "").strip().lower()
+    if not normalized_strategy:
+        normalized_strategy = settings.embedding_strategy.strip().lower()
     if not normalized_strategy:
         normalized_strategy = DEFAULT_EMBEDDING_STRATEGY
     strategy = EmbeddingStrategy(normalized_strategy)
 
     provider_kwargs: dict[str, object] = {
-        "model": settings.embedding_model or default_embedding_model(strategy.value),
+        "model": (model_override or "").strip()
+        or settings.embedding_model
+        or default_embedding_model(strategy.value),
     }
     if strategy is EmbeddingStrategy.OPENAI:
         provider_kwargs["api_key"] = settings.openai_api_key
@@ -110,22 +117,48 @@ app = create_app(settings=SearchSettings())
 async def _search_impl(
     request: SearchRequest,
 ) -> SearchResult | WikiSearchResult | CombinedSearchResult:
+    code_strategy: SearchStrategy[SearchRequest, SearchResult] = app.state.strategy
+    wiki_strategy: SearchStrategy[WikiSearchRequest, WikiSearchResult] = app.state.wiki_strategy
+    if (request.embedding_strategy or "").strip() or (request.embedding_model or "").strip():
+        embedder = _build_embedder(
+            app.state.settings,
+            None,
+            strategy_override=request.embedding_strategy,
+            model_override=request.embedding_model,
+        )
+        code_strategy = HybridSearchStrategy(
+            db_manager=app.state.strategy.db_manager,
+            milvus=app.state.strategy.milvus,
+            embedder=embedder,
+        )
+        wiki_strategy = HybridWikiSearchStrategy(
+            db_manager=app.state.wiki_strategy.db_manager,
+            milvus=app.state.wiki_strategy.milvus,
+            embedder=embedder,
+        )
+
     requested_sources = request.requested_context_sources()
     if len(requested_sources) == 1 and requested_sources[0] is SearchContextSource.wiki:
-        strategy: SearchStrategy[WikiSearchRequest, WikiSearchResult] = app.state.wiki_strategy
         wiki_request = WikiSearchRequest.model_validate(request.model_dump(mode="json"))
-        return await strategy.search(wiki_request)
+        return await wiki_strategy.search(wiki_request)
 
     if len(requested_sources) == 1 and requested_sources[0] is SearchContextSource.code:
-        strategy: SearchStrategy[SearchRequest, SearchResult] = app.state.strategy
-        return await strategy.search(request)
+        return await code_strategy.search(request)
 
-    return await _search_combined(request, requested_sources)
+    return await _search_combined(
+        request,
+        requested_sources,
+        code_strategy=code_strategy,
+        wiki_strategy=wiki_strategy,
+    )
 
 
 async def _search_combined(
     request: SearchRequest,
     requested_sources: tuple[SearchContextSource, ...],
+    *,
+    code_strategy: SearchStrategy[SearchRequest, SearchResult],
+    wiki_strategy: SearchStrategy[WikiSearchRequest, WikiSearchResult],
 ) -> CombinedSearchResult:
     tasks: list[asyncio.Future[SearchResult | WikiSearchResult] | asyncio.Task[SearchResult | WikiSearchResult]] = []
     for source in requested_sources:
@@ -138,7 +171,7 @@ async def _search_combined(
                     }
                 ).model_dump(mode="json")
             )
-            tasks.append(asyncio.create_task(app.state.strategy.search(code_request)))
+            tasks.append(asyncio.create_task(code_strategy.search(code_request)))
         elif source is SearchContextSource.wiki:
             wiki_request = WikiSearchRequest.model_validate(
                 request.model_copy(
@@ -149,7 +182,7 @@ async def _search_combined(
                     }
                 ).model_dump(mode="json")
             )
-            tasks.append(asyncio.create_task(app.state.wiki_strategy.search(wiki_request)))
+            tasks.append(asyncio.create_task(wiki_strategy.search(wiki_request)))
 
     results = await asyncio.gather(*tasks)
     ranked_lists: list[list[CombinedSnippet]] = []

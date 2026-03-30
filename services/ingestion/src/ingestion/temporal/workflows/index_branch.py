@@ -124,6 +124,7 @@ class IndexBranchWorkflow:
                             offset=offset,
                             limit=EMBED_BATCH_SIZE,
                             embedding_strategy=input.embedding_strategy,
+                            embedding_model=input.embedding_model,
                         ),
                         start_to_close_timeout=timedelta(minutes=10),
                         retry_policy=_EMBED_RETRY,

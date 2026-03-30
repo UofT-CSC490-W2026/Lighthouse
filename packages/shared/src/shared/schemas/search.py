@@ -23,6 +23,8 @@ class SearchRequest(BaseModel):
     top_k: int = Field(default=10, ge=1, le=100)
     method: SearchMethod | None = None
     context_source: SearchContextSource = SearchContextSource.code
+    embedding_strategy: str | None = None
+    embedding_model: str | None = None
     context_sources: tuple[SearchContextSource, ...] | None = Field(
         default=None,
         min_length=1,

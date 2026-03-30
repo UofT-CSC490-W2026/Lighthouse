@@ -65,6 +65,7 @@ class EmbedBatchInput:
     offset: int
     limit: int
     embedding_strategy: str = "openai"
+    embedding_model: str = ""
 
 
 @dataclass
@@ -119,6 +120,7 @@ class IndexBranchInput:
     github_token: str | None = None
     chunker_strategy: str = "sliding_window"
     embedding_strategy: str = "openai"
+    embedding_model: str = ""
 
 
 @dataclass
@@ -130,6 +132,7 @@ class IncrementalIndexInput:
     after_commit: str
     chunker_strategy: str = "sliding_window"
     embedding_strategy: str = "openai"
+    embedding_model: str = ""
 
 
 @dataclass
@@ -141,3 +144,4 @@ class IncrementalPushSignalInput:
     after_commit: str
     chunker_strategy: str = "sliding_window"
     embedding_strategy: str = "openai"
+    embedding_model: str = ""
