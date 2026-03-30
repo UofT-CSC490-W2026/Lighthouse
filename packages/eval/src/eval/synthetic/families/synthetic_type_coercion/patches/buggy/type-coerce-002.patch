@@ -1,0 +1,11 @@
+diff --git a/transforms/parsers.py b/transforms/parsers.py
+--- a/transforms/parsers.py
++++ b/transforms/parsers.py
+@@ -15,6 +15,6 @@
+     if not cleaned:
+         return default
+     try:
+-        return float(cleaned)
++        return int(cleaned)
+     except ValueError:
+         return default

@@ -147,6 +147,8 @@ async def index_repos(request: IndexRequest):
 
     for repo in request.repositories:
         full_name = repo.full_name.strip().lower()
+        embedding_strategy = (repo.embedding_strategy or "").strip() or settings.embedding_strategy
+        embedding_model = (repo.embedding_model or "").strip() or settings.embedding_model
         repository_id = _ensure_repository_record(
             settings=settings,
             github_repo_id=repo.github_repo_id,
@@ -168,7 +170,8 @@ async def index_repos(request: IndexRequest):
                         github_token=repo.github_token,
                         chunker_strategy=repo.chunker_strategy
                         or settings.chunker_strategy,
-                        embedding_strategy=settings.embedding_strategy,
+                        embedding_strategy=embedding_strategy,
+                        embedding_model=embedding_model,
                         llm_strategy=settings.resolved_llm_strategy(),
                     ),
                     id=workflow_id,
@@ -353,7 +356,13 @@ async def generate_wiki(request: GenerateWikiRequest):
                 full_name=repo.full_name,
                 branch=request.branch,
                 llm_strategy=settings.resolved_llm_strategy(),
-                embedding_strategy=settings.embedding_strategy,
+                embedding_strategy=(
+                    (request.embedding_strategy or "").strip()
+                    or settings.embedding_strategy
+                ),
+                embedding_model=(
+                    (request.embedding_model or "").strip() or settings.embedding_model
+                ),
             ),
             id=workflow_id,
             task_queue=settings.temporal_task_queue,

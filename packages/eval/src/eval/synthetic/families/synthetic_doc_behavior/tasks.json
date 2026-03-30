@@ -1,0 +1,320 @@
+{
+  "family_name": "synthetic-doc-behavior",
+  "family_version": "1",
+  "generation_config": {
+    "task_type": "doc_behavior_mismatch",
+    "task_count": 10,
+    "shared_library_repo_count": 1,
+    "consumer_repo_mode": "one_a_per_task",
+    "python_version_target": "3.11",
+    "context_modes": [
+      "code",
+      "wiki"
+    ],
+    "seed": 493
+  },
+  "tasks": [
+    {
+      "task_id": "doc-behav-001",
+      "task_type": "doc_behavior_mismatch",
+      "title": "article_slug bypasses slugify and fails on special characters",
+      "problem_statement": "The consumer's article_slug function reimplements slug generation with a naive str.replace instead of delegating to doclib.text.slugify. This fails for special characters, leading/trailing symbols, and whitespace-only input. The documented slugify behavior strips, lowercases, replaces non-alphanumeric runs with hyphens, and trims resulting hyphens.",
+      "repo_a_name": "synthetic/doc-consumer-001",
+      "repo_b_name": "synthetic/doclib",
+      "repo_a_id": 940000001,
+      "repo_b_id": 940000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-behav-001.patch",
+      "gold_patch_path": "patches/gold/doc-behav-001.patch",
+      "pytest_targets": [
+        "tests/test_formatting.py"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/formatting.py"
+      ],
+      "expected_relevant_symbols": [
+        "slugify"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "doclib.text.slugify"
+      ],
+      "test_context": "test_article_slug_special_chars, test_article_slug_empty, and test_article_slug_leading_trailing_symbols fail because the naive replace does not handle special characters, whitespace-only input, or leading/trailing hyphens."
+    },
+    {
+      "task_id": "doc-behav-002",
+      "task_type": "doc_behavior_mismatch",
+      "title": "preview_text reimplements truncation and mishandles max_words<1",
+      "problem_statement": "The consumer's preview_text function reimplements word truncation instead of using doclib.text.truncate_words. The reimplementation fails when max_words is zero or negative \u2014 it should return the suffix alone per truncate_words' documented behavior, but instead returns the full text.",
+      "repo_a_name": "synthetic/doc-consumer-002",
+      "repo_b_name": "synthetic/doclib",
+      "repo_a_id": 940000002,
+      "repo_b_id": 940000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-behav-002.patch",
+      "gold_patch_path": "patches/gold/doc-behav-002.patch",
+      "pytest_targets": [
+        "tests/test_formatting.py"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/formatting.py"
+      ],
+      "expected_relevant_symbols": [
+        "truncate_words"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "doclib.text.truncate_words"
+      ],
+      "test_context": "test_preview_text_zero_words fails because the reimplementation does not handle max_words=0 (documented to return suffix alone). It returns the full text instead of '...'."
+    },
+    {
+      "task_id": "doc-behav-003",
+      "task_type": "doc_behavior_mismatch",
+      "title": "author_display reimplements name formatting and loses Anonymous fallback",
+      "problem_statement": "The consumer's author_display function reimplements name formatting instead of delegating to doclib.text.normalize_name. The reimplementation returns an empty string when both names are empty, but the documented behavior is to return 'Anonymous'.",
+      "repo_a_name": "synthetic/doc-consumer-003",
+      "repo_b_name": "synthetic/doclib",
+      "repo_a_id": 940000003,
+      "repo_b_id": 940000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-behav-003.patch",
+      "gold_patch_path": "patches/gold/doc-behav-003.patch",
+      "pytest_targets": [
+        "tests/test_formatting.py"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/formatting.py"
+      ],
+      "expected_relevant_symbols": [
+        "normalize_name"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "doclib.text.normalize_name"
+      ],
+      "test_context": "test_author_display_both_empty fails because the reimplementation returns '' instead of the documented fallback 'Anonymous'."
+    },
+    {
+      "task_id": "doc-behav-004",
+      "task_type": "doc_behavior_mismatch",
+      "title": "compute_score_ratio reimplements division and mishandles NaN",
+      "problem_statement": "The consumer's compute_score_ratio function reimplements division with a simple zero-check instead of using doclib.numbers.safe_divide. The reimplementation does not handle NaN inputs \u2014 documented behavior returns default for NaN, but the reimplementation propagates NaN.",
+      "repo_a_name": "synthetic/doc-consumer-004",
+      "repo_b_name": "synthetic/doclib",
+      "repo_a_id": 940000004,
+      "repo_b_id": 940000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-behav-004.patch",
+      "gold_patch_path": "patches/gold/doc-behav-004.patch",
+      "pytest_targets": [
+        "tests/test_validation.py"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/validation.py"
+      ],
+      "expected_relevant_symbols": [
+        "safe_divide"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "doclib.numbers.safe_divide"
+      ],
+      "test_context": "test_compute_score_ratio_nan_numerator fails because the reimplementation does not check for NaN (documented to return default). It returns nan instead of 0.0."
+    },
+    {
+      "task_id": "doc-behav-005",
+      "task_type": "doc_behavior_mismatch",
+      "title": "bounded_progress uses raw min/max and fails on NaN",
+      "problem_statement": "The consumer's bounded_progress function uses raw min/max instead of doclib.numbers.clamp_to_range. The reimplementation does not handle NaN inputs \u2014 documented clamp behavior returns low for NaN, but min/max propagates NaN.",
+      "repo_a_name": "synthetic/doc-consumer-005",
+      "repo_b_name": "synthetic/doclib",
+      "repo_a_id": 940000005,
+      "repo_b_id": 940000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-behav-005.patch",
+      "gold_patch_path": "patches/gold/doc-behav-005.patch",
+      "pytest_targets": [
+        "tests/test_validation.py"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/validation.py"
+      ],
+      "expected_relevant_symbols": [
+        "clamp_to_range"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "doclib.numbers.clamp_to_range"
+      ],
+      "test_context": "test_bounded_progress_nan fails because max(0.0, min(nan, 100.0)) returns nan instead of the documented behavior of returning low (0.0)."
+    },
+    {
+      "task_id": "doc-behav-006",
+      "task_type": "doc_behavior_mismatch",
+      "title": "completion_summary returns 0.0% instead of N/A for zero total",
+      "problem_statement": "The consumer's completion_summary function reimplements percentage formatting instead of using doclib.numbers.percentage_of. The reimplementation returns '0.0%' when total is zero, but the documented behavior is to return 'N/A'.",
+      "repo_a_name": "synthetic/doc-consumer-006",
+      "repo_b_name": "synthetic/doclib",
+      "repo_a_id": 940000006,
+      "repo_b_id": 940000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-behav-006.patch",
+      "gold_patch_path": "patches/gold/doc-behav-006.patch",
+      "pytest_targets": [
+        "tests/test_reporting.py"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/reporting.py"
+      ],
+      "expected_relevant_symbols": [
+        "percentage_of"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "doclib.numbers.percentage_of"
+      ],
+      "test_context": "test_completion_summary_zero_total fails because the reimplementation returns '0.0%' instead of the documented 'N/A' for zero total."
+    },
+    {
+      "task_id": "doc-behav-007",
+      "task_type": "doc_behavior_mismatch",
+      "title": "deadline_label returns empty string instead of 'unknown' for None",
+      "problem_statement": "The consumer's deadline_label function reimplements date formatting instead of using doclib.dates.format_iso_date. The reimplementation returns an empty string for None input, but the documented behavior is to return 'unknown'.",
+      "repo_a_name": "synthetic/doc-consumer-007",
+      "repo_b_name": "synthetic/doclib",
+      "repo_a_id": 940000007,
+      "repo_b_id": 940000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-behav-007.patch",
+      "gold_patch_path": "patches/gold/doc-behav-007.patch",
+      "pytest_targets": [
+        "tests/test_reporting.py"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/reporting.py"
+      ],
+      "expected_relevant_symbols": [
+        "format_iso_date"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "doclib.dates.format_iso_date"
+      ],
+      "test_context": "test_deadline_label_none fails because the reimplementation returns '' instead of the documented 'unknown' for None input."
+    },
+    {
+      "task_id": "doc-behav-008",
+      "task_type": "doc_behavior_mismatch",
+      "title": "days_until_deadline returns negative values instead of absolute difference",
+      "problem_statement": "The consumer's days_until_deadline function uses raw subtraction instead of doclib.dates.days_between. The raw subtraction returns negative values when deadline < today, but the documented behavior always returns a non-negative absolute difference.",
+      "repo_a_name": "synthetic/doc-consumer-008",
+      "repo_b_name": "synthetic/doclib",
+      "repo_a_id": 940000008,
+      "repo_b_id": 940000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-behav-008.patch",
+      "gold_patch_path": "patches/gold/doc-behav-008.patch",
+      "pytest_targets": [
+        "tests/test_reporting.py"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/reporting.py"
+      ],
+      "expected_relevant_symbols": [
+        "days_between"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "doclib.dates.days_between"
+      ],
+      "test_context": "test_days_until_deadline_backward fails because (deadline - today).days returns -9 instead of the documented absolute value 9."
+    },
+    {
+      "task_id": "doc-behav-009",
+      "task_type": "doc_behavior_mismatch",
+      "title": "next_review_date reimplements day addition without skipping weekends",
+      "problem_statement": "The consumer's next_review_date function reimplements day addition with a simple loop that counts calendar days instead of using doclib.dates.add_business_days. The reimplementation does not skip weekends, so it lands on wrong dates when the span crosses a weekend.",
+      "repo_a_name": "synthetic/doc-consumer-009",
+      "repo_b_name": "synthetic/doclib",
+      "repo_a_id": 940000009,
+      "repo_b_id": 940000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-behav-009.patch",
+      "gold_patch_path": "patches/gold/doc-behav-009.patch",
+      "pytest_targets": [
+        "tests/test_reporting.py"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/reporting.py"
+      ],
+      "expected_relevant_symbols": [
+        "add_business_days"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "doclib.dates.add_business_days"
+      ],
+      "test_context": "test_next_review_date_over_weekend fails because the reimplementation adds 2 calendar days (Jan 9 + 2 = Jan 11, Saturday) instead of 2 business days (Jan 13, Monday)."
+    },
+    {
+      "task_id": "doc-behav-010",
+      "task_type": "doc_behavior_mismatch",
+      "title": "validation functions bypass doclib and fail on NaN edge cases",
+      "problem_statement": "Both compute_score_ratio and bounded_progress in the consumer's validation module bypass their doclib counterparts. compute_score_ratio adds an unnecessary default parameter and bounded_progress uses float() coercion that propagates NaN instead of using the documented NaN-safe clamp behavior.",
+      "repo_a_name": "synthetic/doc-consumer-010",
+      "repo_b_name": "synthetic/doclib",
+      "repo_a_id": 940000010,
+      "repo_b_id": 940000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-behav-010.patch",
+      "gold_patch_path": "patches/gold/doc-behav-010.patch",
+      "pytest_targets": [
+        "tests/test_validation.py"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/validation.py"
+      ],
+      "expected_relevant_symbols": [
+        "safe_divide",
+        "clamp_to_range"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "doclib.numbers.safe_divide",
+        "doclib.numbers.clamp_to_range"
+      ],
+      "test_context": "test_bounded_progress_nan fails because float(nan) is still nan and min/max propagates it. test_bounded_progress_swapped_bounds and test_compute_score_ratio_nan_numerator also fail."
+    }
+  ]
+}

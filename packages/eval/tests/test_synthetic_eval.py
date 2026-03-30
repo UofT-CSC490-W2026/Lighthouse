@@ -151,6 +151,72 @@ def test_summarize_synthetic_run_reports_unresolved_empty_patch(tmp_path) -> Non
     assert summary.instances[0].status == "missing_patch"
 
 
+@pytest.mark.integration
+def test_validate_single_repo_wrong_operator_family(tmp_path) -> None:
+    workspace = prepare_synthetic_workspace(
+        family_name="synthetic-wrong-operator",
+        task_count=2,
+        seed=13,
+        workspace_root=tmp_path,
+    )
+
+    results = validate_prepared_synthetic_workspace(workspace)
+
+    assert len(results) == 2
+    assert all(result.buggy_tests_failed for result in results)
+    assert all(result.gold_patch_applied for result in results)
+    assert all(result.repaired_tests_passed for result in results)
+
+
+@pytest.mark.integration
+def test_validate_dual_repo_doc_behavior_family(tmp_path) -> None:
+    workspace = prepare_synthetic_workspace(
+        family_name="synthetic-doc-behavior",
+        task_count=2,
+        seed=13,
+        workspace_root=tmp_path,
+    )
+
+    results = validate_prepared_synthetic_workspace(workspace)
+
+    assert len(results) == 2
+    assert all(result.buggy_tests_failed for result in results)
+    assert all(result.gold_patch_applied for result in results)
+    assert all(result.repaired_tests_passed for result in results)
+
+
+@pytest.mark.integration
+def test_evaluate_single_repo_predictions_resolves_with_gold(tmp_path) -> None:
+    workspace = prepare_synthetic_workspace(
+        family_name="synthetic-wrong-operator",
+        task_count=1,
+        seed=5,
+        workspace_root=tmp_path / "workspace",
+    )
+    prepared = workspace.tasks[0]
+    predictions_path = tmp_path / "predictions.jsonl"
+    record = SyntheticPredictionRecord(
+        task_id=prepared.task.task_id,
+        task_type=prepared.task.task_type,
+        model_name_or_path="bedrock/test-model",
+        context_source="baseline",
+        model_patch=prepared.task.gold_patch_path.read_text(encoding="utf-8"),
+        full_output=prepared.task.gold_patch_path.read_text(encoding="utf-8"),
+    )
+    _write_predictions(predictions_path, [record])
+
+    summary = evaluate_synthetic_predictions(
+        workspace=workspace,
+        predictions_path=predictions_path,
+        run_id="single-repo-gold-pass",
+        runs_root=tmp_path / "runs",
+    )
+
+    assert summary.resolved_instances == 1
+    assert summary.results[0].patch_applied is True
+    assert summary.results[0].tests_passed is True
+
+
 def _write_predictions(path: Path, records: list[SyntheticPredictionRecord]) -> None:
     path.write_text(
         "\n".join(json.dumps(asdict(record)) for record in records) + "\n",

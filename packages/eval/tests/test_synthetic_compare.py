@@ -7,7 +7,9 @@ from pathlib import Path
 import pytest
 
 from eval.synthetic.compare import (
+    compute_synthetic_pass_at_k,
     compare_synthetic_runs,
+    render_synthetic_pass_at_k_table,
     render_synthetic_comparison_tables,
 )
 from eval.synthetic.compare import (
@@ -229,7 +231,7 @@ def test_list_synthetic_run_ids_discovers_summary_directories(tmp_path) -> None:
 
 
 @pytest.mark.unit
-def test_render_synthetic_score_table_includes_baseline_code_wiki_ast_and_combined_rows(
+def test_render_synthetic_score_table_includes_baseline_code_wiki_ast_combined_and_grep_rows(
     tmp_path,
 ) -> None:
     runs_root = tmp_path / "runs"
@@ -313,6 +315,22 @@ def test_render_synthetic_score_table_includes_baseline_code_wiki_ast_and_combin
             "results": [],
         },
     )
+    _write_summary(
+        runs_root / "grep" / "summary.json",
+        {
+            "family_name": "synthetic-ab-contracts",
+            "family_version": "1",
+            "run_id": "grep",
+            "run_dir": str((runs_root / "grep").resolve()),
+            "predictions_path": "grep.jsonl",
+            "total_tasks": 10,
+            "resolved_tasks": 5,
+            "unresolved_tasks": 5,
+            "patch_apply_failures": 0,
+            "error_tasks": 5,
+            "results": [],
+        },
+    )
 
     baseline = compare_synthetic_runs(
         baseline_run_id="baseline",
@@ -339,6 +357,11 @@ def test_render_synthetic_score_table_includes_baseline_code_wiki_ast_and_combin
         lighthouse_run_id="combined",
         runs_root=runs_root,
     ).lighthouse
+    grep = compare_synthetic_runs(
+        baseline_run_id="baseline",
+        lighthouse_run_id="grep",
+        runs_root=runs_root,
+    ).lighthouse
 
     rows = build_synthetic_score_rows(
         baseline=baseline,
@@ -347,6 +370,7 @@ def test_render_synthetic_score_table_includes_baseline_code_wiki_ast_and_combin
             "wiki": wiki,
             "ast": ast,
             "combined": combined,
+            "grep": grep,
         },
     )
     text = render_synthetic_score_table(rows)
@@ -357,11 +381,151 @@ def test_render_synthetic_score_table_includes_baseline_code_wiki_ast_and_combin
     assert "wiki" in text
     assert "ast" in text
     assert "combined" in text
+    assert "grep" in text
     assert "20.0%" in text
     assert "80.0%" in text
     assert "70.0%" in text
     assert "60.0%" in text
     assert "90.0%" in text
+    assert "50.0%" in text
+
+
+@pytest.mark.unit
+def test_compute_synthetic_pass_at_k_aggregates_runs_with_combination_formula(tmp_path) -> None:
+    runs_root = tmp_path / "runs"
+    for index, resolved in enumerate((False, True, False), start=1):
+        _write_summary(
+            runs_root / f"run-{index}" / "summary.json",
+            {
+                "family_name": "synthetic-ab-contracts",
+                "family_version": "1",
+                "run_id": f"run-{index}",
+                "run_dir": str((runs_root / f"run-{index}").resolve()),
+                "predictions_path": f"run-{index}.jsonl",
+                "total_tasks": 1,
+                "resolved_tasks": 1 if resolved else 0,
+                "unresolved_tasks": 0 if resolved else 1,
+                "patch_apply_failures": 0,
+                "error_tasks": 0,
+                "results": [
+                    {
+                        "task_id": "task-1",
+                        "task_type": "api_contract_mismatch",
+                        "model_name_or_path": "bedrock/test",
+                        "context_source": "code",
+                        "patch_applied": resolved,
+                        "tests_passed": resolved,
+                        "resolved": resolved,
+                        "failing_tests": [] if resolved else ["test_one"],
+                        "pytest_targets": ["test_one"],
+                        "return_code": 0 if resolved else 1,
+                        "patch_apply_error": None,
+                        "repo_a_path": "repo_a",
+                        "repo_b_path": "repo_b",
+                    }
+                ],
+            },
+        )
+
+    summary = compute_synthetic_pass_at_k(
+        run_ids=["run-1", "run-2", "run-3"],
+        k_values=[1, 2, 3],
+        runs_root=runs_root,
+    )
+
+    assert summary.family_name == "synthetic-ab-contracts"
+    assert summary.k_values == (1, 2, 3)
+    assert len(summary.task_rows) == 1
+    task = summary.task_rows[0]
+    assert task.samples == 3
+    assert task.successes == 1
+    # n=3, c=1 -> pass@1=1/3, pass@2=2/3, pass@3=1
+    assert dict(task.pass_at_k)[1] == pytest.approx(1 / 3)
+    assert dict(task.pass_at_k)[2] == pytest.approx(2 / 3)
+    assert dict(task.pass_at_k)[3] == pytest.approx(1.0)
+
+    text = render_synthetic_pass_at_k_table(summary)
+    assert "Macro pass@k" in text
+    assert "Per-task pass@k" in text
+    assert "pass@1" in text
+    assert "pass@2" in text
+    assert "pass@3" in text
+
+
+@pytest.mark.unit
+def test_compute_synthetic_pass_at_k_rejects_mismatched_task_sets(tmp_path) -> None:
+    runs_root = tmp_path / "runs"
+    _write_summary(
+        runs_root / "run-a" / "summary.json",
+        {
+            "family_name": "synthetic-ab-contracts",
+            "family_version": "1",
+            "run_id": "run-a",
+            "run_dir": str((runs_root / "run-a").resolve()),
+            "predictions_path": "run-a.jsonl",
+            "total_tasks": 1,
+            "resolved_tasks": 0,
+            "unresolved_tasks": 1,
+            "patch_apply_failures": 0,
+            "error_tasks": 0,
+            "results": [
+                {
+                    "task_id": "task-1",
+                    "task_type": "api_contract_mismatch",
+                    "model_name_or_path": "bedrock/test",
+                    "context_source": "code",
+                    "patch_applied": False,
+                    "tests_passed": False,
+                    "resolved": False,
+                    "failing_tests": ["test_one"],
+                    "pytest_targets": ["test_one"],
+                    "return_code": 1,
+                    "patch_apply_error": None,
+                    "repo_a_path": "repo_a",
+                    "repo_b_path": "repo_b",
+                }
+            ],
+        },
+    )
+    _write_summary(
+        runs_root / "run-b" / "summary.json",
+        {
+            "family_name": "synthetic-ab-contracts",
+            "family_version": "1",
+            "run_id": "run-b",
+            "run_dir": str((runs_root / "run-b").resolve()),
+            "predictions_path": "run-b.jsonl",
+            "total_tasks": 1,
+            "resolved_tasks": 0,
+            "unresolved_tasks": 1,
+            "patch_apply_failures": 0,
+            "error_tasks": 0,
+            "results": [
+                {
+                    "task_id": "task-2",
+                    "task_type": "api_contract_mismatch",
+                    "model_name_or_path": "bedrock/test",
+                    "context_source": "code",
+                    "patch_applied": False,
+                    "tests_passed": False,
+                    "resolved": False,
+                    "failing_tests": ["test_one"],
+                    "pytest_targets": ["test_one"],
+                    "return_code": 1,
+                    "patch_apply_error": None,
+                    "repo_a_path": "repo_a",
+                    "repo_b_path": "repo_b",
+                }
+            ],
+        },
+    )
+
+    with pytest.raises(ValueError, match="same task ids"):
+        compute_synthetic_pass_at_k(
+            run_ids=["run-a", "run-b"],
+            k_values=[1, 2],
+            runs_root=runs_root,
+        )
 
 
 def _write_summary(path: Path, payload: Mapping[str, object]) -> None:

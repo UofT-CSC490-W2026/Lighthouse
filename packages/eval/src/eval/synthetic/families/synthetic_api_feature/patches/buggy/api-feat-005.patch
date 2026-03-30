@@ -1,0 +1,9 @@
+diff --git a/consumer_app/handlers.py b/consumer_app/handlers.py
+--- a/consumer_app/handlers.py
++++ b/consumer_app/handlers.py
+@@ -13,4 +13,4 @@
+ 
+ 
+ def check_contact(email: str) -> bool:
+-    return validate_email(email)
++    raise NotImplementedError

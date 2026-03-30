@@ -49,6 +49,7 @@ class GenerateWikiInput:
     branch: str
     llm_strategy: str = "openai"
     embedding_strategy: str = "openai"
+    embedding_model: str = ""
 
 
 @dataclass
@@ -80,6 +81,7 @@ class GenerateWikiPageInput:
     source_file_hints: list[str] = field(default_factory=list)
     llm_strategy: str = "openai"
     embedding_strategy: str = "openai"
+    embedding_model: str = ""
 
 
 @dataclass
@@ -88,6 +90,7 @@ class EmbedWikiPagesInput:
     offset: int
     limit: int
     embedding_strategy: str = "openai"
+    embedding_model: str = ""
 
 
 @dataclass
@@ -235,7 +238,11 @@ async def generate_wiki_page(input: GenerateWikiPageInput) -> str:
 
     try:
         try:
-            embedder = _build_embedding_provider(settings, embedding_strategy)
+            embedder = _build_embedding_provider(
+                settings,
+                embedding_strategy,
+                model_override=input.embedding_model,
+            )
             llm = _build_llm_provider(settings, llm_strategy)
         except Exception as exc:
             _raise_non_retryable_wiki_error(exc, phase="provider initialization")
@@ -301,7 +308,11 @@ async def embed_wiki_pages(input: EmbedWikiPagesInput) -> str:
     embedding_strategy = EmbeddingStrategy(input.embedding_strategy.strip().lower())
     try:
         try:
-            embedder = _build_embedding_provider(settings, embedding_strategy)
+            embedder = _build_embedding_provider(
+                settings,
+                embedding_strategy,
+                model_override=input.embedding_model,
+            )
         except Exception as exc:
             _raise_non_retryable_wiki_error(
                 exc, phase="embedding provider initialization"
@@ -390,9 +401,16 @@ def _flatten_structure_pages(structure: dict, section_path: str = "") -> list[di
     return pages
 
 
-def _build_embedding_provider(settings, strategy: EmbeddingStrategy):
+def _build_embedding_provider(
+    settings,
+    strategy: EmbeddingStrategy,
+    *,
+    model_override: str = "",
+):
     provider_kwargs: dict[str, object] = {
-        "model": settings.embedding_model or default_embedding_model(strategy.value),
+        "model": model_override.strip()
+        or settings.embedding_model
+        or default_embedding_model(strategy.value),
     }
     if strategy == EmbeddingStrategy.BEDROCK:
         provider_kwargs["dimensions"] = (

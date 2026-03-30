@@ -1,0 +1,19 @@
+diff --git a/consumer_app/handlers.py b/consumer_app/handlers.py
+--- a/consumer_app/handlers.py
++++ b/consumer_app/handlers.py
+@@ -4,13 +4,8 @@
+ 
+ 
+ def check_server_config(host: str, port: int) -> list[str]:
+-    errors: list[str] = []
+-    if not validate_ip_v4(host):
+-        errors.append(f"invalid host: {host}")
+-    if not validate_port(port):
+-        errors.append(f"invalid port: {port}")
+-    return errors
++    raise NotImplementedError
+ 
+ 
+ def check_contact(email: str) -> bool:
+-    return validate_email(email)
++    raise NotImplementedError

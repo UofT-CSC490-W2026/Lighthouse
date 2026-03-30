@@ -1,0 +1,14 @@
+diff --git a/transforms/parsers.py b/transforms/parsers.py
+--- a/transforms/parsers.py
++++ b/transforms/parsers.py
+@@ -3,7 +3,9 @@
+ 
+ def parse_port(text: str) -> int:
+     """Parse a port number string. Raise ValueError if not a valid port."""
+-    value = int(text.strip())
++    if text != text.strip():
++        raise ValueError(f"Invalid port: {text!r}")
++    value = int(text)
+     if value < 0 or value > 65535:
+         raise ValueError(f"Port out of range: {value}")
+     return value

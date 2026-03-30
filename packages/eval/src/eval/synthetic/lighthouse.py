@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import re
+import subprocess
 
 import httpx
 from pydantic import ValidationError
 from shared.schemas.ingestion import IndexAcceptedResponse
 from shared.schemas.search import (
+    CodeSnippet,
     CombinedSearchResult,
     CombinedSnippet,
     SearchRequest,
@@ -64,6 +67,7 @@ from .workspace import (
 
 DEFAULT_SYNTHETIC_WIKI_INGESTION_URL = DEFAULT_INGESTION_URL
 DEFAULT_SYNTHETIC_CONTEXT_SOURCE = "code"
+_GREP_TOKEN_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]{2,}")
 
 
 def index_synthetic_repository(
@@ -76,6 +80,8 @@ def index_synthetic_repository(
     progress_heartbeat_seconds: float = DEFAULT_PROGRESS_HEARTBEAT_SECONDS,
     timeout_seconds: float = DEFAULT_STATUS_TIMEOUT_SECONDS,
     include_ast: bool = False,
+    embedding_strategy: str | None = None,
+    embedding_model: str | None = None,
 ) -> Path:
     if not ingestion_url.strip():
         raise ValueError("ingestion_url must not be empty.")
@@ -143,6 +149,8 @@ def index_synthetic_repository(
                     tuple(to_submit),
                     github_token=github_token,
                     repo_url_override=repo_url_override,
+                    embedding_strategy=embedding_strategy,
+                    embedding_model=embedding_model,
                 )
                 response = client.post(
                     f"{normalized_ingestion_url}/index",
@@ -176,6 +184,8 @@ def prepare_synthetic_wiki(
     poll_interval_seconds: float = DEFAULT_WIKI_POLL_INTERVAL_SECONDS,
     progress_heartbeat_seconds: float = DEFAULT_WIKI_PROGRESS_HEARTBEAT_SECONDS,
     timeout_seconds: float = DEFAULT_WIKI_TIMEOUT_SECONDS,
+    embedding_strategy: str | None = None,
+    embedding_model: str | None = None,
 ) -> None:
     if not ingestion_url.strip():
         raise ValueError("ingestion_url must not be empty.")
@@ -212,12 +222,18 @@ def prepare_synthetic_wiki(
         if normalized_status in ACTIVE_WIKI_STATUSES:
             print(f"Wiki already generating: {full_name}@{repo.branch}")
         else:
-            request = build_synthetic_wiki_request(workspace)
+            request = build_synthetic_wiki_request(
+                workspace,
+                embedding_strategy=embedding_strategy,
+                embedding_model=embedding_model,
+            )
             accepted = submit_wiki_generation_request(
                 client=client,
                 ingestion_url=normalized_ingestion_url,
                 github_repo_id=request.github_repo_id,
                 branch=request.branch,
+                embedding_strategy=request.embedding_strategy,
+                embedding_model=request.embedding_model,
                 repo_display_name=f"{full_name}@{repo.branch}",
             )
             print(
@@ -241,13 +257,17 @@ def build_synthetic_lighthouse_messages(
     search_service_url: str = DEFAULT_SEARCH_SERVICE_URL,
     top_k: int = DEFAULT_SEARCH_TOP_K,
     context_source: str = DEFAULT_SYNTHETIC_CONTEXT_SOURCE,
+    query_embedding_strategy: str | None = None,
+    query_embedding_model: str | None = None,
 ) -> dict[str, str]:
     if top_k < 1:
         raise ValueError("top_k must be at least 1.")
-    if context_source not in {"code", "wiki", "ast", "combined", "code+wiki"}:
+    if context_source not in {"code", "wiki", "ast", "combined", "code+wiki", "grep"}:
         raise ValueError(
-            "context_source must be 'code', 'wiki', 'ast', 'combined', or 'code+wiki'."
+            "context_source must be 'code', 'wiki', 'ast', 'combined', 'code+wiki', or 'grep'."
         )
+    if context_source == "grep":
+        return build_synthetic_grep_messages(workspace=workspace, top_k=top_k)
     if not search_service_url.strip():
         raise ValueError("search_service_url must not be empty.")
 
@@ -270,6 +290,8 @@ def build_synthetic_lighthouse_messages(
                     workspace=workspace,
                     task=task,
                     top_k=top_k,
+                    embedding_strategy=query_embedding_strategy,
+                    embedding_model=query_embedding_model,
                 )
                 print(f"    retrieved {len(result.snippets)} code snippet(s)")
                 messages[task.task_id] = build_synthetic_code_lighthouse_user_message(
@@ -282,6 +304,8 @@ def build_synthetic_lighthouse_messages(
                     workspace=workspace,
                     task=task,
                     top_k=top_k,
+                    embedding_strategy=query_embedding_strategy,
+                    embedding_model=query_embedding_model,
                 )
                 print(f"    retrieved {len(result.snippets)} wiki snippet(s)")
                 messages[task.task_id] = build_synthetic_wiki_lighthouse_user_message(
@@ -294,6 +318,8 @@ def build_synthetic_lighthouse_messages(
                     workspace=workspace,
                     task=task,
                     top_k=top_k,
+                    embedding_strategy=query_embedding_strategy,
+                    embedding_model=query_embedding_model,
                 )
                 print(f"    retrieved {len(result.snippets)} ast snippet(s)")
                 messages[task.task_id] = build_synthetic_ast_lighthouse_user_message(
@@ -306,6 +332,8 @@ def build_synthetic_lighthouse_messages(
                     workspace=workspace,
                     task=task,
                     top_k=top_k,
+                    embedding_strategy=query_embedding_strategy,
+                    embedding_model=query_embedding_model,
                 )
                 print(f"    retrieved {len(result.snippets)} fused snippet(s)")
                 messages[task.task_id] = build_synthetic_combined_lighthouse_user_message(
@@ -318,6 +346,8 @@ def build_synthetic_lighthouse_messages(
                     workspace=workspace,
                     task=task,
                     top_k=top_k,
+                    embedding_strategy=query_embedding_strategy,
+                    embedding_model=query_embedding_model,
                 )
                 print(f"    retrieved {len(result.snippets)} fused snippet(s)")
                 messages[task.task_id] = build_synthetic_combined_lighthouse_user_message(
@@ -332,6 +362,184 @@ def build_synthetic_lighthouse_messages(
     return messages
 
 
+def build_synthetic_grep_messages(
+    *,
+    workspace: PreparedSyntheticWorkspace,
+    top_k: int,
+) -> dict[str, str]:
+    repo_root = workspace.search_repo_path.resolve()
+    messages: dict[str, str] = {}
+    for index, prepared in enumerate(workspace.tasks, start=1):
+        task = prepared.task
+        print(
+            f"[{index}/{len(workspace.tasks)}] Retrieving synthetic context for {task.task_id} (grep)"
+        )
+        snippets = grep_synthetic_code(
+            repo_root=repo_root,
+            task=task,
+            top_k=top_k,
+        )
+        print(f"    retrieved {len(snippets)} grep snippet(s)")
+        messages[task.task_id] = build_synthetic_code_lighthouse_user_message(
+            prepared,
+            snippets,
+        )
+    return messages
+
+
+def grep_synthetic_code(
+    *,
+    repo_root: Path,
+    task: SyntheticTask,
+    top_k: int,
+) -> list[CodeSnippet]:
+    if top_k < 1:
+        return []
+
+    terms = _grep_query_terms(task)
+    if not terms:
+        return []
+
+    matched_terms_by_file: dict[Path, set[str]] = {}
+    for term in terms:
+        for file_path in _rg_files_for_term(repo_root=repo_root, term=term):
+            matched_terms_by_file.setdefault(file_path, set()).add(term)
+
+    ranked_paths = sorted(
+        matched_terms_by_file,
+        key=lambda path: (
+            -len(matched_terms_by_file[path]),
+            str(path),
+        ),
+    )
+    snippets: list[CodeSnippet] = []
+    for file_path in ranked_paths[:top_k]:
+        matched_terms = sorted(matched_terms_by_file[file_path])
+        snippet = _snippet_for_file(
+            repo_root=repo_root,
+            file_path=file_path,
+            matched_terms=matched_terms,
+        )
+        if snippet is not None:
+            snippets.append(snippet)
+    return snippets
+
+
+def _grep_query_terms(task: SyntheticTask) -> tuple[str, ...]:
+    ordered_terms: list[str] = []
+    seen: set[str] = set()
+
+    def _add(term: str) -> None:
+        normalized = term.strip()
+        if len(normalized) < 3:
+            return
+        key = normalized.lower()
+        if key in seen:
+            return
+        seen.add(key)
+        ordered_terms.append(normalized)
+
+    for symbol in task.expected_relevant_symbols:
+        _add(symbol)
+    for api_name in task.visible_api_names:
+        _add(api_name)
+
+    for token in _GREP_TOKEN_RE.findall(
+        f"{task.title}\n{task.problem_statement}\n{task.test_context}"
+    ):
+        if token.lower() in {"the", "and", "for", "with", "from", "that", "this"}:
+            continue
+        _add(token)
+        if len(ordered_terms) >= 12:
+            break
+
+    return tuple(ordered_terms[:12])
+
+
+def _rg_files_for_term(*, repo_root: Path, term: str) -> tuple[Path, ...]:
+    command = [
+        "rg",
+        "--files-with-matches",
+        "-S",
+        "--glob",
+        "*.py",
+        "--glob",
+        "!**/tests/**",
+        "--glob",
+        "!**/.venv/**",
+        term,
+        str(repo_root),
+    ]
+    completed = subprocess.run(
+        command,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if completed.returncode not in {0, 1}:
+        return ()
+    paths: list[Path] = []
+    for raw_line in completed.stdout.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        path = Path(line)
+        if path.is_file():
+            paths.append(path)
+    return tuple(paths)
+
+
+def _snippet_for_file(
+    *,
+    repo_root: Path,
+    file_path: Path,
+    matched_terms: list[str],
+) -> CodeSnippet | None:
+    try:
+        text = file_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+
+    lines = text.splitlines()
+    if not lines:
+        return None
+    match_line_index = _first_matching_line_index(lines=lines, terms=matched_terms)
+    if match_line_index is None:
+        return None
+
+    start_line = max(1, match_line_index + 1 - 8)
+    end_line = min(len(lines), match_line_index + 1 + 8)
+    content = "\n".join(lines[start_line - 1 : end_line]).rstrip()
+    if not content:
+        return None
+    try:
+        relative = file_path.relative_to(repo_root).as_posix()
+    except ValueError:
+        relative = file_path.as_posix()
+
+    reason_terms = ", ".join(matched_terms[:3])
+    return CodeSnippet(
+        file_path=relative,
+        start_line=start_line,
+        end_line=end_line,
+        content=content,
+        language="python",
+        score=float(len(matched_terms)),
+        reason=f"grep match: {reason_terms}",
+    )
+
+
+def _first_matching_line_index(*, lines: list[str], terms: list[str]) -> int | None:
+    lowered_terms = [term.lower() for term in terms]
+    for index, line in enumerate(lines):
+        if any(term in line for term in terms):
+            return index
+        lowered_line = line.lower()
+        if any(term in lowered_line for term in lowered_terms):
+            return index
+    return None
+
+
 def search_synthetic_code(
     *,
     client: httpx.Client,
@@ -339,6 +547,8 @@ def search_synthetic_code(
     workspace: PreparedSyntheticWorkspace,
     task: SyntheticTask,
     top_k: int,
+    embedding_strategy: str | None = None,
+    embedding_model: str | None = None,
 ) -> SearchResult:
     repo_entry = shared_repo_entry(workspace)
     request = SearchRequest(
@@ -346,6 +556,8 @@ def search_synthetic_code(
         github_repo_id=repo_entry.github_repo_id,
         branch=repo_entry.branch,
         top_k=top_k,
+        embedding_strategy=embedding_strategy,
+        embedding_model=embedding_model,
     )
     response = client.post(
         f"{search_service_url}/search",
@@ -362,6 +574,8 @@ def search_synthetic_wiki(
     workspace: PreparedSyntheticWorkspace,
     task: SyntheticTask,
     top_k: int,
+    embedding_strategy: str | None = None,
+    embedding_model: str | None = None,
 ) -> WikiSearchResult:
     repo_entry = shared_repo_entry(workspace)
     request = WikiSearchRequest(
@@ -369,6 +583,8 @@ def search_synthetic_wiki(
         github_repo_id=repo_entry.github_repo_id,
         branch=repo_entry.branch,
         top_k=top_k,
+        embedding_strategy=embedding_strategy,
+        embedding_model=embedding_model,
     )
     response = client.post(
         f"{search_service_url}/search",
@@ -385,6 +601,8 @@ def search_synthetic_ast(
     workspace: PreparedSyntheticWorkspace,
     task: SyntheticTask,
     top_k: int,
+    embedding_strategy: str | None = None,
+    embedding_model: str | None = None,
 ) -> SearchResult:
     repo = ast_resolved_repository(workspace)
     request = SearchRequest(
@@ -392,6 +610,8 @@ def search_synthetic_ast(
         github_repo_id=repo.github_repo_id,
         branch=repo.branch,
         top_k=top_k,
+        embedding_strategy=embedding_strategy,
+        embedding_model=embedding_model,
     )
     response = client.post(
         f"{search_service_url}/search",
@@ -408,6 +628,8 @@ def search_synthetic_code_and_wiki(
     workspace: PreparedSyntheticWorkspace,
     task: SyntheticTask,
     top_k: int,
+    embedding_strategy: str | None = None,
+    embedding_model: str | None = None,
 ) -> CombinedSearchResult:
     repo_entry = shared_repo_entry(workspace)
     request = SearchRequest(
@@ -415,6 +637,8 @@ def search_synthetic_code_and_wiki(
         github_repo_id=repo_entry.github_repo_id,
         branch=repo_entry.branch,
         top_k=top_k,
+        embedding_strategy=embedding_strategy,
+        embedding_model=embedding_model,
         context_sources=(
             SearchContextSource.code,
             SearchContextSource.wiki,
@@ -449,6 +673,8 @@ def search_synthetic_combined(
     workspace: PreparedSyntheticWorkspace,
     task: SyntheticTask,
     top_k: int,
+    embedding_strategy: str | None = None,
+    embedding_model: str | None = None,
 ) -> CombinedSearchResult:
     code_result = search_synthetic_code(
         client=client,
@@ -456,6 +682,8 @@ def search_synthetic_combined(
         workspace=workspace,
         task=task,
         top_k=top_k,
+        embedding_strategy=embedding_strategy,
+        embedding_model=embedding_model,
     )
     wiki_result = search_synthetic_wiki(
         client=client,
@@ -463,6 +691,8 @@ def search_synthetic_combined(
         workspace=workspace,
         task=task,
         top_k=top_k,
+        embedding_strategy=embedding_strategy,
+        embedding_model=embedding_model,
     )
     ast_result = search_synthetic_ast(
         client=client,
@@ -470,6 +700,8 @@ def search_synthetic_combined(
         workspace=workspace,
         task=task,
         top_k=top_k,
+        embedding_strategy=embedding_strategy,
+        embedding_model=embedding_model,
     )
     fused = _rrf_fuse_combined(
         [

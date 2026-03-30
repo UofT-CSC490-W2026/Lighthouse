@@ -237,7 +237,9 @@ def _render_invalid_block(
 
 
 def _render_pytest_param(values: tuple[object, ...], case_id: str) -> str:
-    rendered_values = ", ".join(repr(value) for value in values)
+    # Use ascii() so control characters in strings (e.g., "\n", "\t") are escaped
+    # in generated source code instead of being injected as raw newlines/tabs.
+    rendered_values = ", ".join(ascii(value) for value in values)
     return f"        pytest.param({rendered_values}, id={case_id!r}),"
 
 
@@ -250,7 +252,9 @@ def _upsert_generated_block(path: Path, block: str) -> None:
         flags=re.DOTALL,
     )
     if pattern.search(text):
-        updated = pattern.sub(generated_block, text)
+        # Use a callable replacement so backslashes in generated content
+        # (e.g., "\\n", "\\t") are preserved literally.
+        updated = pattern.sub(lambda _match: generated_block, text)
     else:
         updated = text.rstrip() + "\n\n\n" + generated_block + "\n"
     path.write_text(updated, encoding="utf-8")

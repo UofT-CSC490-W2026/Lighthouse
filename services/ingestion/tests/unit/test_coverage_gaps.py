@@ -319,6 +319,81 @@ def test_chunk_files_ast_fallbacks_cover_unknown_language_and_runtime_error(monk
 
 
 @pytest.mark.unit
+def test_chunk_files_ast_fallbacks_when_chunker_init_fails_for_markdown(monkeypatch, tmp_path):
+    repo_path = tmp_path / "repo"
+    repo_path.mkdir()
+    readme = repo_path / "README.md"
+    readme.write_text("# hello\n\ncontent\n", encoding="utf-8")
+
+    fallback_chunk = SimpleNamespace(
+        content="chunked content",
+        start_line=1,
+        end_line=2,
+        chunk_hash="hash",
+    )
+    service = SimpleNamespace(write_staging=MagicMock())
+    closed = []
+
+    class FakeSlidingWindowChunker:
+        def chunk_file(self, content: str, file_path: str, language: str | None = None):
+            return [fallback_chunk]
+
+    class FakeAstCodeChunker:
+        def chunk_file(self, content: str, file_path: str, language: str | None = None):
+            return [fallback_chunk]
+
+    def fake_get_chunker(strategy, language=None, chunker_config=None):
+        if strategy is ChunkerStrategy.SLIDING_WINDOW:
+            return FakeSlidingWindowChunker()
+        if strategy is ChunkerStrategy.AST_CODE:
+            if language == "markdown":
+                raise ValueError("Unsupported Programming Language: markdown!")
+            return FakeAstCodeChunker()
+        raise AssertionError(f"unexpected strategy: {strategy}")
+
+    monkeypatch.setattr(
+        "ingestion.temporal.activities.chunking.get_settings",
+        MagicMock(return_value=SimpleNamespace(clone_base_dir=str(tmp_path))),
+    )
+    monkeypatch.setattr(
+        "ingestion.temporal.activities.chunking.make_db",
+        MagicMock(return_value=SimpleNamespace(close=lambda: closed.append(True))),
+    )
+    monkeypatch.setattr("ingestion.temporal.activities.chunking.get_chunker", fake_get_chunker)
+    monkeypatch.setattr(
+        "ingestion.temporal.activities.chunking.ChunkService",
+        MagicMock(return_value=service),
+    )
+    monkeypatch.setattr(
+        "ingestion.temporal.activities.chunking.ASTCodeChunker",
+        FakeAstCodeChunker,
+    )
+    monkeypatch.setattr(
+        "ingestion.temporal.activities.chunking.SlidingWindowChunker",
+        FakeSlidingWindowChunker,
+    )
+
+    result = asyncio.run(
+        chunk_files(
+            ChunkFilesInput(
+                repository_id="repo-id",
+                branch="main",
+                repo_path=str(repo_path),
+                chunker_strategy="ast_code",
+                file_filter=["README.md"],
+            )
+        )
+    )
+
+    assert result.chunk_count == 1
+    service.write_staging.assert_called_once()
+    written_chunks = service.write_staging.call_args.args[1]
+    assert len(written_chunks) == 1
+    assert written_chunks[0]["file_path"] == "README.md"
+    assert closed == [True]
+
+
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_embed_chunk_batch_uses_strategy_specific_default_model(monkeypatch):
     captured: dict[str, object] = {}

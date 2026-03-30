@@ -23,14 +23,8 @@ def test_synthetic_baseline_prompt_avoids_relevant_file_and_patch_leakage(tmp_pa
     assert f"Task ID: {task.task_id}" in prompt
     assert f"Task type: {task.task_type}" in prompt
     assert f"Visible provider APIs: {', '.join(task.visible_api_names)}" in prompt
-    assert (
-        f"Consumer source files to edit for this task: {', '.join(task.consumer_edit_files)}"
-        in prompt
-    )
-    assert (
-        f"Consumer test files for this task: {', '.join(task.consumer_test_files)}"
-        in prompt
-    )
+    assert f"Source files to edit: {', '.join(task.consumer_edit_files)}" in prompt
+    assert f"Test files: {', '.join(task.consumer_test_files)}" in prompt
     first_edit_file = task.consumer_edit_files[0]
     assert (
         f"Use diff headers like `a/{first_edit_file}` and `b/{first_edit_file}`." in prompt
@@ -98,5 +92,5 @@ def test_synthetic_search_query_uses_visible_api_and_test_context() -> None:
     query = build_synthetic_search_query(task)
 
     assert task.problem_statement in query
-    assert "Visible APIs: providerlib.metrics.clamp_percentage" in query
+    assert "Relevant APIs: providerlib.metrics.clamp_percentage" in query
     assert task.test_context in query

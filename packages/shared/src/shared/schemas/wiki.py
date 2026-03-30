@@ -34,6 +34,8 @@ class GenerateWikiRequest(BaseModel):
 
     github_repo_id: int
     branch: str = "main"
+    embedding_strategy: str | None = None
+    embedding_model: str | None = None
 
 
 class GenerateWikiAcceptedResponse(BaseModel):

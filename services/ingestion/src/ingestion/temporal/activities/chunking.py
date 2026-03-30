@@ -65,8 +65,10 @@ async def chunk_files(input: ChunkFilesInput) -> ChunkFilesOutput:
                         chunker = get_chunker(strategy, language=language)
                     except Exception:
                         logger.exception(
-                            "Could not create AST chunker for language=%s; "
-                            "using sliding_window",
+                            "Chunker init failed for %s with strategy=%s and language=%s; "
+                            "falling back to sliding_window",
+                            relative_path,
+                            strategy,
                             language,
                         )
                         chunker = get_chunker(ChunkerStrategy.SLIDING_WINDOW)

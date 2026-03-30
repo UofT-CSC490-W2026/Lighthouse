@@ -8,6 +8,18 @@ import pytest
 from ingestion.utilities.git_ops import GitOperations
 
 
+@pytest.fixture(autouse=True)
+def _mock_git_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _fake_run(*args, **kwargs) -> MagicMock:
+        proc = MagicMock()
+        proc.returncode = 0
+        proc.stdout = ""
+        proc.stderr = ""
+        return proc
+
+    monkeypatch.setattr("ingestion.utilities.git_ops.subprocess.run", _fake_run)
+
+
 @pytest.mark.unit
 class TestGitOperations:
     """Tests for GitOperations."""
@@ -41,6 +53,34 @@ class TestGitOperations:
             branch="main",
         )
         assert result == tmp_path / "my-repo"
+
+    @patch.object(GitOperations, "_ensure_safe_directory")
+    @patch("ingestion.utilities.git_ops.Repo")
+    def test_clone_new_repo_local_source_marks_source_safe(
+        self,
+        mock_repo_cls: MagicMock,
+        mock_ensure_safe: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        src_repo = tmp_path / "src-repo"
+        src_repo.mkdir()
+        (src_repo / ".git").mkdir()
+        ops = GitOperations(str(tmp_path))
+
+        ops.clone_or_fetch(str(src_repo), "dst-repo", branch="main")
+
+        expected_dst = tmp_path / "dst-repo"
+        assert mock_ensure_safe.call_count == 3
+        calls = [call.args[0] for call in mock_ensure_safe.call_args_list]
+        assert calls[0] == src_repo
+        assert calls[1] == expected_dst
+        assert calls[2] == expected_dst
+
+    def test_local_repo_path_from_url(self, tmp_path: Path) -> None:
+        ops = GitOperations(str(tmp_path))
+        assert ops._local_repo_path_from_url("/tmp/repo") == Path("/tmp/repo")
+        assert ops._local_repo_path_from_url("file:///tmp/repo") == Path("/tmp/repo")
+        assert ops._local_repo_path_from_url("https://github.com/o/r") is None
 
     @patch("ingestion.utilities.git_ops.Repo")
     def test_fetch_existing_repo(self, mock_repo_cls: MagicMock, tmp_path: Path) -> None:
@@ -136,7 +176,6 @@ class TestGitOperations:
         repo.mkdir()
         git_dir = repo / ".git"
         git_dir.mkdir()
-        (git_dir / "config").write_text("[core]")
 
         result = ops.list_files(repo)
         names = [p.name for p in result]
@@ -189,3 +228,42 @@ class TestGitOperations:
         ops = GitOperations(str(tmp_path))
         result = ops.get_changed_files(tmp_path / "repo", "aaa", "bbb")
         assert result == []
+
+    @patch("ingestion.utilities.git_ops.subprocess.run")
+    def test_ensure_safe_directory_adds_repo_and_dot_git(
+        self,
+        mock_run: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        proc = MagicMock()
+        proc.returncode = 0
+        proc.stdout = ""
+        proc.stderr = ""
+        mock_run.return_value = proc
+
+        repo_dir = tmp_path / "repo"
+        repo_dir.mkdir()
+        (repo_dir / ".git").mkdir()
+
+        ops = GitOperations(str(tmp_path))
+        ops._ensure_safe_directory(repo_dir)
+
+        assert mock_run.call_count == 2
+        first_call = mock_run.call_args_list[0][0][0]
+        second_call = mock_run.call_args_list[1][0][0]
+        assert first_call == [
+            "git",
+            "config",
+            "--global",
+            "--add",
+            "safe.directory",
+            str(repo_dir),
+        ]
+        assert second_call == [
+            "git",
+            "config",
+            "--global",
+            "--add",
+            "safe.directory",
+            str(repo_dir / ".git"),
+        ]

@@ -1,0 +1,384 @@
+{
+  "family_name": "synthetic-doc-feature",
+  "family_version": "1",
+  "generation_config": {
+    "task_type": "feature_doc_guided",
+    "task_count": 10,
+    "shared_library_repo_count": 1,
+    "consumer_repo_mode": "one_a_per_task",
+    "python_version_target": "3.11",
+    "context_modes": [
+      "code",
+      "wiki"
+    ],
+    "seed": 495
+  },
+  "tasks": [
+    {
+      "task_id": "doc-feat-001",
+      "task_type": "feature_doc_guided",
+      "title": "Implement category_report using domainlib pipeline and output",
+      "problem_statement": "The consumer's category_report function is not yet implemented. It should load CSV records using domainlib.pipeline.load_records, count occurrences of each value in the given category field using domainlib.pipeline.aggregate, and format the result as a text table using domainlib.output.format_table with the title 'Category Report'.",
+      "repo_a_name": "synthetic/doc-feature-consumer-001",
+      "repo_b_name": "synthetic/domainlib",
+      "repo_a_id": 960000001,
+      "repo_b_id": 960000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-feat-001.patch",
+      "gold_patch_path": "patches/gold/doc-feat-001.patch",
+      "pytest_targets": [
+        "tests/test_reports.py"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/reports.py"
+      ],
+      "expected_relevant_symbols": [
+        "load_records",
+        "aggregate",
+        "format_table"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "domainlib.pipeline.load_records",
+        "domainlib.pipeline.aggregate",
+        "domainlib.output.format_table"
+      ],
+      "test_context": "test_category_report_by_dept, test_category_report_by_name, and test_category_report_empty_csv fail with NotImplementedError because category_report has no implementation."
+    },
+    {
+      "task_id": "doc-feat-002",
+      "task_type": "feature_doc_guided",
+      "title": "Implement filtered_category_report with filter and aggregate pipeline",
+      "problem_statement": "The consumer's filtered_category_report function is not yet implemented. It should load records, filter them by a given field/value using domainlib.pipeline.filter_records, aggregate the filtered results by category using domainlib.pipeline.aggregate, and format with domainlib.output.format_table titled 'Filtered Report'.",
+      "repo_a_name": "synthetic/doc-feature-consumer-002",
+      "repo_b_name": "synthetic/domainlib",
+      "repo_a_id": 960000002,
+      "repo_b_id": 960000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-feat-002.patch",
+      "gold_patch_path": "patches/gold/doc-feat-002.patch",
+      "pytest_targets": [
+        "tests/test_reports.py"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/reports.py"
+      ],
+      "expected_relevant_symbols": [
+        "load_records",
+        "filter_records",
+        "aggregate",
+        "format_table"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "domainlib.pipeline.load_records",
+        "domainlib.pipeline.filter_records",
+        "domainlib.pipeline.aggregate",
+        "domainlib.output.format_table"
+      ],
+      "test_context": "test_filtered_category_report_eng_names, test_filtered_category_report_sales_names, test_filtered_category_report_no_match, and test_filtered_category_report_case_insensitive fail with NotImplementedError."
+    },
+    {
+      "task_id": "doc-feat-003",
+      "task_type": "feature_doc_guided",
+      "title": "Implement total_summary using sum_field and format_summary",
+      "problem_statement": "The consumer's total_summary function is not yet implemented. It should load CSV records, compute the sum of a numeric field using domainlib.aggregation.sum_field, and format a summary line using domainlib.output.format_summary with the total, record count, and average.",
+      "repo_a_name": "synthetic/doc-feature-consumer-003",
+      "repo_b_name": "synthetic/domainlib",
+      "repo_a_id": 960000003,
+      "repo_b_id": 960000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-feat-003.patch",
+      "gold_patch_path": "patches/gold/doc-feat-003.patch",
+      "pytest_targets": [
+        "tests/test_summaries.py"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/summaries.py"
+      ],
+      "expected_relevant_symbols": [
+        "load_records",
+        "sum_field",
+        "format_summary"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "domainlib.pipeline.load_records",
+        "domainlib.aggregation.sum_field",
+        "domainlib.output.format_summary"
+      ],
+      "test_context": "test_total_summary and test_total_summary_empty_csv fail with NotImplementedError because total_summary has no implementation."
+    },
+    {
+      "task_id": "doc-feat-004",
+      "task_type": "feature_doc_guided",
+      "title": "Implement filtered_summary with filter, sum, and format pipeline",
+      "problem_statement": "The consumer's filtered_summary function is not yet implemented. It should load records, filter by field/value, compute the sum of a numeric field on the filtered set, and format a summary line with total, count, and average.",
+      "repo_a_name": "synthetic/doc-feature-consumer-004",
+      "repo_b_name": "synthetic/domainlib",
+      "repo_a_id": 960000004,
+      "repo_b_id": 960000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-feat-004.patch",
+      "gold_patch_path": "patches/gold/doc-feat-004.patch",
+      "pytest_targets": [
+        "tests/test_summaries.py"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/summaries.py"
+      ],
+      "expected_relevant_symbols": [
+        "load_records",
+        "filter_records",
+        "sum_field",
+        "format_summary"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "domainlib.pipeline.load_records",
+        "domainlib.pipeline.filter_records",
+        "domainlib.aggregation.sum_field",
+        "domainlib.output.format_summary"
+      ],
+      "test_context": "test_filtered_summary_eng, test_filtered_summary_sales, test_filtered_summary_no_match, and test_filtered_summary_case_insensitive fail with NotImplementedError."
+    },
+    {
+      "task_id": "doc-feat-005",
+      "task_type": "feature_doc_guided",
+      "title": "Implement grouped_totals using group_by and sum_field",
+      "problem_statement": "The consumer's grouped_totals function is not yet implemented. It should load records, group them by a field using domainlib.aggregation.group_by, compute sum_field for each group, and format the totals as a table using domainlib.output.format_table titled 'Group Totals'.",
+      "repo_a_name": "synthetic/doc-feature-consumer-005",
+      "repo_b_name": "synthetic/domainlib",
+      "repo_a_id": 960000005,
+      "repo_b_id": 960000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-feat-005.patch",
+      "gold_patch_path": "patches/gold/doc-feat-005.patch",
+      "pytest_targets": [
+        "tests/test_exports.py"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/exports.py"
+      ],
+      "expected_relevant_symbols": [
+        "load_records",
+        "group_by",
+        "sum_field",
+        "format_table"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "domainlib.pipeline.load_records",
+        "domainlib.aggregation.group_by",
+        "domainlib.aggregation.sum_field",
+        "domainlib.output.format_table"
+      ],
+      "test_context": "test_grouped_totals_by_dept, test_grouped_totals_empty_csv, and test_grouped_totals_by_name fail with NotImplementedError because grouped_totals has no implementation."
+    },
+    {
+      "task_id": "doc-feat-006",
+      "task_type": "feature_doc_guided",
+      "title": "Implement grouped_summaries with group_by, sum_field, and format_summary",
+      "problem_statement": "The consumer's grouped_summaries function is not yet implemented. It should load records, group by a field, then for each group (sorted alphabetically) compute the sum and format a summary line. All lines are joined with newlines.",
+      "repo_a_name": "synthetic/doc-feature-consumer-006",
+      "repo_b_name": "synthetic/domainlib",
+      "repo_a_id": 960000006,
+      "repo_b_id": 960000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-feat-006.patch",
+      "gold_patch_path": "patches/gold/doc-feat-006.patch",
+      "pytest_targets": [
+        "tests/test_exports.py"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/exports.py"
+      ],
+      "expected_relevant_symbols": [
+        "load_records",
+        "group_by",
+        "sum_field",
+        "format_summary"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "domainlib.pipeline.load_records",
+        "domainlib.aggregation.group_by",
+        "domainlib.aggregation.sum_field",
+        "domainlib.output.format_summary"
+      ],
+      "test_context": "test_grouped_summaries_by_dept, test_grouped_summaries_empty_csv, and test_grouped_summaries_single_group fail with NotImplementedError because grouped_summaries has no implementation."
+    },
+    {
+      "task_id": "doc-feat-007",
+      "task_type": "feature_doc_guided",
+      "title": "Implement both report functions in reports.py",
+      "problem_statement": "Both category_report and filtered_category_report in the consumer's reports module are not yet implemented. category_report should load records and aggregate by category field. filtered_category_report should additionally filter records before aggregating. Both format results using format_table.",
+      "repo_a_name": "synthetic/doc-feature-consumer-007",
+      "repo_b_name": "synthetic/domainlib",
+      "repo_a_id": 960000007,
+      "repo_b_id": 960000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-feat-007.patch",
+      "gold_patch_path": "patches/gold/doc-feat-007.patch",
+      "pytest_targets": [
+        "tests/test_reports.py"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/reports.py"
+      ],
+      "expected_relevant_symbols": [
+        "load_records",
+        "filter_records",
+        "aggregate",
+        "format_table"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "domainlib.pipeline.load_records",
+        "domainlib.pipeline.filter_records",
+        "domainlib.pipeline.aggregate",
+        "domainlib.output.format_table"
+      ],
+      "test_context": "All tests in test_reports.py fail with NotImplementedError because both category_report and filtered_category_report are stubs."
+    },
+    {
+      "task_id": "doc-feat-008",
+      "task_type": "feature_doc_guided",
+      "title": "Implement both summary functions in summaries.py",
+      "problem_statement": "Both total_summary and filtered_summary in the consumer's summaries module are not yet implemented. total_summary should load records, sum a field, and format a summary. filtered_summary should filter first, then sum and format. Both use format_summary for output.",
+      "repo_a_name": "synthetic/doc-feature-consumer-008",
+      "repo_b_name": "synthetic/domainlib",
+      "repo_a_id": 960000008,
+      "repo_b_id": 960000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-feat-008.patch",
+      "gold_patch_path": "patches/gold/doc-feat-008.patch",
+      "pytest_targets": [
+        "tests/test_summaries.py"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/summaries.py"
+      ],
+      "expected_relevant_symbols": [
+        "load_records",
+        "filter_records",
+        "sum_field",
+        "format_summary"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "domainlib.pipeline.load_records",
+        "domainlib.pipeline.filter_records",
+        "domainlib.aggregation.sum_field",
+        "domainlib.output.format_summary"
+      ],
+      "test_context": "All tests in test_summaries.py fail with NotImplementedError because both total_summary and filtered_summary are stubs."
+    },
+    {
+      "task_id": "doc-feat-009",
+      "task_type": "feature_doc_guided",
+      "title": "Implement both export functions in exports.py",
+      "problem_statement": "Both grouped_totals and grouped_summaries in the consumer's exports module are not yet implemented. grouped_totals should group records and sum a field per group, formatting as a table. grouped_summaries should produce per-group summary lines sorted alphabetically.",
+      "repo_a_name": "synthetic/doc-feature-consumer-009",
+      "repo_b_name": "synthetic/domainlib",
+      "repo_a_id": 960000009,
+      "repo_b_id": 960000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-feat-009.patch",
+      "gold_patch_path": "patches/gold/doc-feat-009.patch",
+      "pytest_targets": [
+        "tests/test_exports.py"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/exports.py"
+      ],
+      "expected_relevant_symbols": [
+        "load_records",
+        "group_by",
+        "sum_field",
+        "format_table",
+        "format_summary"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "domainlib.pipeline.load_records",
+        "domainlib.aggregation.group_by",
+        "domainlib.aggregation.sum_field",
+        "domainlib.output.format_table",
+        "domainlib.output.format_summary"
+      ],
+      "test_context": "All tests in test_exports.py fail with NotImplementedError because both grouped_totals and grouped_summaries are stubs."
+    },
+    {
+      "task_id": "doc-feat-010",
+      "task_type": "feature_doc_guided",
+      "title": "Implement category_report, total_summary, and grouped_totals across three files",
+      "problem_statement": "Three consumer functions across different modules are not yet implemented: category_report in reports.py (load, aggregate, format_table), total_summary in summaries.py (load, sum_field, format_summary), and grouped_totals in exports.py (load, group_by, sum per group, format_table). Each composes domainlib functions following the documented pipeline patterns.",
+      "repo_a_name": "synthetic/doc-feature-consumer-010",
+      "repo_b_name": "synthetic/domainlib",
+      "repo_a_id": 960000010,
+      "repo_b_id": 960000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-feat-010.patch",
+      "gold_patch_path": "patches/gold/doc-feat-010.patch",
+      "pytest_targets": [
+        "tests/test_reports.py",
+        "tests/test_summaries.py",
+        "tests/test_exports.py"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/reports.py",
+        "consumer_app/summaries.py",
+        "consumer_app/exports.py"
+      ],
+      "expected_relevant_symbols": [
+        "load_records",
+        "aggregate",
+        "sum_field",
+        "group_by",
+        "format_table",
+        "format_summary"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "domainlib.pipeline.load_records",
+        "domainlib.pipeline.aggregate",
+        "domainlib.aggregation.sum_field",
+        "domainlib.aggregation.group_by",
+        "domainlib.output.format_table",
+        "domainlib.output.format_summary"
+      ],
+      "test_context": "Tests for category_report, total_summary, and grouped_totals fail with NotImplementedError. Other functions in each module still work correctly."
+    }
+  ]
+}

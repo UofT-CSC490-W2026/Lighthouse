@@ -19,7 +19,24 @@ DEFAULT_SYNTHETIC_FAMILY = "synthetic-ab-contracts"
 DEFAULT_SYNTHETIC_WORKSPACE_ROOT = Path(".cache/eval/synthetic")
 DEFAULT_SYNTHETIC_RUNS_ROOT = Path(".cache/eval/synthetic_runs")
 DEFAULT_SYNTHETIC_TASK_TYPE = "api_contract_mismatch"
-SUPPORTED_SYNTHETIC_TASK_TYPES = frozenset({DEFAULT_SYNTHETIC_TASK_TYPE})
+SUPPORTED_SYNTHETIC_TASK_TYPES = frozenset({
+    DEFAULT_SYNTHETIC_TASK_TYPE,
+    "logic_wrong_operator",
+    "data_type_coercion",
+    "doc_behavior_mismatch",
+    "feature_api_integration",
+    "feature_doc_guided",
+})
+REPAIR_TASK_TYPES = frozenset({
+    DEFAULT_SYNTHETIC_TASK_TYPE,
+    "logic_wrong_operator",
+    "data_type_coercion",
+    "doc_behavior_mismatch",
+})
+FEATURE_TASK_TYPES = frozenset({
+    "feature_api_integration",
+    "feature_doc_guided",
+})
 DEFAULT_SYNTHETIC_BRANCH = "main"
 DEFAULT_SYNTHETIC_CONTAINER_PROJECT_ROOT = Path("/workspace")
 DEFAULT_AST_CHUNKER_STRATEGY = "ast_code"
@@ -83,12 +100,23 @@ class PreparedSyntheticTask:
 class PreparedSyntheticWorkspace:
     family: SyntheticFamily
     workspace_dir: Path
-    repo_b_path: Path
+    repo_b_path: Path | None
     repo_registry_path: Path
     selection_manifest_path: Path
     validation_report_path: Path
     tasks: tuple[PreparedSyntheticTask, ...]
     seed: int
+
+    @property
+    def has_shared_repo(self) -> bool:
+        return self.repo_b_path is not None
+
+    @property
+    def search_repo_path(self) -> Path:
+        """Path to the repo indexed for search/wiki/AST (repo_b or canonical clean repo_a)."""
+        if self.repo_b_path is not None:
+            return self.repo_b_path
+        return self.workspace_dir / "repos" / "repo_a"
 
 
 @dataclass(frozen=True)
@@ -98,6 +126,8 @@ class SyntheticSearchRepository:
     repo_url: str
     branch: str
     chunker_strategy: str | None = None
+    embedding_strategy: str | None = None
+    embedding_model: str | None = None
 
 
 def load_synthetic_family(
@@ -165,9 +195,9 @@ def select_synthetic_tasks(
         if shared_library_repo_count is not None
         else family.config.shared_library_repo_count
     )
-    if effective_shared_repo_count != 1:
+    if effective_shared_repo_count not in (0, 1):
         raise NotImplementedError(
-            "Synthetic shared_library_repo_count values other than 1 are not implemented in v1."
+            "Synthetic shared_library_repo_count values other than 0 or 1 are not supported."
         )
 
     effective_task_count = task_count if task_count is not None else family.config.task_count
@@ -217,7 +247,8 @@ def prepare_synthetic_workspace(
     if force and workspace_dir.exists():
         shutil.rmtree(workspace_dir)
 
-    repo_b_path = workspace_dir / "repos" / "repo_b"
+    has_shared_repo = family.config.shared_library_repo_count >= 1
+    repo_b_path: Path | None = workspace_dir / "repos" / "repo_b" if has_shared_repo else None
     repo_registry_path = workspace_dir / "repo-registry.json"
     selection_manifest_path = workspace_dir / "prepared.json"
     validation_report_path = workspace_dir / "validation.json"
@@ -231,9 +262,15 @@ def prepare_synthetic_workspace(
         shutil.rmtree(workspace_dir)
         workspace_dir.mkdir(parents=True, exist_ok=True)
 
-    if not repo_b_path.exists():
+    if repo_b_path is not None and not repo_b_path.exists():
         _copy_tree(family.family_dir / "repo_b_template", repo_b_path)
         _initialize_git_repo(repo_b_path)
+
+    if not has_shared_repo:
+        canonical_repo_a = workspace_dir / "repos" / "repo_a"
+        if not canonical_repo_a.exists():
+            _copy_tree(family.family_dir / "repo_a_template", canonical_repo_a)
+            _initialize_git_repo(canonical_repo_a)
 
     prepared_tasks: list[PreparedSyntheticTask] = []
     for task in tasks:
@@ -241,10 +278,11 @@ def prepare_synthetic_workspace(
         if not repo_a_path.exists():
             _copy_tree(family.family_dir / "repo_a_template", repo_a_path)
             _initialize_git_repo(repo_a_path)
-            _apply_patch(repo_a_path, task.buggy_patch_path)
+            if task.buggy_patch_path.stat().st_size > 0:
+                _apply_patch(repo_a_path, task.buggy_patch_path)
         prepared_tasks.append(PreparedSyntheticTask(task=task, repo_a_path=repo_a_path))
 
-    _write_repo_registry(repo_registry_path, tasks)
+    _write_repo_registry(repo_registry_path, tasks, has_shared_repo=has_shared_repo)
     _write_selection_manifest(
         selection_manifest_path=selection_manifest_path,
         validation_report_path=validation_report_path,
@@ -272,38 +310,38 @@ def build_task_lookup(tasks: tuple[PreparedSyntheticTask, ...]) -> dict[str, Pre
 
 
 def shared_repo_entry(workspace: PreparedSyntheticWorkspace) -> RepoRegistryEntry:
-    shared_task = _shared_task(workspace.tasks)
+    _name, repo_id, branch = _indexed_repo_identity_for_workspace(workspace)
     return RepoRegistryEntry(
-        github_repo_id=shared_task.task.repo_b_id,
-        branch=shared_task.task.branch,
+        github_repo_id=repo_id,
+        branch=branch,
     )
 
 
 def shared_resolved_repository(workspace: PreparedSyntheticWorkspace) -> ResolvedRepository:
-    shared_task = _shared_task(workspace.tasks)
+    name, repo_id, branch = _indexed_repo_identity_for_workspace(workspace)
     return ResolvedRepository(
-        full_name=shared_task.task.repo_b_name.lower(),
-        github_repo_id=shared_task.task.repo_b_id,
-        repo_url=str(workspace.repo_b_path.resolve()),
-        branch=shared_task.task.branch,
+        full_name=name,
+        github_repo_id=repo_id,
+        repo_url=str(workspace.search_repo_path.resolve()),
+        branch=branch,
     )
 
 
 def ast_repo_entry(workspace: PreparedSyntheticWorkspace) -> RepoRegistryEntry:
-    shared_task = _shared_task(workspace.tasks)
+    name, repo_id, branch = _indexed_repo_identity_for_workspace(workspace)
     return RepoRegistryEntry(
-        github_repo_id=_ast_repo_id(shared_task.task.repo_b_id),
-        branch=shared_task.task.branch,
+        github_repo_id=_ast_repo_id(repo_id),
+        branch=branch,
     )
 
 
 def ast_resolved_repository(workspace: PreparedSyntheticWorkspace) -> ResolvedRepository:
-    shared_task = _shared_task(workspace.tasks)
+    name, repo_id, branch = _indexed_repo_identity_for_workspace(workspace)
     return ResolvedRepository(
-        full_name=_ast_repo_name(shared_task.task.repo_b_name.lower()),
-        github_repo_id=_ast_repo_id(shared_task.task.repo_b_id),
-        repo_url=str(workspace.repo_b_path.resolve()),
-        branch=shared_task.task.branch,
+        full_name=_ast_repo_name(name),
+        github_repo_id=_ast_repo_id(repo_id),
+        repo_url=str(workspace.search_repo_path.resolve()),
+        branch=branch,
     )
 
 
@@ -342,6 +380,8 @@ def build_synthetic_index_request(
     github_token: str | None = None,
     repo_url_override: str | None = None,
     include_ast: bool = False,
+    embedding_strategy: str | None = None,
+    embedding_model: str | None = None,
 ) -> IndexRequest:
     repositories = synthetic_search_repositories(
         workspace,
@@ -351,6 +391,8 @@ def build_synthetic_index_request(
         repositories,
         github_token=github_token,
         repo_url_override=repo_url_override,
+        embedding_strategy=embedding_strategy,
+        embedding_model=embedding_model,
     )
 
 
@@ -359,6 +401,8 @@ def build_synthetic_index_request_for_repositories(
     *,
     github_token: str | None = None,
     repo_url_override: str | None = None,
+    embedding_strategy: str | None = None,
+    embedding_model: str | None = None,
 ) -> IndexRequest:
     return IndexRequest(
         repositories=[
@@ -369,34 +413,47 @@ def build_synthetic_index_request_for_repositories(
                 branches=[repo.branch],
                 github_token=github_token,
                 chunker_strategy=repo.chunker_strategy,
+                embedding_strategy=embedding_strategy or repo.embedding_strategy,
+                embedding_model=embedding_model or repo.embedding_model,
             )
             for repo in repositories
         ]
     )
 
 
-def build_synthetic_wiki_request(workspace: PreparedSyntheticWorkspace) -> GenerateWikiRequest:
+def build_synthetic_wiki_request(
+    workspace: PreparedSyntheticWorkspace,
+    *,
+    embedding_strategy: str | None = None,
+    embedding_model: str | None = None,
+) -> GenerateWikiRequest:
     entry = shared_repo_entry(workspace)
     return GenerateWikiRequest(
         github_repo_id=entry.github_repo_id,
         branch=entry.branch,
+        embedding_strategy=embedding_strategy,
+        embedding_model=embedding_model,
     )
 
 
 def copy_prepared_task_repositories(
     *,
     prepared_task: PreparedSyntheticTask,
-    repo_b_path: Path,
+    repo_b_path: Path | None,
     destination_root: Path,
-) -> tuple[Path, Path]:
+) -> tuple[Path, Path | None]:
     repo_a_destination = destination_root / "repo_a"
-    repo_b_destination = destination_root / "repo_b"
     if repo_a_destination.exists():
         shutil.rmtree(repo_a_destination)
-    if repo_b_destination.exists():
-        shutil.rmtree(repo_b_destination)
     shutil.copytree(prepared_task.repo_a_path, repo_a_destination)
-    shutil.copytree(repo_b_path, repo_b_destination)
+
+    repo_b_destination: Path | None = None
+    if repo_b_path is not None:
+        repo_b_destination = destination_root / "repo_b"
+        if repo_b_destination.exists():
+            shutil.rmtree(repo_b_destination)
+        shutil.copytree(repo_b_path, repo_b_destination)
+
     return repo_a_destination, repo_b_destination
 
 
@@ -415,7 +472,7 @@ def synthetic_repo_url_for_container(
     compose_root: Path,
     container_project_root: Path = DEFAULT_SYNTHETIC_CONTAINER_PROJECT_ROOT,
 ) -> str:
-    repo_path = workspace.repo_b_path.resolve()
+    repo_path = workspace.search_repo_path.resolve()
     relative_repo_path = repo_path.relative_to(compose_root.resolve())
     return str((container_project_root / relative_repo_path).as_posix())
 
@@ -480,8 +537,8 @@ def _parse_generation_config(data: Mapping[str, object]) -> SyntheticGenerationC
         raise ValueError(f"Unsupported synthetic task type in config: {task_type!r}")
     if task_count < 1:
         raise ValueError("Synthetic family config task_count must be at least 1.")
-    if shared_library_repo_count < 1:
-        raise ValueError("shared_library_repo_count must be at least 1.")
+    if shared_library_repo_count < 0:
+        raise ValueError("shared_library_repo_count must be at least 0.")
     if not consumer_repo_mode:
         raise ValueError("Synthetic family config is missing consumer_repo_mode.")
     if not python_version_target:
@@ -562,10 +619,12 @@ def _parse_task(family_dir: Path, data: object) -> SyntheticTask:
         raise ValueError(f"Synthetic task {task_id!r} is missing title.")
     if not problem_statement:
         raise ValueError(f"Synthetic task {task_id!r} is missing problem_statement.")
-    if not repo_a_name or not repo_b_name:
-        raise ValueError(f"Synthetic task {task_id!r} is missing repository names.")
-    if repo_a_id < 1 or repo_b_id < 1:
-        raise ValueError(f"Synthetic task {task_id!r} must use positive synthetic repo ids.")
+    if not repo_a_name:
+        raise ValueError(f"Synthetic task {task_id!r} is missing repo_a_name.")
+    if repo_a_id < 1:
+        raise ValueError(f"Synthetic task {task_id!r} must use a positive synthetic repo_a_id.")
+    if repo_b_name and repo_b_id < 1:
+        raise ValueError(f"Synthetic task {task_id!r} has repo_b_name but invalid repo_b_id.")
     if not buggy_patch_path.is_file():
         raise FileNotFoundError(f"Buggy patch not found for {task_id!r}: {buggy_patch_path}")
     if not gold_patch_path.is_file():
@@ -655,17 +714,35 @@ def _run_command(repo_path: Path, *args: str) -> None:
         raise RuntimeError(f"Command failed in {repo_path}: {' '.join(args)}\n{details}") from exc
 
 
-def _write_repo_registry(output_path: Path, tasks: tuple[SyntheticTask, ...]) -> None:
+def _write_repo_registry(
+    output_path: Path,
+    tasks: tuple[SyntheticTask, ...],
+    *,
+    has_shared_repo: bool = True,
+) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    shared_repo_name = _shared_repo_name(tasks)
-    shared_repo_id = _shared_repo_id(tasks)
-    branch = _shared_repo_branch(tasks)
-    payload = {
-        shared_repo_name: {
-            "github_repo_id": shared_repo_id,
-            "branch": branch,
+    if has_shared_repo:
+        shared_repo_name = _shared_repo_name(tasks)
+        shared_repo_id = _shared_repo_id(tasks)
+        branch = _shared_repo_branch(tasks)
+        payload: dict[str, object] = {
+            shared_repo_name: {
+                "github_repo_id": shared_repo_id,
+                "branch": branch,
+            }
         }
-    }
+    else:
+        consumer_names = {task.repo_a_name.lower() for task in tasks}
+        if len(consumer_names) != 1:
+            raise ValueError("Synthetic v1 only supports one consumer repository name per workspace.")
+        branch = _shared_repo_branch(tasks)
+        repo_id = min(task.repo_a_id for task in tasks)
+        payload = {
+            next(iter(consumer_names)): {
+                "github_repo_id": repo_id,
+                "branch": branch,
+            }
+        }
     output_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
@@ -675,7 +752,7 @@ def _write_selection_manifest(
     validation_report_path: Path,
     family: SyntheticFamily,
     tasks: list[PreparedSyntheticTask],
-    repo_b_path: Path,
+    repo_b_path: Path | None,
     repo_registry_path: Path,
     seed: int,
 ) -> None:
@@ -692,7 +769,7 @@ def _write_selection_manifest(
             "context_modes": list(family.config.context_modes),
             "seed": seed,
         },
-        "repo_b_path": str(repo_b_path.resolve()),
+        "repo_b_path": str(repo_b_path.resolve()) if repo_b_path is not None else "",
         "repo_registry_path": str(repo_registry_path.resolve()),
         "validation_report_path": str(validation_report_path.resolve()),
         "tasks": [
@@ -716,6 +793,25 @@ def _write_selection_manifest(
     )
 
 
+def _indexed_repo_identity_for_workspace(
+    workspace: PreparedSyntheticWorkspace,
+) -> tuple[str, int, str]:
+    """(full_name, github_repo_id, branch) for the repo we index for search/wiki/AST."""
+    synth_tasks = tuple(prepared.task for prepared in workspace.tasks)
+    branch = _shared_repo_branch(synth_tasks)
+    if workspace.has_shared_repo:
+        return (
+            _shared_repo_name(synth_tasks),
+            _shared_repo_id(synth_tasks),
+            branch,
+        )
+    consumer_names = {task.repo_a_name.lower() for task in synth_tasks}
+    if len(consumer_names) != 1:
+        raise ValueError("Synthetic v1 only supports one consumer repository name per workspace.")
+    repo_id = min(task.repo_a_id for task in synth_tasks)
+    return next(iter(consumer_names)), repo_id, branch
+
+
 def _shared_repo_name(tasks: tuple[SyntheticTask, ...]) -> str:
     repo_names = {task.repo_b_name.lower() for task in tasks}
     if len(repo_names) != 1:
@@ -735,13 +831,6 @@ def _shared_repo_branch(tasks: tuple[SyntheticTask, ...]) -> str:
     if len(branches) != 1:
         raise ValueError("Synthetic v1 only supports one shared library branch.")
     return next(iter(branches))
-
-
-def _shared_task(tasks: tuple[PreparedSyntheticTask, ...]) -> PreparedSyntheticTask:
-    repo_names = {prepared.task.repo_b_name.lower() for prepared in tasks}
-    if len(repo_names) != 1:
-        raise ValueError("Synthetic v1 only supports one shared library repository.")
-    return tasks[0]
 
 
 def _ast_repo_id(base_repo_id: int) -> int:

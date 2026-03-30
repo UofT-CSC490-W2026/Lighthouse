@@ -1,0 +1,48 @@
+diff --git a/consumer_app/reports.py b/consumer_app/reports.py
+--- a/consumer_app/reports.py
++++ b/consumer_app/reports.py
+@@ -4,8 +4,10 @@
+ from domainlib.output import format_table
+ 
+ 
+ def category_report(csv_data: str, category_field: str) -> str:
+-    raise NotImplementedError("category_report not yet implemented")
++    records = load_records(csv_data)
++    counts = aggregate(records, category_field)
++    return format_table(counts, title="Category Report")
+ 
+ 
+ def filtered_category_report(csv_data: str, filter_field: str, filter_value: str, category_field: str) -> str:
+diff --git a/consumer_app/summaries.py b/consumer_app/summaries.py
+--- a/consumer_app/summaries.py
++++ b/consumer_app/summaries.py
+@@ -5,8 +5,10 @@
+ from domainlib.output import format_summary
+ 
+ 
+ def total_summary(csv_data: str, value_field: str, label: str) -> str:
+-    raise NotImplementedError("total_summary not yet implemented")
++    records = load_records(csv_data)
++    total = sum_field(records, value_field)
++    return format_summary(label, total, len(records))
+ 
+ 
+ def filtered_summary(csv_data: str, filter_field: str, filter_value: str, value_field: str, label: str) -> str:
+diff --git a/consumer_app/exports.py b/consumer_app/exports.py
+--- a/consumer_app/exports.py
++++ b/consumer_app/exports.py
+@@ -5,8 +5,13 @@
+ from domainlib.output import format_table, format_summary
+ 
+ 
+ def grouped_totals(csv_data: str, group_field: str, value_field: str) -> str:
+-    raise NotImplementedError("grouped_totals not yet implemented")
++    records = load_records(csv_data)
++    groups = group_by(records, group_field)
++    totals = {}
++    for key, group_records in groups.items():
++        totals[key] = sum_field(group_records, value_field)
++    return format_table(totals, title="Group Totals")
+ 
+ 
+ def grouped_summaries(csv_data: str, group_field: str, value_field: str) -> str:
