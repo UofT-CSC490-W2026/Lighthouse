@@ -25,8 +25,11 @@ from shared.schemas.search import (
 )
 from vectordb import MilvusClient
 
+from llm import OpenAILLMProvider
 from search.config import SearchSettings
+from search.reranker.cohere_reranker import CohereReranker
 from search.strategies.hybrid_strategy import BranchNotIndexedError, HybridSearchStrategy
+from search.strategies.llm_combined_strategy import LLMCombinedSearchStrategy
 from search.strategies.search_strategy import SearchStrategy
 from search.strategies.wiki_search_strategy import HybridWikiSearchStrategy
 
@@ -94,6 +97,18 @@ def create_app(
             embedder=emb,
         )
 
+        llm_provider = OpenAILLMProvider(api_key=s.openai_api_key, model=s.llm_model)
+        reranker = CohereReranker(api_key=s.cohere_api_key, model=s.rerank_model)
+        app.state.llm_combined_strategy = LLMCombinedSearchStrategy(
+            db_manager=db_manager,
+            milvus_code=milvus,
+            milvus_wiki=wiki_milvus,
+            embedder=emb,
+            llm=llm_provider,
+            reranker=reranker,
+            llm_reasoning_effort=s.llm_reasoning_effort,
+        )
+
         logger.info("Search service initialized")
         yield
 
@@ -111,6 +126,10 @@ async def _search_impl(
     request: SearchRequest,
 ) -> SearchResult | WikiSearchResult | CombinedSearchResult:
     requested_sources = request.requested_context_sources()
+    if len(requested_sources) == 1 and requested_sources[0] is SearchContextSource.llm_combined:
+        llm_strategy: LLMCombinedSearchStrategy = app.state.llm_combined_strategy
+        return await llm_strategy.search(request)
+
     if len(requested_sources) == 1 and requested_sources[0] is SearchContextSource.wiki:
         wiki_search: SearchStrategy[WikiSearchRequest, WikiSearchResult] = app.state.wiki_strategy
         wiki_request = WikiSearchRequest.model_validate(request.model_dump(mode="json"))

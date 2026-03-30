@@ -166,7 +166,7 @@ class SearchEngine:
                 branch=branch.strip() or "main",
                 file_path=normalized_file_path,
                 top_k=10,
-                context_sources=(SearchContextSource.code, SearchContextSource.wiki),
+                context_sources=(SearchContextSource.llm_combined,),
             )
         except ValidationError as exc:
             raise AppError(
