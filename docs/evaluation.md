@@ -1,1432 +1,375 @@
 # Eval Package
 
-This document describes the evaluation package under `packages/eval/`.
+This document describes the practical evaluation workflow in this repository.
+It keeps the package-oriented style while adding a runbook section for
+reproducible synthetic and SWE-bench experiments.
 
-It now supports two evaluation tracks:
-
-- a SWE-bench workflow that uses the official harness for image preparation and
-  scoring
-- a small synthetic A/B contract benchmark that is optimized for fast local
-  iteration and direct Lighthouse validation
-
-For the broader roadmap, see `docs/eval-package-plan.md`. This document only
-covers the package as it exists today.
-
-Unless otherwise noted, all paths shown below are relative to the repository
-root.
-
-Before running Lighthouse-backed indexing or retrieval after pulling service or
-database-model changes, apply the database migrations from `packages/db` so the
-search and ingestion services match the current schema.
+---
 
 ## Scope
 
-Current scope:
-
-- load and inspect a SWE-bench slice from Hugging Face
-- prepare SWE-bench Docker images for that slice
-- index SWE-bench repositories into Lighthouse and write a repo registry file
-- generate Lighthouse wiki documentation for indexed SWE-bench repositories
-- generate baseline and retrieval-augmented SWE-bench prediction JSONL with Bedrock
-- evaluate SWE-bench predictions with the official harness and summarize the results
-- load a checked-in synthetic benchmark family with configurable task-count and seed overrides
-- materialize deterministic local synthetic repos under `.cache/eval/synthetic/...`
-- validate synthetic tasks by proving they fail before the gold patch and pass after it
-- index the shared synthetic provider repository into Lighthouse
-- generate provider-library wiki documentation for the synthetic benchmark
-- generate baseline and retrieval-augmented synthetic prediction JSONL with Bedrock
-- evaluate synthetic predictions locally and summarize the results
-- compare baseline and Lighthouse synthetic runs in a table
-- run a full synthetic experiment end to end with one command
-
-Current non-scope:
-
-- commit-pinned retrieval instead of branch-based retrieval
-- synthetic task families beyond the first `api_contract_mismatch` family
-- synthetic topologies with more than one shared provider repository
-
-## Design
-
-The package is host-first and harness-first.
-
-Host-first means the commands are meant to be run directly on the developer
-machine with `uv`, not through a separate orchestration container.
-
-Harness-first means we rely on the official SWE-bench harness for benchmark
-runtime concerns such as Docker image preparation, rather than re-implementing
-that behavior ourselves.
-
-Today the package contains:
-
-```text
-packages/eval/
-  pyproject.toml
-  src/eval/
-    __init__.py
-    cli.py
-    slice.py
-    harness.py
-    indexing.py
-    bedrock.py
-    lighthouse.py
-    wiki.py
-    prompts.py
-    predictions.py
-    summary.py
-    synthetic/
-      __init__.py
-      workspace.py
-      prompts.py
-      predictions.py
-      lighthouse.py
-      eval.py
-      compare.py
-      experiment.py
-      metadata.py
-      families/
-        synthetic_ab_contracts/
-          family.json
-          tasks.json
-          repo_a_template/
-          repo_b_template/
-          patches/
-```
-
-### `slice.py`
-
-`slice.py` is the dataset-selection layer.
-
-It loads a SWE-bench dataset split and converts rows into a small
-`SWEBenchTask` dataclass containing:
-
-- `instance_id`
-- `repo`
-- `base_commit`
-- `version`
-- `problem_statement`
-
-It supports two selection modes:
-
-- `--max-instances N`
-- repeated `--instance-id ...`
-
-### `harness.py`
-
-`harness.py` is the wrapper around the official
-`swebench.harness.prepare_images` entrypoint.
-
-It currently does four things:
-
-1. resolves the current Docker endpoint
-2. calls the official harness for a chosen SWE-bench slice
-3. streams harness log files while the build runs
-4. verifies that the expected instance image tags exist afterward
-
-The default harness work directory is:
-
-```text
-.cache/eval/swebench_harness
-```
-
-Harness build logs are written under:
-
-```text
-.cache/eval/swebench_harness/logs/build_images
-```
-
-### `indexing.py`
-
-`indexing.py` is the host-side helper for pre-indexing Lighthouse repositories
-for a selected SWE-bench slice.
-
-It:
-
-- resolves the unique repositories referenced by the selected tasks
-- looks up each repo's GitHub repo id and default branch via the GitHub API
-- checks whether that branch is already indexed in Lighthouse
-- submits missing repositories to the ingestion service
-- waits for indexing completion
-- writes a registry JSON file that `generate-lighthouse` can consume later
-
-### `bedrock.py`, `lighthouse.py`, `wiki.py`, `prompts.py`, and `predictions.py`
-
-These files make up the current generation paths.
-
-`bedrock.py` contains a small Bedrock wrapper that:
-
-- accepts models in `bedrock/<model-id>` format
-- defaults baseline generation to `us-east-1`
-- calls the Bedrock `converse` API
-- returns the text content from the model response
-
-`prompts.py` contains the minimal baseline prompt used for SWE-bench today.
-It uses only benchmark metadata from the selected task:
-
-- `instance_id`
-- `repo`
-- `base_commit`
-- `version`
-- `problem_statement`
-
-`predictions.py` turns model responses into harness-compatible JSONL rows and
-writes them incrementally to disk.
-
-`lighthouse.py` is the code-retrieval layer for Lighthouse-augmented generation.
-
-It:
-
-- calls the search service at `POST /search`
-- resolves `owner/repo -> github_repo_id, branch` through either:
-  - a repository registry JSON file, or
-  - a single `--github-repo-id` override for one-repo slices
-- builds prompt-ready retrieved context for each SWE-bench task
-
-`wiki.py` is the wiki-generation and wiki-retrieval layer.
-
-It:
-
-- calls the ingestion service at `POST /generate-wiki`
-- polls the ingestion service at `GET /wiki-status/{github_repo_id}`
-- calls the search service at `POST /search` with `context_source=wiki`
-- builds prompt-ready wiki context for each SWE-bench task
-
-By default, bundled wiki generation now uses the ingestion service's Bedrock
-LLM path. If wiki generation is misconfigured, preprocessing fails immediately
-with the ingestion service error instead of waiting on Temporal retries.
-
-### `summary.py`
-
-`summary.py` reads the harness outputs back from disk.
-
-It locates:
-
-- the aggregate run report written at the harness workdir root
-- the per-instance `report.json` files under `logs/run_evaluation/...`
-
-It then turns those files into a smaller summary view containing:
-
-- aggregate counts such as resolved and unresolved instances
-- per-instance status
-- whether the generated patch applied
-- how many `FAIL_TO_PASS` tests passed or failed
-- any remaining failing `FAIL_TO_PASS` test names
-
-### `synthetic/`
-
-The `synthetic/` package contains the synthetic benchmark path.
-
-`synthetic/workspace.py` contains:
-
-- synthetic family loading from checked-in `family.json` and `tasks.json`
-- deterministic task selection with `--task-count`, `--task-type`, and `--seed`
-- local repo materialization under `.cache/eval/synthetic/...`
-- git initialization and buggy patch application for each consumer repo
-- request helpers for synthetic indexing and wiki generation
-
-`synthetic/prompts.py` contains the synthetic baseline and retrieval prompt
-builders. These prompts intentionally avoid leakage:
-
-- no gold patches
-- no buggy patch paths
-- no expected relevant file hints in the baseline path
-
-`synthetic/predictions.py` writes synthetic prediction JSONL rows with:
-
-- `task_id`
-- `task_type`
-- `model_name_or_path`
-- `context_source`
-- `model_patch`
-- `full_output`
-
-`synthetic/lighthouse.py` is the Lighthouse-facing synthetic helper layer. It:
-
-- indexes the shared provider repository only
-- generates wiki documentation for the shared provider repository only
-- queries the code or wiki search endpoints against that provider repository
-- builds prompt-ready synthetic retrieval context
-
-`synthetic/eval.py` is the local synthetic evaluator. It:
-
-- validates checked-in tasks before they are used
-- applies model patches to consumer repo `A` only
-- runs the declared pytest targets locally with repo `B` exposed on `PYTHONPATH`
-- writes per-task results and a run summary under `.cache/eval/synthetic_runs/<run-id>/`
-- records SWE-bench-style aggregate counters such as `submitted_instances`, `completed_instances`, `resolved_instances`, `unresolved_instances`, `empty_patch_instances`, and `error_instances`
-- stamps each run with experiment metadata for generation and embedding configuration
-
-`synthetic/metadata.py` resolves experiment metadata for synthetic runs. It records:
-
-- generation model and region
-- indexing embedding strategy and model
-- query embedding strategy and model
-- retrieval context source and `top_k`
-
-`synthetic/experiment.py` is the orchestration layer for one-command synthetic
-experiments. It can:
-
-- prepare or rebuild the synthetic workspace
-- optionally validate the checked-in tasks
-- index the shared provider repo
-- optionally generate provider wiki documentation
-- generate baseline and Lighthouse predictions
-- evaluate both runs locally
-- compare the final runs and write comparison artifacts to disk
-
-### Image Naming
-
-The expected instance image names currently follow the official SWE-bench
-harness convention:
-
-```text
-sweb.eval.x86_64.<instance_id>:latest
-```
-
-For example:
-
-```text
-sweb.eval.x86_64.astropy__astropy-12907:latest
-```
-
-This is still true on Apple Silicon / ARM machines. The harness defaults to the
-`x86_64` image naming convention, and Docker Desktop handles the underlying
-emulation/runtime behavior.
+### Supported evaluation tracks
+
+- **Synthetic** (fast, controlled families): full matrix runner exists.
+- **SWE-bench** (official harness-backed): run commands exist, but no single built-in matrix command yet.
+
+### Key CLI commands
+
+- Synthetic:
+  - `run-synthetic-experiment`
+  - `pass-at-k-synthetic`
+  - `run-synthetic-matrix`
+- SWE-bench:
+  - `show-slice`
+  - `prepare-images`
+  - `index-repos`
+  - `prepare-wiki`
+  - `generate-baseline`
+  - `generate-lighthouse`
+  - `evaluate`
+  - `summarize`
+
+---
+
+## Synthetic Benchmark Motivation and Defensibility
+
+Synthetic families currently under `packages/eval/src/eval/synthetic/families/`:
+
+- `synthetic-ab-contracts` (`api_contract_mismatch`)
+- `synthetic-wrong-operator` (`logic_wrong_operator`)
+- `synthetic-type-coercion` (`data_type_coercion`)
+- `synthetic-doc-behavior` (`doc_behavior_mismatch`)
+- `synthetic-api-feature` (`feature_api_integration`)
+- `synthetic-doc-feature` (`feature_doc_guided`)
+
+### Why these are defensible
+
+- **Controlled causal structure**: each task has known buggy and gold patches.
+- **Executable ground truth**: every task is validated by local pytest behavior:
+  - buggy state fails
+  - gold-patched state passes
+- **No answer leakage by default**: prompts avoid embedding gold patch content.
+- **Task-type diversity**: includes both repair and feature tasks.
+- **Search-method stress**:
+  - code-centric families evaluate lexical/localization capability
+  - doc/API families evaluate information retrieval utility
+- **Deterministic sampling**: `seed` + `task_count` produce reproducible subsets.
+
+### Defensibility checklist
+
+For each reported synthetic result set, record:
+
+- family names + versions
+- task_count, seed, task_type (if filtered)
+- codegen model, region
+- embedding strategy/model(s)
+- retrieval context source and top-k
+- run ids + artifact paths
+- pass@k definition and k set
+
+---
 
 ## Requirements
 
-You should have the following available on the host:
+- Python + deps:
+  - `uv sync --all-packages --dev`
+- Infra/services:
+  - `docker compose up -d postgres ingestion ingestion-worker search`
+- If migrations are needed:
+  - `cd packages/db && uv run alembic upgrade head && cd ../..`
+- Optional health checks:
+  - `curl -sf http://localhost:8001/health`
+  - `curl -sf http://localhost:8002/health`
 
-- `uv`
-- `python3`
-- `docker`
-- a working Docker daemon / Docker Desktop context
-- network access to Hugging Face for SWE-bench dataset loading
-- AWS credentials with access to Bedrock if you want to generate predictions
+---
 
-Optional but recommended:
+## Runbook
 
-- `HUGGINGFACE_HUB_TOKEN`
+`run-synthetic-matrix` is the matrix runner. It consumes a JSON config.
 
-If `HUGGINGFACE_HUB_TOKEN` is set, the harness wrapper will also expose it to
-the official SWE-bench tooling as `HF_TOKEN`.
+### 4.1 Example matrix config
 
-## CLI
-
-The current CLI entrypoint is:
-
-```bash
-uv run --package eval python -m eval.cli ...
-```
-
-Available commands today:
-
-- `show-slice`
-- `prepare-images`
-- `index-repos`
-- `prepare-wiki` (optional manual/backfill command)
-- `generate-baseline`
-- `generate-lighthouse`
-- `evaluate`
-- `summarize`
-- `show-synthetic`
-- `prepare-synthetic`
-- `index-synthetic`
-- `prepare-synthetic-wiki` (optional manual/backfill command)
-- `generate-synthetic-baseline`
-- `generate-synthetic-lighthouse`
-- `evaluate-synthetic`
-- `summarize-synthetic`
-- `compare-synthetic`
-- `run-synthetic-experiment`
-
-Shared synthetic selection arguments:
-
-- `--family`
-- `--task-count`
-- `--task-type`
-- `--seed`
-- `--shared-library-repo-count`
-
-Current synthetic v1 limits:
-
-- `--task-type` currently supports only `api_contract_mismatch`
-- `--shared-library-repo-count` must remain `1`
-
-Synthetic workspace-aware commands also accept:
-
-- `--workspace-root`
-- `--force-workspace`
-
-### `show-slice`
-
-Print a selected SWE-bench slice without preparing any Docker images.
-
-Supported arguments:
-
-- `--dataset-name`
-- `--split`
-- `--max-instances`
-- `--instance-id`
-
-### `prepare-images`
-
-Load a selected SWE-bench slice and prepare the required SWE-bench Docker
-images for that slice.
-
-Supported arguments:
-
-- `--dataset-name`
-- `--split`
-- `--max-instances`
-- `--instance-id`
-- `--workdir`
-- `--max-workers`
-
-### `generate-baseline`
-
-Load a selected SWE-bench slice, generate one baseline patch per task with
-Bedrock, and write the results to a predictions `.jsonl` file.
-
-Supported arguments:
-
-- `--dataset-name`
-- `--split`
-- `--max-instances`
-- `--instance-id`
-- `--model`
-- `--output`
-- `--region-name`
-- `--temperature`
-- `--max-tokens`
-- `--overwrite`
-
-### `index-repos`
-
-Resolve the repositories referenced by a selected SWE-bench slice, submit them
-to Lighthouse ingestion, wait for the requested branches to become indexed, and
-write a repo registry JSON file.
-
-Supported arguments:
-
-- `--dataset-name`
-- `--split`
-- `--max-instances`
-- `--instance-id`
-- `--ingestion-url`
-- `--github-token`
-- `--output`
-- `--status-poll-interval`
-- `--progress-heartbeat-seconds`
-- `--status-timeout-seconds`
-
-### `prepare-wiki`
-
-Generate Lighthouse wiki documentation for the repositories referenced by a
-selected SWE-bench slice. This is now bundled into `index-repos` by default,
-so this command is mainly useful for backfills or reruns.
-
-Supported arguments:
-
-- `--dataset-name`
-- `--split`
-- `--max-instances`
-- `--instance-id`
-- `--ingestion-url`
-- `--repo-registry`
-- `--github-repo-id`
-- `--branch`
-- `--status-poll-interval`
-- `--progress-heartbeat-seconds`
-- `--status-timeout-seconds`
-
-### `generate-lighthouse`
-
-Load a selected SWE-bench slice, retrieve code or wiki context from Lighthouse, and
-generate one prediction per task with Bedrock.
-
-Supported arguments:
-
-- `--dataset-name`
-- `--split`
-- `--max-instances`
-- `--instance-id`
-- `--model`
-- `--output`
-- `--region-name`
-- `--temperature`
-- `--max-tokens`
-- `--overwrite`
-- `--search-url`
-- `--repo-registry`
-- `--github-repo-id`
-- `--branch`
-- `--top-k`
-- `--context-source`
-
-### `evaluate`
-
-Load a selected SWE-bench slice, run the official harness against an existing
-predictions file, and print the resulting report path and run log directory.
-
-Supported arguments:
-
-- `--dataset-name`
-- `--split`
-- `--max-instances`
-- `--instance-id`
-- `--predictions`
-- `--run-id`
-- `--workdir`
-- `--max-workers`
-- `--timeout-seconds`
-- `--cache-level`
-
-### `summarize`
-
-Read an existing SWE-bench harness run and print a compact human-readable
-summary.
-
-Supported arguments:
-
-- `--predictions`
-- `--run-id`
-- `--workdir`
-
-### `show-synthetic`
-
-Print the selected synthetic task subset without materializing any repos.
-
-### `prepare-synthetic`
-
-Materialize the selected synthetic tasks locally and validate that each task:
-
-- fails in its buggy state
-- applies its gold patch cleanly
-- passes after the gold patch
-
-### `index-synthetic`
-
-Index the shared synthetic provider repository into Lighthouse using the local
-repo path from the materialized workspace.
-
-### `prepare-synthetic-wiki`
-
-Generate Lighthouse wiki documentation for the shared synthetic provider
-repository. This is now bundled into `index-synthetic` by default, so this
-command is mainly useful for backfills or reruns.
-
-### `generate-synthetic-baseline`
-
-Generate baseline synthetic predictions with Bedrock using only the task
-statement, failing test context, and visible provider API names.
-
-### `generate-synthetic-lighthouse`
-
-Generate synthetic predictions with Lighthouse retrieval context. Supported
-context sources:
-
-- `code`
-- `wiki`
-
-### `evaluate-synthetic`
-
-Apply synthetic prediction patches to consumer repo `A`, run the declared
-pytest targets locally, and write structured results under:
-
-```text
-.cache/eval/synthetic_runs/<run-id>/
-```
-
-The synthetic summary uses the same aggregate counters as the SWE-bench
-harness summary:
-
-- `total_instances`
-- `submitted_instances`
-- `completed_instances`
-- `resolved_instances`
-- `unresolved_instances`
-- `empty_patch_instances`
-- `error_instances`
-
-Per-task synthetic summaries also mirror the SWE-bench report shape:
-
-- `patch_exists`
-- `patch_successfully_applied`
-- `FAIL_TO_PASS.success`
-- `FAIL_TO_PASS.failure`
-- `PASS_TO_PASS.failure`
-
-### `summarize-synthetic`
-
-Read a synthetic run summary back from disk and print a compact human-readable
-report.
-
-### `compare-synthetic`
-
-Load two synthetic runs, treat one as the baseline and the other as the
-Lighthouse run, and print:
-
-- an overall comparison table
-- a per-task comparison table
-
-Supported arguments:
-
-- `--baseline-run-id`
-- `--lighthouse-run-id`
-- `--runs-root`
-- `--baseline-label`
-- `--lighthouse-label`
-
-## Synthetic Run Book
-
-### One-Command Experiment
-
-```bash
-uv run --package eval python -m eval.cli run-synthetic-experiment \
-  --task-count 10 \
-  --seed 1 \
-  --run-prefix synthetic-all-10 \
-  --context-source all \
-  --model bedrock/us.amazon.nova-pro-v1:0
-```
-
-This writes:
-
-- baseline predictions under `.cache/eval/runs/`
-- code and wiki Lighthouse predictions under `.cache/eval/runs/`
-- run summaries under `.cache/eval/synthetic_runs/`
-- score tables, pairwise comparisons, and experiment artifacts under `.cache/eval/synthetic_experiments/`
-
-`--context-source all` runs baseline, raw-code retrieval, and wiki retrieval in
-one command and prints a single score table with all three rows. You can still
-run only one retrieval leg with `--context-source code` or
-`--context-source wiki`.
-
-If you want to compare different embedding configurations, reconfigure the
-running ingestion and search services, re-index with this command, and either:
-
-- let the runner infer embedding metadata from `services/ingestion/.env` and `services/search/.env`
-- pass explicit overrides with `--indexing-embedding-strategy`,
-  `--indexing-embedding-model`, `--query-embedding-strategy`, and
-  `--query-embedding-model`
-
-### 1. Inspect The Selected Synthetic Tasks
-
-```bash
-uv run --package eval python -m eval.cli show-synthetic --task-count 3 --seed 1
-```
-
-This prints:
-
-- the family name and version
-- the selected deterministic subset
-- each task id, task type, consumer repo, provider repo, and pytest targets
-
-### 2. Materialize And Validate The Synthetic Workspace
-
-```bash
-uv run --package eval python -m eval.cli prepare-synthetic \
-  --task-count 3 \
-  --seed 1
-```
-
-This materializes:
-
-- one shared provider repo `B`
-- one buggy consumer repo `A` per task
-- a repo registry JSON for the shared provider repo
-- a validation report proving the checked-in gold patches still resolve the tasks
-
-### 3. Preprocess The Shared Provider Repo
-
-```bash
-uv run --package eval python -m eval.cli index-synthetic \
-  --task-count 3 \
-  --seed 1
-```
-
-This now performs the synthetic preprocessing bundle:
-
-- index the shared provider repo for raw code retrieval
-- generate provider wiki documentation for wiki retrieval
-
-Consumer repos are not indexed in v1.
-
-### 4. Generate Baseline Synthetic Predictions
-
-```bash
-uv run --package eval python -m eval.cli generate-synthetic-baseline \
-  --task-count 3 \
-  --seed 1 \
-  --output .cache/eval/runs/synthetic-baseline-3.jsonl
-```
-
-### 5. Generate Retrieval-Augmented Synthetic Predictions
-
-Code retrieval:
-
-```bash
-uv run --package eval python -m eval.cli generate-synthetic-lighthouse \
-  --task-count 3 \
-  --seed 1 \
-  --context-source code \
-  --output .cache/eval/runs/synthetic-code-3.jsonl
-```
-
-Wiki retrieval:
-
-```bash
-uv run --package eval python -m eval.cli generate-synthetic-lighthouse \
-  --task-count 3 \
-  --seed 1 \
-  --context-source wiki \
-  --output .cache/eval/runs/synthetic-wiki-3.jsonl
-```
-
-### 6. Evaluate Synthetic Predictions Locally
-
-```bash
-uv run --package eval python -m eval.cli evaluate-synthetic \
-  --task-count 3 \
-  --seed 1 \
-  --predictions .cache/eval/runs/synthetic-baseline-3.jsonl \
-  --run-id synthetic-baseline-3
-```
-
-### 7. Summarize The Synthetic Run
-
-```bash
-uv run --package eval python -m eval.cli summarize-synthetic \
-  --run-id synthetic-baseline-3
-```
-
-### 8. Compare Baseline And Lighthouse
-
-```bash
-uv run --package eval python -m eval.cli compare-synthetic \
-  --baseline-run-id synthetic-baseline-3 \
-  --lighthouse-run-id synthetic-code-3
-```
-
-This prints two tables:
-
-- an overall table with the SWE-bench aggregate field names:
-  `total_instances`, `submitted_instances`, `completed_instances`,
-  `resolved_instances`, `unresolved_instances`, `empty_patch_instances`, and
-  `error_instances`
-- a per-task table showing baseline status, Lighthouse status, failing-test
-  counts, and whether Lighthouse improved, regressed, or stayed unchanged
-
-### `run-synthetic-experiment`
-
-Run the full synthetic flow in one command:
-
-- prepare the workspace
-- optionally validate the tasks
-- index the shared provider repo
-- optionally generate provider wiki documentation
-- generate baseline and Lighthouse predictions
-- evaluate both runs
-- print and persist the comparison table
-
-The command writes experiment artifacts under:
-
-```text
-.cache/eval/synthetic_experiments/
-```
-
-## SWE-bench Run Book
-
-### 1. Show The Slice
-
-From the repo root:
-
-```bash
-uv run --package eval python -m eval.cli show-slice --max-instances 3
-```
-
-Expected output shape:
-
-```text
-SWE-bench slice: 3 instance(s) from princeton-nlp/SWE-bench_Lite [test]
-1. astropy__astropy-12907
-   repo: astropy/astropy
-   base_commit: ...
-   version: ...
-2. astropy__astropy-14182
-   repo: astropy/astropy
-   base_commit: ...
-   version: ...
-3. astropy__astropy-14365
-   repo: astropy/astropy
-   base_commit: ...
-   version: ...
-```
-
-This confirms:
-
-- the dataset is reachable
-- the slice selection logic is working
-- the chosen instance ids are the ones you expect
-
-### 2. Prepare Images For One Instance
-
-The recommended first manual image-prep test is a single instance:
-
-```bash
-uv run --package eval python -m eval.cli prepare-images \
-  --instance-id astropy__astropy-12907 \
-  --max-workers 1
-```
-
-Expected output shape at the beginning:
-
-```text
-SWE-bench slice: 1 instance(s) from princeton-nlp/SWE-bench_Lite [test]
-1. astropy__astropy-12907
-   repo: astropy/astropy
-   base_commit: ...
-   version: ...
-
-Preparing 1 SWE-bench image(s)
-Using Docker endpoint: unix://...
-Harness workdir: .cache/eval/swebench_harness
-Instance ids:
-  - astropy__astropy-12907
-```
-
-Then, depending on cache state, you should see either:
-
-- fresh build output from the official harness, or
-- a fast path where the harness reports that the images already exist
-
-Typical harness progress includes lines such as:
-
-- `Building base image (...)`
-- `Total environment images to build: ...`
-- `Building instance images for ... instances`
-- `Streaming harness log: ...`
-
-Expected success at the end:
-
-```text
-Verified image: sweb.eval.x86_64.astropy__astropy-12907:latest
-Prepared images:
-  - sweb.eval.x86_64.astropy__astropy-12907:latest
-```
-
-Host-side verification:
-
-```bash
-docker image inspect sweb.eval.x86_64.astropy__astropy-12907:latest >/dev/null && echo "image ready"
-```
-
-### 3. Prepare Images For The 3-Instance Smoke Slice
-
-After the single-instance test succeeds, prepare the slice we have been using
-for smoke work:
-
-```bash
-uv run --package eval python -m eval.cli prepare-images \
-  --max-instances 3 \
-  --max-workers 1
-```
-
-This selects the first three instances from the SWE-bench Lite `test` split,
-which currently are:
-
-- `astropy__astropy-12907`
-- `astropy__astropy-14182`
-- `astropy__astropy-14365`
-
-If the first image was already built during the single-instance test, the
-harness should usually skip rebuilding it and only build what is still missing.
-
-Expected success at the end:
-
-```text
-Verified image: sweb.eval.x86_64.astropy__astropy-12907:latest
-Verified image: sweb.eval.x86_64.astropy__astropy-14182:latest
-Verified image: sweb.eval.x86_64.astropy__astropy-14365:latest
-Prepared images:
-  - sweb.eval.x86_64.astropy__astropy-12907:latest
-  - sweb.eval.x86_64.astropy__astropy-14182:latest
-  - sweb.eval.x86_64.astropy__astropy-14365:latest
-```
-
-Host-side verification:
-
-```bash
-docker image inspect \
-  sweb.eval.x86_64.astropy__astropy-12907:latest \
-  sweb.eval.x86_64.astropy__astropy-14182:latest \
-  sweb.eval.x86_64.astropy__astropy-14365:latest >/dev/null && echo "images ready"
-```
-
-### 4. Generate Baseline Predictions
-
-Once the slice is selected and the image-prep command is behaving as expected,
-generate a baseline predictions file.
-
-For the first manual check, use one instance and write to a throwaway path:
-
-```bash
-uv run --package eval python -m eval.cli generate-baseline \
-  --instance-id astropy__astropy-12907 \
-  --output .cache/eval/runs/baseline-1.jsonl
-```
-
-The default model is currently:
-
-```text
-bedrock/us.amazon.nova-lite-v1:0
-```
-
-The default Bedrock region is currently:
-
-```text
-us-east-1
-```
-
-If you want a different Bedrock model, override it explicitly:
-
-```bash
-uv run --package eval python -m eval.cli generate-baseline \
-  --instance-id astropy__astropy-12907 \
-  --model bedrock/<your-model-id> \
-  --output .cache/eval/runs/baseline-1.jsonl
-```
-
-Expected output shape:
-
-```text
-SWE-bench slice: 1 instance(s) from princeton-nlp/SWE-bench_Lite [test]
-1. astropy__astropy-12907
-   repo: astropy/astropy
-   base_commit: ...
-   version: ...
-Model: bedrock/us.amazon.nova-lite-v1:0
-Bedrock region: us-east-1
-Output file: .cache/eval/runs/baseline-1.jsonl
-[1/1] Generating baseline patch for astropy__astropy-12907
-    wrote ... patch chars
-Wrote 1 prediction(s) to .cache/eval/runs/baseline-1.jsonl
-```
-
-Then inspect the file directly:
-
-```bash
-sed -n '1,5p' .cache/eval/runs/baseline-1.jsonl
-```
-
-Each JSONL row currently includes:
-
-- `instance_id`
-- `model_name_or_path`
-- `model_patch`
-- `full_output`
-
-To inspect just the generated patch:
-
-```bash
-python3 - <<'PY'
-import json
-from pathlib import Path
-
-row = json.loads(Path(".cache/eval/runs/baseline-1.jsonl").read_text().splitlines()[0])
-print(row["model_patch"])
-PY
-```
-
-To verify that the patch begins like a unified diff:
-
-```bash
-python3 - <<'PY'
-import json
-from pathlib import Path
-
-row = json.loads(Path(".cache/eval/runs/baseline-1.jsonl").read_text().splitlines()[0])
-patch = row["model_patch"]
-print("starts_with_unified_diff =", patch.startswith("--- a/"))
-print("instance_id =", row["instance_id"])
-PY
-```
-
-For the 3-instance smoke slice:
-
-```bash
-uv run --package eval python -m eval.cli generate-baseline \
-  --max-instances 3 \
-  --output .cache/eval/runs/baseline-3.jsonl
-```
-
-Then verify the file has three rows:
-
-```bash
-wc -l .cache/eval/runs/baseline-3.jsonl
-```
-
-### 5. Index Repositories For Lighthouse
-
-Before using Lighthouse retrieval, pre-index the repositories referenced by the
-selected SWE-bench slice.
-
-For the full SWE-bench Lite `test` split, run:
-
-```bash
-uv run --package eval python -m eval.cli index-repos \
-  --ingestion-url http://localhost:8001 \
-  --output .cache/eval/repo-registry.json
-```
-
-For just the current 3-instance smoke slice:
-
-```bash
-uv run --package eval python -m eval.cli index-repos \
-  --max-instances 3 \
-  --ingestion-url http://localhost:8001 \
-  --output .cache/eval/repo-registry.json
-```
-
-For local runs against `localhost`, `index-repos` automatically streams
-`ingestion-worker` Docker logs while it waits. It also prints periodic
-"Still waiting ..." heartbeat lines if the branch status has not changed for a
-while.
-
-If you want quieter output, disable the log stream explicitly:
-
-```bash
-uv run --package eval python -m eval.cli index-repos \
-  --max-instances 3 \
-  --ingestion-url http://localhost:8001 \
-  --no-stream-worker-logs \
-  --output .cache/eval/repo-registry.json
-```
-
-Expected output shape:
-
-```text
-SWE-bench slice: ... instance(s) from princeton-nlp/SWE-bench_Lite [test]
-...
-Resolving GitHub metadata for astropy/astropy
-    resolved -> github_repo_id=..., branch=main
-Submitting ... repository indexing request(s)
-Accepted workflows: index-...
-[ingestion-worker] ...
-Index status: astropy/astropy@main -> ...
-Still waiting after ...: astropy/astropy@main=indexing
-Index status: astropy/astropy@main -> indexed
-Repository registry: .cache/eval/repo-registry.json
-```
-
-The resulting registry file is the input you can reuse for later
-`generate-lighthouse` runs.
-
-### 6. Generate Lighthouse-Augmented Predictions
-
-Before using Lighthouse retrieval, make sure:
-
-- the search service is running
-- the repository for the selected SWE-bench tasks has already been preprocessed with `index-repos`
-- you know either:
-  - the indexed repository's `github_repo_id`, or
-  - a registry file that maps `owner/repo` to `github_repo_id` and `branch`
-
-For a single-repository slice, the smallest manual test is to pass the GitHub
-repo id directly:
-
-```bash
-uv run --package eval python -m eval.cli generate-lighthouse \
-  --instance-id astropy__astropy-12907 \
-  --github-repo-id <github-repo-id> \
-  --branch main \
-  --search-url http://localhost:8002 \
-  --context-source code \
-  --output .cache/eval/runs/lighthouse-1.jsonl
-```
-
-For multi-repository slices, use a registry JSON file. The simplest supported
-format is:
+Create `configs/synthetic-matrix-openai-embed.json`:
 
 ```json
 {
-  "astropy/astropy": {
-    "github_repo_id": 123456,
-    "branch": "main"
-  }
+  "families": ["all"],
+  "context_sources": ["code", "wiki", "combined", "ast"],
+  "chunking_strategies": ["base", "ast"],
+  "codegen_models": [
+    "openai/gpt-5.4",
+    "bedrock/us.amazon.nova-pro-v1:0"
+  ],
+  "embedding_models": [
+    "text-embedding-3-large"
+  ],
+  "embedding_strategy": "openai",
+  "repeat_count": 3,
+  "k_values": [1, 2, 3],
+  "task_count": 10,
+  "top_k": 5
 }
 ```
 
-and then:
+Notes:
+
+- `families: ["all"]` expands all checked-in synthetic families.
+- `context_source="ast"` requires `chunking_strategy="ast"` (enforced).
+- `embedding_strategy` is single-valued per run. To sweep OpenAI + Bedrock embeddings, run two matrix configs.
+
+### 4.2 Dry-run first (recommended)
 
 ```bash
-uv run --package eval python -m eval.cli generate-lighthouse \
-  --max-instances 3 \
-  --repo-registry .cache/eval/repo-registry.json \
+uv run eval run-synthetic-matrix \
+  --config configs/synthetic-matrix-openai-embed.json \
+  --run-prefix synth-openai-dry \
+  --dry-run \
+  --output-root .cache/eval/synthetic_experiments/synth/openai
+```
+
+### 4.3 Execute matrix
+
+```bash
+uv run eval run-synthetic-matrix \
+  --config configs/synthetic-matrix-openai-embed.json \
+  --run-prefix synth-openai \
+  --ingestion-url http://localhost:8001 \
+  --search-url http://localhost:8002 \
+  --output-root .cache/eval/synthetic_experiments/synth/openai \
+  --continue-on-error
+```
+
+### 4.4 Artifacts to report
+
+Per matrix output root:
+
+- `matrix_rows.json` (cell-level score + pass@k + efficiency fields)
+- `matrix_rows.md` (combined score/pass@k and efficiency sections)
+- `matrix_efficiency.json`
+- `matrix_efficiency.txt`
+- `heatmaps/*.png` (score and pass@k)
+- `pass_at_k/*.pass_at_k.txt`
+
+### 4.5 Efficiency metrics currently exposed
+
+For each matrix cell:
+
+- mean total duration (seconds)
+- mean generation tokens
+- mean generation cost (USD, estimated from checked-in pricing catalogs)
+- per-repeat values for the above
+
+These are now visible in:
+
+- `matrix_rows.*`
+- `matrix_efficiency.*`
+
+---
+
+### Synthetic Pass@k
+
+Pass@k is first-class for synthetic and is integrated into matrix output.  
+Manual aggregation remains available:
+
+```bash
+uv run eval pass-at-k-synthetic \
+  --run-id run-a --run-id run-b --run-id run-c \
+  --k 1 --k 2 --k 3
+```
+
+Formula used:
+
+- `pass@k = 1 - C(n-c, k) / C(n, k)`
+  - `n`: total sampled runs
+  - `c`: successful runs for that task
+
+---
+
+### SWE-bench with Configuration Parity
+
+There is no built-in `run-swebench-matrix` command yet.  
+Use a config-driven sweep script and keep parity by reusing the same model/context/top-k selections as synthetic.
+
+#### Current parity constraints
+
+- SWE-bench CLI does **not** currently expose embedding override flags per run.
+- SWE-bench generation commands are currently **Bedrock-only**.
+- Synthetic matrix supports OpenAI + Bedrock codegen, plus runtime embedding strategy/model overrides.
+
+To keep parity today:
+
+- use the **intersection** of supported codegen models (Bedrock models) and retrieval contexts (`code`/`wiki`) across both tracks
+- pin SWE-bench embedding backend by service env/config before each sweep batch
+- run separate sweeps for each embedding backend/model setting (same approach as synthetic multi-config)
+
+### 6.2 SWE-bench runbook (single config batch)
+
+1) Show/select slice:
+
+```bash
+uv run eval show-slice --dataset-name princeton-nlp/SWE-bench_Lite --split test --max-instances 50
+```
+
+2) Prepare images:
+
+```bash
+uv run eval prepare-images \
+  --dataset-name princeton-nlp/SWE-bench_Lite \
+  --split test \
+  --max-instances 50 \
+  --max-workers 1
+```
+
+3) Index repos + wiki preprocess:
+
+```bash
+uv run eval index-repos \
+  --dataset-name princeton-nlp/SWE-bench_Lite \
+  --split test \
+  --max-instances 50 \
+  --ingestion-url http://localhost:8001 \
+  --output .cache/eval/swebench/repo-registry.json
+```
+
+4) Generate + evaluate baseline:
+
+```bash
+uv run eval generate-baseline \
+  --dataset-name princeton-nlp/SWE-bench_Lite \
+  --split test \
+  --max-instances 50 \
+  --model bedrock/us.amazon.nova-pro-v1:0 \
+  --output .cache/eval/swebench/baseline.jsonl \
+  --overwrite
+
+uv run eval evaluate \
+  --dataset-name princeton-nlp/SWE-bench_Lite \
+  --split test \
+  --max-instances 50 \
+  --predictions .cache/eval/swebench/baseline.jsonl \
+  --run-id swebench-baseline-nova-pro \
+  --max-workers 1
+```
+
+5) Generate + evaluate retrieval runs (repeat for `code` and `wiki`):
+
+```bash
+uv run eval generate-lighthouse \
+  --dataset-name princeton-nlp/SWE-bench_Lite \
+  --split test \
+  --max-instances 50 \
+  --model bedrock/us.amazon.nova-pro-v1:0 \
+  --repo-registry .cache/eval/swebench/repo-registry.json \
   --search-url http://localhost:8002 \
   --context-source code \
-  --output .cache/eval/runs/lighthouse-3.jsonl
-```
+  --top-k 5 \
+  --output .cache/eval/swebench/code.jsonl \
+  --overwrite
 
-To use the doc-generation path instead of code snippets, change
-`--context-source code` to `--context-source wiki`.
-
-Expected output shape:
-
-```text
-SWE-bench slice: 1 instance(s) from princeton-nlp/SWE-bench_Lite [test]
-1. astropy__astropy-12907
-   repo: astropy/astropy
-   base_commit: ...
-   version: ...
-Model: bedrock/us.amazon.nova-lite-v1:0
-Bedrock region: us-east-1
-Search service URL: http://localhost:8002
-Context source: code
-GitHub repo id override: ...
-Branch override: main
-Output file: .cache/eval/runs/lighthouse-1.jsonl
-[1/1] Retrieving Lighthouse context for astropy__astropy-12907
-    repo target: astropy/astropy (github_repo_id=..., branch=main)
-    retrieved ... snippet(s)
-[1/1] Generating Lighthouse patch for astropy__astropy-12907
-    wrote ... patch chars
-Wrote 1 prediction(s) to .cache/eval/runs/lighthouse-1.jsonl
-```
-
-Then inspect the file directly:
-
-```bash
-sed -n '1,5p' .cache/eval/runs/lighthouse-1.jsonl
-```
-
-### 7. Evaluate Predictions
-
-Once you have a predictions file, run the official SWE-bench harness through
-the new wrapper.
-
-For a single-instance manual test:
-
-```bash
-uv run --package eval python -m eval.cli evaluate \
-  --instance-id astropy__astropy-12907 \
-  --predictions .cache/eval/runs/baseline-1.jsonl \
-  --run-id baseline-1-smoke \
+uv run eval evaluate \
+  --dataset-name princeton-nlp/SWE-bench_Lite \
+  --split test \
+  --max-instances 50 \
+  --predictions .cache/eval/swebench/code.jsonl \
+  --run-id swebench-code-nova-pro \
   --max-workers 1
 ```
 
-Use a fresh `--run-id` for each new evaluation attempt so the harness does not
-reuse prior per-instance reports from the same run id.
-
-Expected output shape at the beginning:
-
-```text
-SWE-bench slice: 1 instance(s) from princeton-nlp/SWE-bench_Lite [test]
-1. astropy__astropy-12907
-   repo: astropy/astropy
-   base_commit: ...
-   version: ...
-Evaluating 1 SWE-bench prediction(s)
-Run id: baseline-1-smoke
-Using Docker endpoint: unix://...
-Harness workdir: .cache/eval/swebench_harness
-Predictions file: .cache/eval/runs/baseline-1.jsonl
-Instance ids:
-  - astropy__astropy-12907
-```
-
-During the run you should see newly discovered harness log files and per-log
-stream output, for example:
-
-- `Streaming harness log: run_evaluation/...`
-- `[harness:run_evaluation/.../run_instance.log] ...`
-
-At the end, the official harness should print a summary similar to:
-
-```text
-Total instances: 1
-Instances submitted: 1
-Instances completed: 1
-Instances resolved: ...
-Instances unresolved: ...
-Report written to bedrock__us.amazon.nova-lite-v1:0.baseline-1-smoke.json
-```
-
-and the wrapper should print:
-
-```text
-Evaluation report: .cache/eval/swebench_harness/bedrock__us.amazon.nova-lite-v1:0.baseline-1-smoke.json
-Run log directory: .cache/eval/swebench_harness/logs/run_evaluation/baseline-1-smoke/bedrock__us.amazon.nova-lite-v1:0
-```
-
-Then inspect the report:
+6) Summarize:
 
 ```bash
-cat .cache/eval/swebench_harness/bedrock__us.amazon.nova-lite-v1:0.baseline-1-smoke.json
+uv run eval summarize \
+  --predictions .cache/eval/swebench/code.jsonl \
+  --run-id swebench-code-nova-pro
 ```
 
-To inspect the per-instance report produced by the harness:
+### 6.3 Config-driven SWE-bench sweep script (recommended)
+
+Use your synthetic matrix config as the source of truth and iterate models/contexts in shell/Python.  
+Example shell shape:
 
 ```bash
-cat .cache/eval/swebench_harness/logs/run_evaluation/baseline-1-smoke/bedrock__us.amazon.nova-lite-v1:0/astropy__astropy-12907/report.json
+#!/usr/bin/env bash
+set -euo pipefail
+
+DATASET="princeton-nlp/SWE-bench_Lite"
+SPLIT="test"
+N=50
+REGISTRY=".cache/eval/swebench/repo-registry.json"
+OUTROOT=".cache/eval/swebench"
+
+for MODEL in "bedrock/us.amazon.nova-pro-v1:0" "bedrock/us.amazon.nova-lite-v1:0"; do
+  # baseline
+  uv run eval generate-baseline \
+    --dataset-name "$DATASET" --split "$SPLIT" --max-instances "$N" \
+    --model "$MODEL" \
+    --output "$OUTROOT/${MODEL//\//__}.baseline.jsonl" \
+    --overwrite
+
+  uv run eval evaluate \
+    --dataset-name "$DATASET" --split "$SPLIT" --max-instances "$N" \
+    --predictions "$OUTROOT/${MODEL//\//__}.baseline.jsonl" \
+    --run-id "swebench-${MODEL//\//-}-baseline" \
+    --max-workers 1
+
+  for CTX in code wiki; do
+    uv run eval generate-lighthouse \
+      --dataset-name "$DATASET" --split "$SPLIT" --max-instances "$N" \
+      --model "$MODEL" \
+      --repo-registry "$REGISTRY" \
+      --search-url http://localhost:8002 \
+      --context-source "$CTX" \
+      --top-k 5 \
+      --output "$OUTROOT/${MODEL//\//__}.${CTX}.jsonl" \
+      --overwrite
+
+    uv run eval evaluate \
+      --dataset-name "$DATASET" --split "$SPLIT" --max-instances "$N" \
+      --predictions "$OUTROOT/${MODEL//\//__}.${CTX}.jsonl" \
+      --run-id "swebench-${MODEL//\//-}-${CTX}" \
+      --max-workers 1
+  done
+done
 ```
 
-For the 3-instance smoke slice:
+---
 
-```bash
-uv run --package eval python -m eval.cli evaluate \
-  --max-instances 3 \
-  --predictions .cache/eval/runs/baseline-3.jsonl \
-  --run-id baseline-3-smoke \
-  --max-workers 1
-```
+## Reporting Template for Tables/Figures
 
-### 8. Summarize A Completed Run
+For each synthetic matrix figure/table, include:
 
-Once an evaluation has finished, you can print a compact summary without
-opening the raw harness JSON files manually.
+- benchmark track: synthetic
+- families included
+- model sweep lists
+- embedding sweep lists + strategy
+- retrieval contexts + chunking strategies
+- repeats and k-values
+- score metric and pass@k metric definitions
+- cost source (checked-in pricing catalogs)
 
-For the same single-instance run:
+For SWE-bench tables:
 
-```bash
-uv run --package eval python -m eval.cli summarize \
-  --predictions .cache/eval/runs/baseline-1.jsonl \
-  --run-id baseline-1-smoke
-```
+- dataset and split
+- instance selection (`max-instances` or explicit IDs)
+- same model/context/top-k settings as synthetic where applicable
+- note any unsupported parity dimension (currently per-run embedding override in CLI)
 
-Expected output shape:
-
-```text
-Harness report: .cache/eval/swebench_harness/bedrock__us.amazon.nova-lite-v1:0.baseline-1-smoke.json
-Run log directory: .cache/eval/swebench_harness/logs/run_evaluation/baseline-1-smoke/bedrock__us.amazon.nova-lite-v1:0
-Total instances: 1
-Submitted instances: 1
-Completed instances: 1
-Resolved instances: 0
-Unresolved instances: 1
-Empty patch instances: 0
-Error instances: 0
-Per-instance results:
-- astropy__astropy-12907: unresolved
-  patch applied: yes
-  FAIL_TO_PASS: 0 passed, 2 failed
-  PASS_TO_PASS failures: 0
-  failing FAIL_TO_PASS test: astropy/modeling/tests/test_separable.py::...
-```
-
-This is meant to be a convenience layer over the official harness artifacts,
-not a replacement for them. The raw JSON files are still the source of truth.
-
-## Artifacts And Logs
-
-### Harness Work Directory
-
-By default the harness wrapper uses:
-
-```text
-.cache/eval/swebench_harness
-```
-
-You can override this with `--workdir`.
-
-### Build Logs
-
-Live-tailed build logs are discovered under:
-
-```text
-.cache/eval/swebench_harness/logs/build_images
-```
-
-Typical log files include:
-
-- base image build logs
-- environment image build logs
-- instance image build logs
-- instance preparation logs
-
-### Prediction Files
-
-The baseline generator writes JSONL to the path you pass via `--output`.
-
-For example:
-
-```text
-.cache/eval/runs/baseline-1.jsonl
-```
-
-### Repo Registry Files
-
-The indexing command writes a JSON registry that maps `owner/repo` to
-`github_repo_id` and `branch`.
-
-For example:
-
-```text
-.cache/eval/repo-registry.json
-```
-
-### Evaluation Reports
-
-The official harness summary report is written in the harness work directory.
-
-For example:
-
-```text
-.cache/eval/swebench_harness/bedrock__us.amazon.nova-lite-v1:0.baseline-1-smoke.json
-```
-
-Per-instance run logs and `report.json` files are written under:
-
-```text
-.cache/eval/swebench_harness/logs/run_evaluation/<run-id>/<model-name>/
-```
+---
 
 ## Troubleshooting
 
-### Docker Endpoint Could Not Be Resolved
+- **Indexing/wiki 500s**: restart services + run DB migrations.
+- **No heatmaps**: ensure `matplotlib` installed; `seaborn` is optional.
+- **OpenAI model fails**: verify `OPENAI_API_KEY`.
+- **Bedrock model invalid**: use inference-profile style IDs (`bedrock/us.amazon...`).
+- **Large matrix instability**: use `--continue-on-error` and inspect `matrix_rows.json` `error` fields.
 
-If `prepare-images` fails before the harness starts, check that the Docker CLI
-can talk to your active daemon:
+---
 
-```bash
-docker ps
-docker context inspect
-```
+## Reproducibility Recommendations
 
-The wrapper resolves the Docker SDK endpoint from the current Docker context and
-passes it through as `DOCKER_HOST`.
-
-### Hugging Face Warnings About Unauthenticated Requests
-
-Set:
-
-```bash
-export HUGGINGFACE_HUB_TOKEN=...
-```
-
-The wrapper will forward that value as `HF_TOKEN` for the harness if `HF_TOKEN`
-is not already set.
-
-### Bedrock Generation Fails Before Writing Any Predictions
-
-Check that your AWS credentials and region are configured for Bedrock access:
-
-```bash
-aws sts get-caller-identity
-echo "$AWS_DEFAULT_REGION"
-```
-
-If needed, pass an explicit Bedrock region:
-
-```bash
-uv run --package eval python -m eval.cli generate-baseline \
-  --instance-id astropy__astropy-12907 \
-  --region-name us-east-1 \
-  --output .cache/eval/runs/baseline-1.jsonl
-```
-
-If you see an error saying that the model identifier is invalid, the most common
-cause is that a region-specific foundation-model id was used where an inference
-profile id is needed. The package default uses the US cross-region inference
-profile form:
-
-```text
-bedrock/us.amazon.nova-lite-v1:0
-```
-
-Amazon Nova models commonly require an inference-profile id for `Converse`. For
-example, `amazon.nova-lite-v1:0` may fail while `us.amazon.nova-lite-v1:0`
-works.
-
-If you previously ran the command with the older raw foundation-model id, rerun
-with `--overwrite` or remove the previous output file first.
-
-### Repository Indexing Fails
-
-Check that:
-
-- the ingestion service is running
-- the GitHub metadata lookup can reach `api.github.com`
-- the indexing branch eventually reaches `indexed`
-
-Useful checks:
-
-```bash
-curl -s http://localhost:8001/health
-curl -s https://api.github.com/repos/astropy/astropy
-```
-
-### Lighthouse Generation Fails Before Writing Any Predictions
-
-Check that:
-
-- the search service is running
-- the selected repository has already been indexed
-- you supplied either `--repo-registry` or `--github-repo-id`
-
-Useful checks:
-
-```bash
-curl -s http://localhost:8002/health
-curl -s http://localhost:8002/search/methods
-```
-
-If you are using a registry file, validate that it contains the selected repo:
-
-```bash
-sed -n '1,80p' .cache/eval/repo-registry.json
-```
-
-### Evaluation Fails Before Any Instance Runs
-
-Check that:
-
-- the predictions file exists
-- the required SWE-bench images are already prepared
-- Docker is reachable from the current shell
-
-Useful checks:
-
-```bash
-docker ps
-docker image inspect sweb.eval.x86_64.astropy__astropy-12907:latest >/dev/null && echo "image ready"
-ls -l .cache/eval/runs/baseline-1.jsonl
-```
-
-### Summarize Cannot Find The Report
-
-Check that:
-
-- you are using the same `--run-id` that was passed to `evaluate`
-- you are pointing at the same predictions file used for that run
-- you are using the same harness `--workdir`
-
-Useful checks:
-
-```bash
-ls -l .cache/eval/swebench_harness/*.json
-find .cache/eval/swebench_harness/logs/run_evaluation -maxdepth 3 -type d
-```
-
-### The Command Succeeds Quickly But Nothing Is Rebuilt
-
-That usually means the harness found the images already present and skipped the
-build.
-
-Check explicitly:
-
-```bash
-docker image inspect sweb.eval.x86_64.astropy__astropy-12907:latest
-```
-
-### A Build Appears Stuck
-
-The harness can spend a while in base, environment, or instance image creation.
-Inspect the logs under:
-
-```text
-.cache/eval/swebench_harness/logs/build_images
-```
-
-If the wrapper is running, it should also print newly discovered log file paths
-and stream them live.
+- Keep all config files under `configs/` and version-control them.
+- Use deterministic seeds for synthetic runs.
+- Encode run identity in `--run-prefix` (`<track>-<modelset>-<date>`).
+- Never overwrite archival outputs; write to dated roots.
+- Store final artifact root paths directly in your manuscript appendix.
