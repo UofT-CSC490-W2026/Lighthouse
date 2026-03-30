@@ -659,6 +659,9 @@ locals {
   milvus_user_data = <<-EOF
     #!/bin/bash
     set -euxo pipefail
+    exec > >(tee /var/log/milvus-bootstrap.log | logger -t milvus-bootstrap -s 2>/dev/console) 2>&1
+
+    echo "Starting Milvus bootstrap"
 
     dnf update -y
     dnf install -y docker
@@ -729,6 +732,8 @@ locals {
     YML
 
     docker compose -f /opt/milvus/docker-compose.yml up -d
+    docker compose -f /opt/milvus/docker-compose.yml ps
+    echo "Milvus bootstrap completed"
   EOF
 }
 
