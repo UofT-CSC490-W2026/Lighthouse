@@ -1,8 +1,10 @@
 # Lighthouse
 
 <!-- coverage:start -->
+
 [![Tests](https://github.com/UofT-CSC490-W2026/Lighthouse/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/UofT-CSC490-W2026/Lighthouse/actions/workflows/tests.yml)
 ![Test Coverage](https://img.shields.io/badge/test%20coverage-97.27%25-brightgreen)
+
 <!-- coverage:end -->
 
 Better context for coding agents.
@@ -53,7 +55,9 @@ monorepo/
 
 1. Run `uv sync --all-packages --dev` to install dependencies for the entire monorepo.
 2. Run `cd services/web && bun install` to install dependencies for the web service.
-3. Run `scripts/setup-local-env-files.sh` to setup local `.env` files for all services. You will still need to get the following secrets from the team:
+3. Run `scripts/setup-local-env-files.sh` to setup local `.env` files for all services.
+
+**You will still need to get the following secrets from the team**:
 
 ```bash
 # For the ingestion and search services
