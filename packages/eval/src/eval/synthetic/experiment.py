@@ -117,8 +117,10 @@ def run_synthetic_experiment(
 ) -> SyntheticExperimentResult:
     if not run_prefix.strip():
         raise ValueError("run_prefix must not be empty.")
-    if context_source not in {"code", "wiki", "code+wiki"}:
-        raise ValueError("context_source must be 'code', 'wiki', or 'code+wiki'.")
+    if context_source not in {"code", "wiki", "ast", "combined", "code+wiki"}:
+        raise ValueError(
+            "context_source must be 'code', 'wiki', 'ast', 'combined', or 'code+wiki'."
+        )
 
     workspace = prepare_synthetic_workspace(
         family_name=family_name,
@@ -144,6 +146,7 @@ def run_synthetic_experiment(
             poll_interval_seconds=index_poll_interval_seconds,
             progress_heartbeat_seconds=index_progress_heartbeat_seconds,
             timeout_seconds=index_timeout_seconds,
+            include_ast=context_source in {"ast", "combined"},
         )
     if not skip_wiki_preparation:
         prepare_synthetic_wiki(
@@ -365,6 +368,7 @@ def run_synthetic_experiment_suite(
             poll_interval_seconds=index_poll_interval_seconds,
             progress_heartbeat_seconds=index_progress_heartbeat_seconds,
             timeout_seconds=index_timeout_seconds,
+            include_ast=True,
         )
     if not skip_wiki_preparation:
         prepare_synthetic_wiki(
@@ -416,7 +420,7 @@ def run_synthetic_experiment_suite(
     lighthouse_summaries: dict[str, SyntheticRunSummary] = {}
     comparisons: dict[str, SyntheticRunComparison] = {}
 
-    for context_source in ("code", "wiki", "code+wiki"):
+    for context_source in ("code", "wiki", "ast", "combined"):
         lighthouse_predictions_path = (
             predictions_root / f"{run_prefix}-{context_source}.jsonl"
         )

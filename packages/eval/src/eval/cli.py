@@ -843,7 +843,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     generate_synthetic_lighthouse.add_argument(
         "--context-source",
-        choices=["code", "wiki", "code+wiki"],
+        choices=["code", "wiki", "ast", "combined", "code+wiki"],
         default="code",
         help="Which Lighthouse retrieval source to use for prompt context",
     )
@@ -990,11 +990,11 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     run_synthetic_experiment.add_argument(
         "--context-source",
-        choices=["code", "wiki", "code+wiki", "all"],
+        choices=["code", "wiki", "ast", "combined", "code+wiki", "all"],
         default="code",
         help=(
-            "Which Lighthouse retrieval source to use: code, wiki, code+wiki, "
-            "or all (baseline + code + wiki + code+wiki)"
+            "Which Lighthouse retrieval source to use: code, wiki, ast, combined, "
+            "legacy code+wiki, or all (baseline + code + wiki + ast + combined)"
         ),
     )
     run_synthetic_experiment.add_argument(
