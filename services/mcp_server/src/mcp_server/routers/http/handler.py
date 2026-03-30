@@ -2,16 +2,24 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import logging
 import typing
 from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, HTTPException, Request
 
-from ...utilities import BoundRoute, RequestError, collect_routables
+from ...utilities import BoundRoute, RequestError, collect_routables, log_error, to_public_error
 from ...utilities.logging import Colour, pp
 
 if TYPE_CHECKING:
     from ...main import App
+
+
+def _safe_log(app: Any, exc: Exception, envelope) -> None:
+    logger = getattr(app, "log", None)
+    if logger is None:
+        logger = logging.getLogger(__name__)
+    log_error(logger, exc, envelope)
 
 
 class HTTPRouteHandler:
@@ -92,13 +100,20 @@ class HTTPRouteHandler:
             resolved_hints = {}
 
         orig_sig = inspect.signature(method)
-        expects_request = "request" in orig_sig.parameters
+        request_param = orig_sig.parameters.get("request")
+        resolved_request_annotation = (
+            resolved_hints.get("request", request_param.annotation)
+            if request_param is not None
+            else None
+        )
+        expects_http_request = resolved_request_annotation is Request
+        has_request_param = request_param is not None
         expects_auth = "auth" in orig_sig.parameters
         new_params = []
-        if meta.auth_required and not expects_request:
+        if meta.auth_required and not expects_http_request:
             new_params.append(
                 inspect.Parameter(
-                    "request",
+                    "_http_request",
                     inspect.Parameter.POSITIONAL_OR_KEYWORD,
                     annotation=Request,
                 )
@@ -120,36 +135,77 @@ class HTTPRouteHandler:
             call_kwargs = dict(kwargs)
 
             if meta.auth_required:
-                request = call_kwargs.get("request")
-                if request is None:
+                if expects_http_request:
+                    http_request = call_kwargs.get("request")
+                elif has_request_param:
+                    http_request = call_kwargs.get("_http_request")
+                else:
+                    # Backward-compatible path for direct calls/tests that pass
+                    # `request=` even when the wrapped endpoint has no request parameter.
+                    http_request = call_kwargs.get("_http_request") or call_kwargs.get(
+                        "request"
+                    )
+                if http_request is None:
                     raise RuntimeError(
                         "Authenticated HTTP routes require a Request object."
                     )
                 try:
-                    auth = await self.app.authenticator.require_http_request(request)
+                    auth = await self.app.authenticator.require_http_request(http_request)
                 except RequestError as exc:
+                    status_code, envelope = to_public_error(exc)
+                    _safe_log(self.app, exc, envelope)
                     raise HTTPException(
-                        status_code=exc.status_code, detail=exc.detail
+                        status_code=status_code,
+                        detail=envelope.model_dump(mode="json"),
                     ) from exc
-                request.state.authenticated_user = auth
+                except Exception as exc:
+                    status_code, envelope = to_public_error(exc)
+                    _safe_log(self.app, exc, envelope)
+                    raise HTTPException(
+                        status_code=status_code,
+                        detail=envelope.model_dump(mode="json"),
+                    ) from exc
+                if hasattr(http_request, "state"):
+                    http_request.state.authenticated_user = auth
                 if expects_auth:
                     call_kwargs["auth"] = auth
 
-            if not expects_request:
+            if not has_request_param:
                 call_kwargs.pop("request", None)
+            call_kwargs.pop("_http_request", None)
 
             try:
                 result = method(**call_kwargs)
             except RequestError as exc:
+                status_code, envelope = to_public_error(exc)
+                _safe_log(self.app, exc, envelope)
                 raise HTTPException(
-                    status_code=exc.status_code, detail=exc.detail
+                    status_code=status_code,
+                    detail=envelope.model_dump(mode="json"),
+                ) from exc
+            except Exception as exc:
+                status_code, envelope = to_public_error(exc)
+                _safe_log(self.app, exc, envelope)
+                raise HTTPException(
+                    status_code=status_code,
+                    detail=envelope.model_dump(mode="json"),
                 ) from exc
             if asyncio.iscoroutine(result):
                 try:
                     result = await result
                 except RequestError as exc:
+                    status_code, envelope = to_public_error(exc)
+                    _safe_log(self.app, exc, envelope)
                     raise HTTPException(
-                        status_code=exc.status_code, detail=exc.detail
+                        status_code=status_code,
+                        detail=envelope.model_dump(mode="json"),
+                    ) from exc
+                except Exception as exc:
+                    status_code, envelope = to_public_error(exc)
+                    _safe_log(self.app, exc, envelope)
+                    raise HTTPException(
+                        status_code=status_code,
+                        detail=envelope.model_dump(mode="json"),
                     ) from exc
             return result
 

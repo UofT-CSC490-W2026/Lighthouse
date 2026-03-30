@@ -17,6 +17,11 @@ logger = logging.getLogger(__name__)
 class BranchNotIndexedError(RuntimeError):
     """Raised when a requested branch is not indexed for a repository."""
 
+    def __init__(self, branch: str, indexed_branches: list[str] | None = None) -> None:
+        super().__init__(f'Branch requested not indexed or does not exist: "{branch}"')
+        self.branch = branch
+        self.indexed_branches = indexed_branches or []
+
 
 class HybridSearchStrategy(SearchStrategy[SearchRequest, SearchResult]):
     """Hybrid search combining vector similarity and PostgreSQL full-text search."""
@@ -45,7 +50,8 @@ class HybridSearchStrategy(SearchStrategy[SearchRequest, SearchResult]):
                 repo_id = repo.id
                 if not self._is_branch_indexed(repo.id, request.branch):
                     raise BranchNotIndexedError(
-                        f"Branch requested not indexed or does not exist: \"{request.branch}\""
+                        request.branch,
+                        indexed_branches=self._list_indexed_branches(repo.id),
                     )
 
         attempt = self._search_for_branch(
@@ -327,6 +333,29 @@ class HybridSearchStrategy(SearchStrategy[SearchRequest, SearchResult]):
                 filtered.append(result)
 
         return filtered
+
+    def _list_indexed_branches(self, repo_id: str) -> list[str]:
+        """Return indexed branch names for a repository, ordered alphabetically."""
+        try:
+            with self.db_manager.connection_context():
+                rows = (
+                    IndexedFile.select(IndexedFile.branch_name)
+                    .where(IndexedFile.repository == repo_id)
+                    .distinct()
+                )
+                branches = sorted({row.branch_name for row in rows if row.branch_name})
+                if branches:
+                    return branches
+
+                chunk_rows = (
+                    Chunk.select(Chunk.branch)
+                    .where(Chunk.repository == repo_id)
+                    .distinct()
+                )
+                return sorted({row.branch for row in chunk_rows if row.branch})
+        except Exception:
+            logger.exception("Failed to enumerate indexed branches for repo %s", repo_id)
+            return []
 
     def _get_active_publish_map(
         self, file_keys: list[tuple[str, str, str]]
