@@ -434,17 +434,204 @@ GitChameleon 2.0 \cite{gitchameleon}
 \section{Experiments, Key Metrics, and Results}
 \label{sec:experiments}
 
+\subsection{Synthetic Benchmark Dataset}
+
+Our current evaluation track is built around a synthetic benchmark that is checked into the repository and executed by the \texttt{packages/eval} pipeline. The full checked-in corpus contains 150 executable tasks spanning six families, but the matrix runner evaluates deterministic seeded subsets of that corpus for tractability. In particular, the family configuration files use \texttt{task\_count=10} as the default per-run sample size, while the task manifests themselves contain the full corpus. This distinction matters most for the \texttt{synthetic-ab-contracts} family: it contains 100 task instances in the manifest, but a standard matrix cell samples 10 of them with a fixed seed so that model and retrieval comparisons are made on the same subset. \\
+
+\begin{table}[t]
+\centering
+\small
+\caption{Synthetic benchmark families currently checked into the repository. Counts are taken from the task manifests, not the default per-run sample size.}
+\label{tab:synthetic-family-summary}
+\begin{tabular}{l l r p{5.2cm}}
+\hline
+Family & Task type & Tasks & Benchmark role \\
+\hline
+\texttt{synthetic-ab-contracts} & \texttt{api\_contract\_mismatch} & 100 & Dual-repo repair tasks where the consumer must recover non-local provider semantics. \\
+\texttt{synthetic-api-feature} & \texttt{feature\_api\_integration} & 10 & Dual-repo feature tasks implemented against provider APIs. \\
+\texttt{synthetic-doc-behavior} & \texttt{doc\_behavior\_mismatch} & 10 & Dual-repo repair tasks where the documented library behavior matters. \\
+\texttt{synthetic-doc-feature} & \texttt{feature\_doc\_guided} & 10 & Dual-repo feature tasks guided by library documentation. \\
+\texttt{synthetic-type-coercion} & \texttt{data\_type\_coercion} & 10 & Single-repo repair controls focused on local code understanding. \\
+\texttt{synthetic-wrong-operator} & \texttt{logic\_wrong\_operator} & 10 & Single-repo repair controls focused on local bug localization. \\
+\hline
+Total & --- & 150 & 130 repair tasks and 20 feature tasks overall. \\
+\hline
+\end{tabular}
+\end{table}
+
+Each task manifest stores executable ground truth rather than free-form human judgments. Concretely, every task records a \texttt{buggy\_patch\_path}, a \texttt{gold\_patch\_path}, the targeted \texttt{pytest\_targets}, and several relevance annotations such as \texttt{expected\_relevant\_files}, \texttt{expected\_relevant\_symbols}, \texttt{visible\_api\_names}, and \texttt{test\_context}. The evaluator first materializes the buggy workspace by applying the buggy patch, then validates the instance by checking that (i) the buggy state fails on the declared tests and (ii) the gold patch applies cleanly and makes those same tests pass. The result is an executable notion of correctness: a model output is counted as successful only if its extracted patch applies with \texttt{git apply} and the declared tests pass.
+
+The benchmark is intentionally aligned with Lighthouse's core value proposition: surfacing non-local context that is not obvious from the local edit alone. This is most direct in the dual-repo families, especially \texttt{synthetic-ab-contracts}, where the consumer code is wrong because it violates the contract of a helper in a separate provider repository. The provider repository remains correct, and the task is to recover that behavior from surfaced provider code or documentation. The documentation-centric families extend the same idea to cases where the desired behavior is stated more explicitly in generated wiki content than in the local consumer implementation. By contrast, the single-repo \texttt{logic\_wrong\_operator} and \texttt{data\_type\_coercion} families act as controls: they are still useful coding tasks, but they are much less dependent on dependency-aware retrieval and therefore help isolate where Lighthouse adds genuine value rather than merely reformatting already local information.\\
+
+The \texttt{synthetic-ab-contracts} family is intentionally over-represented because it is our clearest stress test for dependency-context retrieval. Its build script expands 10 base consumer/provider contract motifs into 100 concrete instances by generating many contract-specific test cases around the same underlying buggy and gold patches. That design gives us both semantic diversity and repeated opportunities to test whether retrieval can recover subtle provider behavior such as rounding rules, default values, parsing semantics, or normalization conventions.\\
+
+Two methodological caveats are important to state explicitly. First, our ``no-context'' baseline is not a zero-information prompt. The baseline prompt still includes the task statement, the failing test context, the local buggy consumer files, and the relevant local test files. What it withholds is retrieved non-local context from the dependency side. Throughout the paper, ``no context'' should therefore be read as ``no surfaced dependency context beyond the standard local prompt.'' Second, the current query builder uses high-quality task metadata such as \texttt{visible\_api\_names} and \texttt{expected\_relevant\_symbols} when forming retrieval queries. We therefore interpret the benchmark as measuring retrieval and downstream patch generation given a well-specified issue query, not as a fully end-to-end evaluation of raw bug-report understanding.\\
+
+\subsection{Experimental Setup and Ablations}
+
+Our experiments are organized as a matrix over five factors: task family, context source, chunking strategy, code-generation model, and embedding model. The matrix runner expands this grid automatically and writes per-cell artifacts for score, pass@k, and efficiency. The checked-in configuration under \texttt{.cache/config/bedrock.json} currently sweeps four retrieval conditions (\texttt{grep}, \texttt{code}, \texttt{wiki}, and \texttt{combined}), uses the base chunking strategy, fixes \texttt{top\_k=5}, and compares six code generators: \texttt{bedrock/anthropic.claude-sonnet-4-6}, \texttt{bedrock/amazon.nova-pro-v1:0}, \texttt{bedrock/deepseek.v3.2}, \texttt{bedrock/google.gemma-3-12b-it}, \texttt{bedrock/meta.llama4-scout-17b-instruct-v1:0}, and \texttt{openai/gpt-5.4}. The current checked-in run uses Bedrock Titan embeddings (\texttt{amazon.titan-embed-text-v2:0}), while the evaluation code and tests also support separate sweeps over alternative embedding models such as \texttt{text-embedding-3-large}. Because embedding strategy is single-valued per matrix config, cross-provider embedding comparisons are run as separate batches.\\
+
+We compare the following retrieval settings.
+\begin{itemize}
+  \item \textbf{Baseline}: no retrieved dependency context. The model sees only the task statement, failing-test context, local buggy files, and local test files.
+  \item \textbf{Grep}: a strong lexical baseline. The evaluator derives up to 12 search terms from the task title, problem statement, test context, \texttt{visible\_api\_names}, and \texttt{expected\_relevant\_symbols}, runs \texttt{rg} over non-test Python files, ranks files by matched-term count, and surfaces local snippets around the first match.
+  \item \textbf{Code}: Lighthouse code retrieval over indexed code chunks.
+  \item \textbf{Wiki}: Lighthouse retrieval over generated repository wiki pages.
+  \item \textbf{AST}: Lighthouse retrieval over AST-oriented code chunks for the settings that index the AST view.
+  \item \textbf{Combined}: the strongest synthetic retrieval setting, which fuses ranked code, wiki, and AST results via reciprocal-rank fusion in the evaluator. A legacy \texttt{code+wiki} mode is also available when we want fusion without AST.
+\end{itemize}
+
+For the Lighthouse conditions, the underlying search service is hybrid rather than purely vector based. Code search combines Milvus vector retrieval with PostgreSQL full-text search and fuses the ranked lists using reciprocal-rank fusion. Wiki search uses the same pattern over generated wiki pages. When the search service receives multiple context sources, it fuses already-ranked code and wiki lists with reciprocal-rank fusion; in the synthetic evaluator, the \texttt{combined} condition extends this to code, wiki, and AST lists. This makes the ablation meaningful: \texttt{code} tests whether surfaced implementation details are sufficient, \texttt{wiki} tests whether surfaced documentation is sufficient, and \texttt{combined} tests whether broader retrieval breadth improves or dilutes the signal.\\
+
+The generation side is controlled so that the code-generation comparison is clean. Both Bedrock and OpenAI generators are prompted to return only a unified diff patch, and the evaluator extracts the patch, applies it with \texttt{git apply}, and runs the declared tests. We treat the dual-repo feature families separately from the repair families in the narrative because the feature tasks are not bug fixes in the narrow sense; they typically start from a stub that raises \texttt{NotImplementedError} and require composing one or more non-local helper APIs into a correct implementation.\\
+
+We also include chunking and embedding ablations. The base chunker corresponds to the standard sliding-window index, while the AST setting uses a separate AST-oriented index. The final paper should report these as controlled ablations rather than as a single leaderboard, because the right retrieval representation is plausibly task dependent: AST-heavy chunking may help symbolically local code tasks, whereas documentation-heavy tasks may benefit more from wiki retrieval than from any change in code chunk granularity.\\
+
+\subsection{Key Metrics}
+
+Our primary downstream metric is task \emph{score}, defined as the percentage of tasks in a run that are fully resolved:
+\[
+\mathrm{score} = \frac{\#\ \mathrm{resolved\ instances}}{\#\ \mathrm{total\ instances}}.
+\]
+A task is resolved only when the model emits a non-empty patch, the patch applies cleanly, and the declared failing tests pass after application. We additionally keep the intermediate failure modes (\texttt{missing\_patch}, \texttt{patch\_failed}, \texttt{unresolved}, and \texttt{error}) because they are useful for understanding whether a method is failing at localization, patch formatting, or semantic repair.
+
+When we run repeated samples of the same matrix cell, we also report pass@k. The evaluator uses the standard estimator
+\[
+\mathrm{pass@}k = 1 - \frac{\mathrm{C}(n-c,k)}{\mathrm{C}(n,k)},
+\]
+where \(n\) is the number of sampled runs for a task and \(c\) is the number of successful runs. The matrix runner aggregates this per task and then macro-averages across tasks in the cell. In the final paper, pass@k should be reported only for repeated cells; if a sweep is run with a single repeat, pass@1 is still meaningful but higher-k values are not.
+
+Our efficiency analysis has three parts. First, we log generation input tokens, output tokens, total tokens, latency, and estimated generation cost using checked-in pricing catalogs for both OpenAI and Bedrock models. Second, we log end-to-end stage durations, including indexing time, wiki-generation time, retrieval time, generation time, and total wall-clock time. Third, we distinguish one-time retrieval setup cost from per-query cost: indexing and wiki generation are amortizable offline costs, while retrieval calls, query embedding tokens, and generation tokens are online costs. The current evaluator already emits generation-side efficiency fields directly and has schema support for retrieval query token and cost estimates; the final version of the paper should explicitly separate offline embedding/indexing cost from online retrieval-plus-generation cost in the main tables.
+
+Two additional reporting conventions are important. First, because the benchmark is per-task executable and strongly typed, we can report \emph{improved}, \emph{regressed}, and \emph{unchanged} task counts relative to the baseline rather than only aggregate score deltas. Second, the evaluator targets the declared failing pytest slice for each task rather than a full repository regression suite. The results should therefore be interpreted as targeted fail-to-pass performance on well-scoped coding tasks, not as a full pass-to-pass regression guarantee over the entire repository.
+
+\begin{table}[t]
+\centering
+\fbox{\parbox{0.95\linewidth}{
+\vspace{0.5em}
+\centering
+Placeholder for the main quantitative table.
+
+Recommended columns: family, task type, context source, codegen model, embedding model, score, pass@1, pass@k, improved tasks, regressed tasks, mean generation tokens, mean estimated generation cost, mean total wall-clock time.
+\vspace{0.5em}
+}}
+\caption{Main quantitative results. Fill from the exported matrix and comparison artifacts once the full sweep completes.}
+\label{tab:main-results}
+\end{table}
+
+\subsection{Results}
+
+The main question is whether retrieved non-local context improves downstream coding performance enough to justify its additional cost. Our expectation is that the answer will depend strongly on task family. On the dependency-centric families, especially \texttt{synthetic-ab-contracts} and \texttt{synthetic-api-feature}, we expect surfaced provider code to dominate the baseline because the correct fix depends on behavior that is implemented outside the local consumer edit. On the documentation-centric families, we expect \texttt{wiki} retrieval to close more of the gap, and possibly exceed pure code retrieval when the required behavior is expressed more directly in prose than in the provider implementation. On the single-repo control families, we expect much smaller gains, which would support the claim that Lighthouse's benefit comes from surfacing non-local context rather than simply re-presenting already local code.
+
+\begin{figure}[t]
+\centering
+\fbox{\parbox{0.95\linewidth}{
+\vspace{0.5em}
+\centering
+Placeholder for the main heatmaps.
+
+Use the matrix runner's heatmaps or equivalent plots with codegen model on the x-axis, context source on the y-axis, and separate panels for embedding model and task family. Include both score and pass@k views.
+\vspace{0.5em}
+}}
+\caption{Family-by-family retrieval heatmaps for score and pass@k.}
+\label{fig:main-heatmaps}
+\end{figure}
+
+\paragraph{Preliminary observations from completed cells.}
+The currently completed cells already show the qualitative shape we expect. On a seeded 10-task subset of \texttt{synthetic-ab-contracts} with Titan embeddings and \texttt{top\_k=5}, \texttt{bedrock/amazon.nova-pro-v1:0} improves from 1/10 resolved tasks in the baseline to 8/10 with \texttt{code} retrieval, 5/10 with \texttt{combined} retrieval, and 2/10 with \texttt{wiki} retrieval. In the same completed runs, the code condition yields 7 improved tasks and 0 regressions relative to the baseline, while the combined and wiki conditions are weaker and introduce regressions. This is a strong early signal that exact provider implementation context matters more than documentation alone for contract-mismatch repair, and that adding more heterogeneous context can sometimes dilute the most useful evidence instead of strengthening it.
+
+The partial efficiency results show the trade-off clearly. For the same Nova Pro runs, total generation tokens increase from 10{,}355 in the baseline to 20{,}130 with code retrieval, 19{,}017 with combined retrieval, and 16{,}428 with wiki retrieval. Total wall-clock time also changes unevenly: the code run increases from 18.5\,s to 24.0\,s, the wiki run is roughly neutral at 19.3\,s, and the combined run grows to 42.5\,s because it pays for broader retrieval and a larger prompt. This is the kind of quality-cost frontier we want the full paper to make explicit.
+
+The smaller-model story remains suggestive but not settled. In the completed \texttt{synthetic-ab-contracts} code runs, \texttt{bedrock/google.gemma-3-12b-it} improves from 3/10 to 4/10 resolved tasks when code retrieval is enabled, with 5 improved tasks but also 2 regressions. That is consistent with the hypothesis that weaker or cheaper models can benefit from retrieval while also being more brittle to noisy context. The full matrix is needed to test that hypothesis properly across all families and models. A likely final interpretation, if the larger sweep follows this pattern, is that retrieval provides the largest relative lift for cheaper models while the strongest frontier models define the best no-retrieval ceiling.
+
+\begin{figure}[t]
+\centering
+\fbox{\parbox{0.95\linewidth}{
+\vspace{0.5em}
+\centering
+Placeholder for the efficiency frontier figure.
+
+Recommended plot: score (or pass@1) on the y-axis against mean generation cost or mean total tokens on the x-axis, grouped by context source and colored by codegen model. A second panel can show wall-clock time instead of cost.
+\vspace{0.5em}
+}}
+\caption{Quality-efficiency frontier across code-generation models and retrieval settings.}
+\label{fig:efficiency-tradeoff}
+\end{figure}
+
+The final version of this section should therefore make three claims, subject to the completed matrix data. First, non-local retrieval should matter most on dual-repo contract and API-integration tasks, which directly test Lighthouse's value proposition. Second, the best retrieval source should be task dependent: code should dominate when exact implementation semantics matter, while wiki context should be more competitive when behavior is explicitly documented. Third, the practical value of retrieval is not just whether it improves score, but whether it improves score enough to justify the additional token, latency, and cost budget. The completed cells already indicate that this trade-off is real and model dependent; the full tables and heatmaps will let us quantify it precisely.
+
+
+
+
 
 % ================================================================================
 \section{Future Work and Next Steps}
 \label{sec:future}
 
-% Frame project as a research instrument/proof of concept with potential to be turned into a product
+Lighthouse is a research instrument and proof of concept with a clear path
+toward becoming a production product.
+Future work spans two lenses: product maturity and research depth.\\
 
-% - Synchronization
-% - Repository discovery (UX enhancement) e.g. indexing repository dependencies (right now flow assumes you will manually index all relevant codebases, and relevant context might pertain to the details of some package the repo you're working on consumes)
-% - Scaling repository indexing (it slow)
-% - Experiment with more search types (agent conversation history, knowledge graph, commit history)
+\subsection{Product}
+
+\textbf{Automated webhook setup.}
+Currently, a developer must manually trigger re-indexing after pushing to a
+repository.
+The natural next step is to register GitHub webhooks automatically when a
+repository is added, so that every push triggers an incremental index update
+without any developer action.
+This removes the largest remaining friction point in the onboarding flow.\\
+
+\textbf{Incremental wiki generation.}
+Wiki generation is currently re-run in full on every indexing job, making it
+the dominant cost in the ingestion pipeline.
+Because a typical push changes only a small fraction of the codebase, the wiki
+should be updated incrementally: only pages whose source chunks changed need
+to be regenerated.
+This would reduce wiki generation from a per-job full pass to a diff-driven
+partial update, substantially improving ingestion throughput.\\
+
+\textbf{Expanded search types.}
+The current retrieval surface covers code chunks and wiki pages.
+Useful additions include agent conversation history (surfacing context from
+prior sessions on the same codebase), commit history and PR descriptions
+(capturing intent and rationale that does not appear in the code itself), and
+issue threads (linking failing tests or bug reports back to relevant code
+regions).
+Each of these extends the types of questions an agent can answer with
+Lighthouse context.\\
+
+\subsection{Research}
+
+\textbf{Graph-structured indexing.}
+The current index treats code chunks independently.
+A natural extension is to index the dependency graph explicitly — representing
+files, modules, and packages as nodes and import/call relationships as edges —
+enabling retrieval that follows structural dependencies rather than relying
+solely on semantic similarity.
+Graph databases such as Neo4j are well-suited to this representation.\\
+
+\textbf{Agentic retrieval.}
+Our current retrieval pipeline is a single-shot query-then-rank process.
+An agentic retrieval layer could iteratively refine queries based on
+intermediate results: issuing a first retrieval pass, inspecting the top
+candidates, and re-querying with refined or expanded terms.
+This is especially valuable for complex tasks where the relevant context is
+spread across multiple files or repositories and cannot be captured in a single
+query.\\
+
+\textbf{Indexing beyond source code.}
+We currently index source files and LLM-generated wiki pages.
+Extending the index to external documentation (library API docs, changelogs,
+README files) and package dependency manifests would allow agents to retrieve
+context for third-party APIs and version-specific behavior — the class of
+failures that benchmarks like GitChameleon 2.0 are designed to stress-test.\\
+
+The directions above represent a few of many paths forward.
+Lighthouse opens up a large and largely unexplored design space — in how
+context is indexed, what is indexed, how it is retrieved, and how it is
+consumed by agents — and we expect the most impactful directions to emerge
+from empirical experimentation on real agent tasks.
 
 
 % ================================================================================
