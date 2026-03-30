@@ -112,13 +112,13 @@ async def _search_impl(
 ) -> SearchResult | WikiSearchResult | CombinedSearchResult:
     requested_sources = request.requested_context_sources()
     if len(requested_sources) == 1 and requested_sources[0] is SearchContextSource.wiki:
-        strategy: SearchStrategy[WikiSearchRequest, WikiSearchResult] = app.state.wiki_strategy
+        wiki_search: SearchStrategy[WikiSearchRequest, WikiSearchResult] = app.state.wiki_strategy
         wiki_request = WikiSearchRequest.model_validate(request.model_dump(mode="json"))
-        return await strategy.search(wiki_request)
+        return await wiki_search.search(wiki_request)
 
     if len(requested_sources) == 1 and requested_sources[0] is SearchContextSource.code:
-        strategy: SearchStrategy[SearchRequest, SearchResult] = app.state.strategy
-        return await strategy.search(request)
+        code_search: SearchStrategy[SearchRequest, SearchResult] = app.state.strategy
+        return await code_search.search(request)
 
     return await _search_combined(request, requested_sources)
 
