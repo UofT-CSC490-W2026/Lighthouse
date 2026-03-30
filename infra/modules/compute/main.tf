@@ -662,6 +662,8 @@ locals {
 
     dnf update -y
     dnf install -y docker docker-compose-plugin
+    systemctl enable amazon-ssm-agent
+    systemctl start amazon-ssm-agent
     systemctl enable docker
     systemctl start docker
 
