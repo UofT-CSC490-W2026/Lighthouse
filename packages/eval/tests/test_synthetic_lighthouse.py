@@ -7,6 +7,8 @@ from httpx import Client, MockTransport, Request, Response
 
 from eval.synthetic import prepare_synthetic_workspace
 from eval.synthetic.lighthouse import (
+    build_synthetic_grep_messages,
+    grep_synthetic_code,
     search_synthetic_ast,
     search_synthetic_combined,
     search_synthetic_code,
@@ -331,3 +333,67 @@ def test_search_synthetic_code_surfaces_migration_hint_on_server_error(tmp_path)
                 task=task,
                 top_k=4,
             )
+
+
+@pytest.mark.unit
+def test_grep_synthetic_code_uses_task_context_terms_and_returns_snippets(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = prepare_synthetic_workspace(task_count=1, seed=3, workspace_root=tmp_path)
+    task = workspace.tasks[0].task
+    anchor_symbol = task.expected_relevant_symbols[0]
+    repo_root = workspace.search_repo_path
+    target_file = repo_root / "providerlib" / "metrics.py"
+    target_file.parent.mkdir(parents=True, exist_ok=True)
+    target_file.write_text(
+        "\n".join(
+            [
+                "def normalize_percentage(value: int) -> int:",
+                "    return max(0, min(100, int(value)))",
+                "",
+                "def clamp_percentage(value: int) -> int:",
+                "    return normalize_percentage(value)",
+                f"# {anchor_symbol}",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        "eval.synthetic.lighthouse._rg_files_for_term",
+        lambda **kwargs: (target_file,),
+    )
+
+    snippets = grep_synthetic_code(
+        repo_root=repo_root,
+        task=task,
+        top_k=2,
+    )
+
+    assert len(snippets) == 1
+    assert snippets[0].file_path == "providerlib/metrics.py"
+    assert anchor_symbol in snippets[0].content
+    assert snippets[0].reason is not None
+    assert "grep match" in snippets[0].reason
+
+
+@pytest.mark.unit
+def test_build_synthetic_grep_messages_returns_prompt_per_task(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = prepare_synthetic_workspace(task_count=2, seed=3, workspace_root=tmp_path)
+    monkeypatch.setattr(
+        "eval.synthetic.lighthouse.grep_synthetic_code",
+        lambda **kwargs: [],
+    )
+
+    messages = build_synthetic_grep_messages(workspace=workspace, top_k=3)
+
+    assert set(messages) == {prepared.task.task_id for prepared in workspace.tasks}
+    for prepared in workspace.tasks:
+        assert "Retrieved provider-library code context from Lighthouse:" in messages[
+            prepared.task.task_id
+        ]

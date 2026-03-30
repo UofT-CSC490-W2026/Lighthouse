@@ -126,9 +126,9 @@ def run_synthetic_experiment(
 ) -> SyntheticExperimentResult:
     if not run_prefix.strip():
         raise ValueError("run_prefix must not be empty.")
-    if context_source not in {"code", "wiki", "ast", "combined", "code+wiki"}:
+    if context_source not in {"code", "wiki", "ast", "combined", "code+wiki", "grep"}:
         raise ValueError(
-            "context_source must be 'code', 'wiki', 'ast', 'combined', or 'code+wiki'."
+            "context_source must be 'code', 'wiki', 'ast', 'combined', 'code+wiki', or 'grep'."
         )
 
     resolved_include_ast = (
@@ -155,7 +155,8 @@ def run_synthetic_experiment(
         validate_prepared_synthetic_workspace(workspace)
 
     indexing_duration_seconds = 0.0
-    if not skip_index:
+    should_run_index = not skip_index and context_source != "grep"
+    if should_run_index:
         indexing_started = perf_counter()
         index_synthetic_repository(
             workspace=workspace,
@@ -171,7 +172,8 @@ def run_synthetic_experiment(
         )
         indexing_duration_seconds = perf_counter() - indexing_started
     wiki_duration_seconds = 0.0
-    if not skip_wiki_preparation:
+    should_run_wiki = not skip_wiki_preparation and context_source != "grep"
+    if should_run_wiki:
         wiki_started = perf_counter()
         prepare_synthetic_wiki(
             workspace=workspace,
@@ -491,7 +493,7 @@ def run_synthetic_experiment_suite(
     comparisons: dict[str, SyntheticRunComparison] = {}
     lighthouse_efficiencies: dict[str, RunEfficiencySummary] = {}
 
-    for context_source in ("code", "wiki", "ast", "combined"):
+    for context_source in ("code", "wiki", "ast", "combined", "grep"):
         lighthouse_predictions_path = (
             predictions_root / f"{run_prefix}-{context_source}.jsonl"
         )
