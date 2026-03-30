@@ -17,7 +17,9 @@ class SlidingWindowChunker(Chunker):
         self.max_lines = max_lines
         self.overlap_lines = overlap_lines
 
-    def chunk_file(self, content: str, file_path: str) -> list[ChunkResult]:
+    def chunk_file(
+        self, content: str, file_path: str, language: str | None = None
+    ) -> list[ChunkResult]:
         if not content.strip():
             return []
 

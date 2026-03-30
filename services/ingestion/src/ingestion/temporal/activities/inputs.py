@@ -126,3 +126,4 @@ class IncrementalIndexInput:
     branch: str
     before_commit: str
     after_commit: str
+    chunker_strategy: str = "sliding_window"

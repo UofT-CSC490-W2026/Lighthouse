@@ -132,6 +132,7 @@ class IncrementalIndexWorkflow:
                     repo_path=git_result.repo_path,
                     repository_id=repository_id,
                     branch=input.branch,
+                    chunker_strategy=input.chunker_strategy,
                     file_filter=changed_files,
                 ),
                 start_to_close_timeout=timedelta(minutes=10),
