@@ -76,6 +76,8 @@ def index_synthetic_repository(
     progress_heartbeat_seconds: float = DEFAULT_PROGRESS_HEARTBEAT_SECONDS,
     timeout_seconds: float = DEFAULT_STATUS_TIMEOUT_SECONDS,
     include_ast: bool = False,
+    embedding_strategy: str | None = None,
+    embedding_model: str | None = None,
 ) -> Path:
     if not ingestion_url.strip():
         raise ValueError("ingestion_url must not be empty.")
@@ -143,6 +145,8 @@ def index_synthetic_repository(
                     tuple(to_submit),
                     github_token=github_token,
                     repo_url_override=repo_url_override,
+                    embedding_strategy=embedding_strategy,
+                    embedding_model=embedding_model,
                 )
                 response = client.post(
                     f"{normalized_ingestion_url}/index",
@@ -176,6 +180,8 @@ def prepare_synthetic_wiki(
     poll_interval_seconds: float = DEFAULT_WIKI_POLL_INTERVAL_SECONDS,
     progress_heartbeat_seconds: float = DEFAULT_WIKI_PROGRESS_HEARTBEAT_SECONDS,
     timeout_seconds: float = DEFAULT_WIKI_TIMEOUT_SECONDS,
+    embedding_strategy: str | None = None,
+    embedding_model: str | None = None,
 ) -> None:
     if not ingestion_url.strip():
         raise ValueError("ingestion_url must not be empty.")
@@ -212,12 +218,18 @@ def prepare_synthetic_wiki(
         if normalized_status in ACTIVE_WIKI_STATUSES:
             print(f"Wiki already generating: {full_name}@{repo.branch}")
         else:
-            request = build_synthetic_wiki_request(workspace)
+            request = build_synthetic_wiki_request(
+                workspace,
+                embedding_strategy=embedding_strategy,
+                embedding_model=embedding_model,
+            )
             accepted = submit_wiki_generation_request(
                 client=client,
                 ingestion_url=normalized_ingestion_url,
                 github_repo_id=request.github_repo_id,
                 branch=request.branch,
+                embedding_strategy=request.embedding_strategy,
+                embedding_model=request.embedding_model,
                 repo_display_name=f"{full_name}@{repo.branch}",
             )
             print(
@@ -241,6 +253,8 @@ def build_synthetic_lighthouse_messages(
     search_service_url: str = DEFAULT_SEARCH_SERVICE_URL,
     top_k: int = DEFAULT_SEARCH_TOP_K,
     context_source: str = DEFAULT_SYNTHETIC_CONTEXT_SOURCE,
+    query_embedding_strategy: str | None = None,
+    query_embedding_model: str | None = None,
 ) -> dict[str, str]:
     if top_k < 1:
         raise ValueError("top_k must be at least 1.")
@@ -270,6 +284,8 @@ def build_synthetic_lighthouse_messages(
                     workspace=workspace,
                     task=task,
                     top_k=top_k,
+                    embedding_strategy=query_embedding_strategy,
+                    embedding_model=query_embedding_model,
                 )
                 print(f"    retrieved {len(result.snippets)} code snippet(s)")
                 messages[task.task_id] = build_synthetic_code_lighthouse_user_message(
@@ -282,6 +298,8 @@ def build_synthetic_lighthouse_messages(
                     workspace=workspace,
                     task=task,
                     top_k=top_k,
+                    embedding_strategy=query_embedding_strategy,
+                    embedding_model=query_embedding_model,
                 )
                 print(f"    retrieved {len(result.snippets)} wiki snippet(s)")
                 messages[task.task_id] = build_synthetic_wiki_lighthouse_user_message(
@@ -294,6 +312,8 @@ def build_synthetic_lighthouse_messages(
                     workspace=workspace,
                     task=task,
                     top_k=top_k,
+                    embedding_strategy=query_embedding_strategy,
+                    embedding_model=query_embedding_model,
                 )
                 print(f"    retrieved {len(result.snippets)} ast snippet(s)")
                 messages[task.task_id] = build_synthetic_ast_lighthouse_user_message(
@@ -306,6 +326,8 @@ def build_synthetic_lighthouse_messages(
                     workspace=workspace,
                     task=task,
                     top_k=top_k,
+                    embedding_strategy=query_embedding_strategy,
+                    embedding_model=query_embedding_model,
                 )
                 print(f"    retrieved {len(result.snippets)} fused snippet(s)")
                 messages[task.task_id] = build_synthetic_combined_lighthouse_user_message(
@@ -318,6 +340,8 @@ def build_synthetic_lighthouse_messages(
                     workspace=workspace,
                     task=task,
                     top_k=top_k,
+                    embedding_strategy=query_embedding_strategy,
+                    embedding_model=query_embedding_model,
                 )
                 print(f"    retrieved {len(result.snippets)} fused snippet(s)")
                 messages[task.task_id] = build_synthetic_combined_lighthouse_user_message(
@@ -339,6 +363,8 @@ def search_synthetic_code(
     workspace: PreparedSyntheticWorkspace,
     task: SyntheticTask,
     top_k: int,
+    embedding_strategy: str | None = None,
+    embedding_model: str | None = None,
 ) -> SearchResult:
     repo_entry = shared_repo_entry(workspace)
     request = SearchRequest(
@@ -346,6 +372,8 @@ def search_synthetic_code(
         github_repo_id=repo_entry.github_repo_id,
         branch=repo_entry.branch,
         top_k=top_k,
+        embedding_strategy=embedding_strategy,
+        embedding_model=embedding_model,
     )
     response = client.post(
         f"{search_service_url}/search",
@@ -362,6 +390,8 @@ def search_synthetic_wiki(
     workspace: PreparedSyntheticWorkspace,
     task: SyntheticTask,
     top_k: int,
+    embedding_strategy: str | None = None,
+    embedding_model: str | None = None,
 ) -> WikiSearchResult:
     repo_entry = shared_repo_entry(workspace)
     request = WikiSearchRequest(
@@ -369,6 +399,8 @@ def search_synthetic_wiki(
         github_repo_id=repo_entry.github_repo_id,
         branch=repo_entry.branch,
         top_k=top_k,
+        embedding_strategy=embedding_strategy,
+        embedding_model=embedding_model,
     )
     response = client.post(
         f"{search_service_url}/search",
@@ -385,6 +417,8 @@ def search_synthetic_ast(
     workspace: PreparedSyntheticWorkspace,
     task: SyntheticTask,
     top_k: int,
+    embedding_strategy: str | None = None,
+    embedding_model: str | None = None,
 ) -> SearchResult:
     repo = ast_resolved_repository(workspace)
     request = SearchRequest(
@@ -392,6 +426,8 @@ def search_synthetic_ast(
         github_repo_id=repo.github_repo_id,
         branch=repo.branch,
         top_k=top_k,
+        embedding_strategy=embedding_strategy,
+        embedding_model=embedding_model,
     )
     response = client.post(
         f"{search_service_url}/search",
@@ -408,6 +444,8 @@ def search_synthetic_code_and_wiki(
     workspace: PreparedSyntheticWorkspace,
     task: SyntheticTask,
     top_k: int,
+    embedding_strategy: str | None = None,
+    embedding_model: str | None = None,
 ) -> CombinedSearchResult:
     repo_entry = shared_repo_entry(workspace)
     request = SearchRequest(
@@ -415,6 +453,8 @@ def search_synthetic_code_and_wiki(
         github_repo_id=repo_entry.github_repo_id,
         branch=repo_entry.branch,
         top_k=top_k,
+        embedding_strategy=embedding_strategy,
+        embedding_model=embedding_model,
         context_sources=(
             SearchContextSource.code,
             SearchContextSource.wiki,
@@ -449,6 +489,8 @@ def search_synthetic_combined(
     workspace: PreparedSyntheticWorkspace,
     task: SyntheticTask,
     top_k: int,
+    embedding_strategy: str | None = None,
+    embedding_model: str | None = None,
 ) -> CombinedSearchResult:
     code_result = search_synthetic_code(
         client=client,
@@ -456,6 +498,8 @@ def search_synthetic_combined(
         workspace=workspace,
         task=task,
         top_k=top_k,
+        embedding_strategy=embedding_strategy,
+        embedding_model=embedding_model,
     )
     wiki_result = search_synthetic_wiki(
         client=client,
@@ -463,6 +507,8 @@ def search_synthetic_combined(
         workspace=workspace,
         task=task,
         top_k=top_k,
+        embedding_strategy=embedding_strategy,
+        embedding_model=embedding_model,
     )
     ast_result = search_synthetic_ast(
         client=client,
@@ -470,6 +516,8 @@ def search_synthetic_combined(
         workspace=workspace,
         task=task,
         top_k=top_k,
+        embedding_strategy=embedding_strategy,
+        embedding_model=embedding_model,
     )
     fused = _rrf_fuse_combined(
         [

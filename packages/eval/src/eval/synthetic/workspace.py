@@ -126,6 +126,8 @@ class SyntheticSearchRepository:
     repo_url: str
     branch: str
     chunker_strategy: str | None = None
+    embedding_strategy: str | None = None
+    embedding_model: str | None = None
 
 
 def load_synthetic_family(
@@ -378,6 +380,8 @@ def build_synthetic_index_request(
     github_token: str | None = None,
     repo_url_override: str | None = None,
     include_ast: bool = False,
+    embedding_strategy: str | None = None,
+    embedding_model: str | None = None,
 ) -> IndexRequest:
     repositories = synthetic_search_repositories(
         workspace,
@@ -387,6 +391,8 @@ def build_synthetic_index_request(
         repositories,
         github_token=github_token,
         repo_url_override=repo_url_override,
+        embedding_strategy=embedding_strategy,
+        embedding_model=embedding_model,
     )
 
 
@@ -395,6 +401,8 @@ def build_synthetic_index_request_for_repositories(
     *,
     github_token: str | None = None,
     repo_url_override: str | None = None,
+    embedding_strategy: str | None = None,
+    embedding_model: str | None = None,
 ) -> IndexRequest:
     return IndexRequest(
         repositories=[
@@ -405,17 +413,26 @@ def build_synthetic_index_request_for_repositories(
                 branches=[repo.branch],
                 github_token=github_token,
                 chunker_strategy=repo.chunker_strategy,
+                embedding_strategy=embedding_strategy or repo.embedding_strategy,
+                embedding_model=embedding_model or repo.embedding_model,
             )
             for repo in repositories
         ]
     )
 
 
-def build_synthetic_wiki_request(workspace: PreparedSyntheticWorkspace) -> GenerateWikiRequest:
+def build_synthetic_wiki_request(
+    workspace: PreparedSyntheticWorkspace,
+    *,
+    embedding_strategy: str | None = None,
+    embedding_model: str | None = None,
+) -> GenerateWikiRequest:
     entry = shared_repo_entry(workspace)
     return GenerateWikiRequest(
         github_repo_id=entry.github_repo_id,
         branch=entry.branch,
+        embedding_strategy=embedding_strategy,
+        embedding_model=embedding_model,
     )
 
 

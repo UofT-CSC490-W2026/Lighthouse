@@ -12,6 +12,8 @@ class RepoIndexRequest(BaseModel):
     branches: list[str] = Field(default_factory=lambda: ["main"])
     github_token: str | None = None
     chunker_strategy: str | None = None
+    embedding_strategy: str | None = None
+    embedding_model: str | None = None
 
 
 class IndexRequest(BaseModel):

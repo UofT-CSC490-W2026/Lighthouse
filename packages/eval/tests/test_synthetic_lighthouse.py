@@ -59,6 +59,48 @@ def test_search_synthetic_code_builds_search_request_for_shared_repo(tmp_path) -
 
 
 @pytest.mark.unit
+def test_search_synthetic_code_includes_embedding_overrides(tmp_path) -> None:
+    workspace = prepare_synthetic_workspace(task_count=1, seed=3, workspace_root=tmp_path)
+    task = workspace.tasks[0].task
+
+    def handler(request: Request) -> Response:
+        payload = json.loads(request.content)
+        assert payload["embedding_strategy"] == "openai"
+        assert payload["embedding_model"] == "text-embedding-3-large"
+        return Response(
+            200,
+            json={
+                "query": payload["query"],
+                "total_results": 1,
+                "snippets": [
+                    {
+                        "file_path": "providerlib/metrics.py",
+                        "start_line": 1,
+                        "end_line": 4,
+                        "content": "def clamp_percentage(value):\n    return 100\n",
+                        "language": "python",
+                        "score": 0.91,
+                        "reason": "contract implementation",
+                    }
+                ],
+            },
+        )
+
+    with Client(transport=MockTransport(handler)) as client:
+        result = search_synthetic_code(
+            client=client,
+            search_service_url="http://search.test",
+            workspace=workspace,
+            task=task,
+            top_k=4,
+            embedding_strategy="openai",
+            embedding_model="text-embedding-3-large",
+        )
+
+    assert result.total_results == 1
+
+
+@pytest.mark.unit
 def test_search_synthetic_wiki_builds_search_request_for_shared_repo(tmp_path) -> None:
     workspace = prepare_synthetic_workspace(task_count=1, seed=3, workspace_root=tmp_path)
     task = workspace.tasks[0].task

@@ -18,7 +18,9 @@ async def embed_chunk_batch(input: EmbedBatchInput) -> str:
     db = make_db(settings)
     strategy = EmbeddingStrategy(input.embedding_strategy.strip().lower())
     provider_kwargs: dict[str, object] = {
-        "model": settings.embedding_model or default_embedding_model(strategy.value),
+        "model": input.embedding_model.strip()
+        or settings.embedding_model
+        or default_embedding_model(strategy.value),
     }
     if strategy == EmbeddingStrategy.BEDROCK:
         provider_kwargs["dimensions"] = (

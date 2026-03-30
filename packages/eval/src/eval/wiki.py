@@ -247,8 +247,15 @@ def submit_wiki_generation_request(
     github_repo_id: int,
     branch: str,
     repo_display_name: str,
+    embedding_strategy: str | None = None,
+    embedding_model: str | None = None,
 ) -> GenerateWikiAcceptedResponse:
-    request = GenerateWikiRequest(github_repo_id=github_repo_id, branch=branch)
+    request = GenerateWikiRequest(
+        github_repo_id=github_repo_id,
+        branch=branch,
+        embedding_strategy=embedding_strategy,
+        embedding_model=embedding_model,
+    )
 
     try:
         response = client.post(

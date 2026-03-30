@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+import math
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -54,6 +55,25 @@ class SyntheticScoreRow:
     resolved_instances: int
     unresolved_instances: int
     score_pct: float
+
+
+@dataclass(frozen=True)
+class SyntheticPassAtKTaskRow:
+    task_id: str
+    task_type: str
+    samples: int
+    successes: int
+    pass_at_k: tuple[tuple[int, float], ...]
+
+
+@dataclass(frozen=True)
+class SyntheticPassAtKSummary:
+    family_name: str
+    family_version: str
+    run_ids: tuple[str, ...]
+    k_values: tuple[int, ...]
+    task_rows: tuple[SyntheticPassAtKTaskRow, ...]
+    macro_pass_at_k: tuple[tuple[int, float], ...]
 
 
 def compare_synthetic_runs(
@@ -317,6 +337,122 @@ def render_synthetic_score_table(rows: Sequence[SyntheticScoreRow]) -> str:
     return _render_table(headers, table_rows)
 
 
+def compute_synthetic_pass_at_k(
+    *,
+    run_ids: Sequence[str],
+    k_values: Sequence[int],
+    runs_root: Path = DEFAULT_SYNTHETIC_RUNS_ROOT,
+) -> SyntheticPassAtKSummary:
+    normalized_run_ids = tuple(run_id.strip() for run_id in run_ids if run_id.strip())
+    if not normalized_run_ids:
+        raise ValueError("Provide at least one run id.")
+
+    normalized_k_values = tuple(sorted({k for k in k_values if k > 0}))
+    if not normalized_k_values:
+        raise ValueError("Provide at least one positive k value.")
+
+    summaries = [
+        summarize_synthetic_run(run_id=run_id, runs_root=runs_root)
+        for run_id in normalized_run_ids
+    ]
+    first = summaries[0]
+    for summary in summaries[1:]:
+        if summary.family_name != first.family_name:
+            raise ValueError(
+                "All runs must share the same synthetic family_name; got "
+                f"{first.family_name!r} and {summary.family_name!r}."
+            )
+        if summary.family_version != first.family_version:
+            raise ValueError(
+                "All runs must share the same synthetic family_version; got "
+                f"{first.family_version!r} and {summary.family_version!r}."
+            )
+
+    task_ids = {instance.task_id for instance in first.instances}
+    for summary in summaries[1:]:
+        other_ids = {instance.task_id for instance in summary.instances}
+        if other_ids != task_ids:
+            missing = sorted(task_ids - other_ids)
+            extra = sorted(other_ids - task_ids)
+            raise ValueError(
+                "All runs must cover the same task ids for pass@k aggregation. "
+                f"Missing: {missing or 'none'}. Extra: {extra or 'none'}."
+            )
+
+    instances_by_run = [
+        {instance.task_id: instance for instance in summary.instances}
+        for summary in summaries
+    ]
+
+    task_rows: list[SyntheticPassAtKTaskRow] = []
+    for task_id in sorted(task_ids):
+        resolved_flags = [instances[task_id].resolved for instances in instances_by_run]
+        samples = len(resolved_flags)
+        successes = sum(1 for flag in resolved_flags if flag)
+        task_type = instances_by_run[0][task_id].task_type
+        task_rows.append(
+            SyntheticPassAtKTaskRow(
+                task_id=task_id,
+                task_type=task_type,
+                samples=samples,
+                successes=successes,
+                pass_at_k=tuple(
+                    (k, _pass_at_k_from_counts(samples=samples, successes=successes, k=k))
+                    for k in normalized_k_values
+                ),
+            )
+        )
+
+    macro: list[tuple[int, float]] = []
+    for k in normalized_k_values:
+        values = [dict(row.pass_at_k)[k] for row in task_rows]
+        macro.append((k, (sum(values) / len(values)) if values else 0.0))
+
+    return SyntheticPassAtKSummary(
+        family_name=first.family_name,
+        family_version=first.family_version,
+        run_ids=normalized_run_ids,
+        k_values=normalized_k_values,
+        task_rows=tuple(task_rows),
+        macro_pass_at_k=tuple(macro),
+    )
+
+
+def render_synthetic_pass_at_k_table(summary: SyntheticPassAtKSummary) -> str:
+    macro_headers = ("k", "macro_pass@k")
+    macro_rows = [(str(k), f"{value * 100:.1f}%") for k, value in summary.macro_pass_at_k]
+
+    task_headers = (
+        "task_id",
+        "task_type",
+        "samples",
+        "successes",
+        *(f"pass@{k}" for k in summary.k_values),
+    )
+    task_rows = [
+        (
+            row.task_id,
+            row.task_type,
+            str(row.samples),
+            str(row.successes),
+            *(f"{dict(row.pass_at_k)[k] * 100:.1f}%" for k in summary.k_values),
+        )
+        for row in summary.task_rows
+    ]
+
+    lines = [
+        f"Family: {summary.family_name} [v{summary.family_version}]",
+        f"Runs: {', '.join(summary.run_ids)}",
+        "",
+        "Macro pass@k",
+        _render_table(macro_headers, macro_rows),
+        "",
+        "Per-task pass@k",
+        _render_table(task_headers, task_rows),
+    ]
+    return "\n".join(lines)
+
+
 def _classify_delta(
     baseline: SyntheticTaskEvaluationResult,
     lighthouse: SyntheticTaskEvaluationResult,
@@ -412,6 +548,20 @@ def _format_experiment_line(label: str, summary: SyntheticRunSummary) -> str:
         parts.append(f"top_k={experiment.search_top_k}")
     details = ", ".join(parts) if parts else "no experiment metadata recorded"
     return f"{label.capitalize()} config: {details}"
+
+
+def _pass_at_k_from_counts(*, samples: int, successes: int, k: int) -> float:
+    if samples <= 0:
+        return 0.0
+    if successes <= 0:
+        return 0.0
+    if k >= samples:
+        return 1.0
+    if samples - successes < k:
+        return 1.0
+    numerator = math.comb(samples - successes, k)
+    denominator = math.comb(samples, k)
+    return 1.0 - (numerator / denominator)
 
 
 def _render_table(headers: tuple[str, ...], rows: Sequence[Sequence[str]]) -> str:
