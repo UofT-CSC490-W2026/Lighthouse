@@ -4,6 +4,7 @@ import logging
 import os
 from pathlib import Path
 import subprocess
+from urllib.parse import urlparse
 
 from git import Repo
 
@@ -45,6 +46,9 @@ class GitOperations:
     ) -> Path:
         """Clone if not exists, else fetch and checkout branch. Returns repo path."""
         repo_path = self.base_dir / repo_dir_name
+        source_repo_path = self._local_repo_path_from_url(repo_url)
+        if source_repo_path is not None:
+            self._ensure_safe_directory(source_repo_path)
         self._ensure_safe_directory(repo_path)
 
         auth_url = self._authenticated_url(repo_url)
@@ -143,3 +147,16 @@ class GitOperations:
                     candidate,
                     (result.stderr or result.stdout).strip() or "unknown error",
                 )
+
+    def _local_repo_path_from_url(self, repo_url: str) -> Path | None:
+        """Return local source path when cloning from filesystem URLs."""
+        parsed = urlparse(repo_url)
+        if parsed.scheme == "file":
+            if not parsed.path:
+                return None
+            return Path(parsed.path)
+        if parsed.scheme:
+            return None
+        if repo_url.startswith("/"):
+            return Path(repo_url)
+        return None

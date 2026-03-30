@@ -55,6 +55,34 @@ class TestGitOperations:
         )
         assert result == tmp_path / "my-repo"
 
+    @patch.object(GitOperations, "_ensure_safe_directory")
+    @patch("ingestion.utilities.git_ops.Repo")
+    def test_clone_new_repo_local_source_marks_source_safe(
+        self,
+        mock_repo_cls: MagicMock,
+        mock_ensure_safe: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        src_repo = tmp_path / "src-repo"
+        src_repo.mkdir()
+        (src_repo / ".git").mkdir()
+        ops = GitOperations(str(tmp_path))
+
+        ops.clone_or_fetch(str(src_repo), "dst-repo", branch="main")
+
+        expected_dst = tmp_path / "dst-repo"
+        assert mock_ensure_safe.call_count == 3
+        calls = [call.args[0] for call in mock_ensure_safe.call_args_list]
+        assert calls[0] == src_repo
+        assert calls[1] == expected_dst
+        assert calls[2] == expected_dst
+
+    def test_local_repo_path_from_url(self, tmp_path: Path) -> None:
+        ops = GitOperations(str(tmp_path))
+        assert ops._local_repo_path_from_url("/tmp/repo") == Path("/tmp/repo")
+        assert ops._local_repo_path_from_url("file:///tmp/repo") == Path("/tmp/repo")
+        assert ops._local_repo_path_from_url("https://github.com/o/r") is None
+
     @patch("ingestion.utilities.git_ops.Repo")
     def test_fetch_existing_repo(self, mock_repo_cls: MagicMock, tmp_path: Path) -> None:
         repo_dir = tmp_path / "my-repo"
