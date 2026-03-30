@@ -21,6 +21,7 @@ from ingestion.embedding.registry import (
 from ingestion.main import _ensure_repository_record
 from ingestion.main import github_webhook
 from ingestion.main import lifespan as ingestion_lifespan
+from ingestion.chunking.ast_code_chunker import ASTCodeChunker
 from ingestion.temporal.activities.chunking import chunk_files
 from ingestion.temporal.activities.inputs import ChunkFilesInput
 from ingestion.temporal.activities.helpers import get_settings as activity_get_settings
@@ -48,6 +49,14 @@ def test_chunker_registry_registers_and_rejects_unknown():
 
     register_chunker(ChunkerStrategy.SLIDING_WINDOW, DummyChunker)
     assert isinstance(get_chunker(ChunkerStrategy.SLIDING_WINDOW), DummyChunker)
+
+
+@pytest.mark.unit
+def test_chunker_registry_passes_language_to_ast_chunker():
+    chunker = get_chunker(ChunkerStrategy.AST_CODE, language="python")
+
+    assert isinstance(chunker, ASTCodeChunker)
+    assert chunker.default_language == "python"
 
 
 @pytest.mark.unit
@@ -143,6 +152,76 @@ def test_chunk_files_skips_blank_content(monkeypatch, tmp_path):
 
     assert result.chunk_count == 0
     service.write_staging.assert_not_called()
+
+
+@pytest.mark.unit
+def test_chunk_files_ast_fallbacks_cover_unknown_language_and_runtime_error(monkeypatch, tmp_path):
+    repo_path = tmp_path / "repo"
+    repo_path.mkdir()
+    unknown = repo_path / "notes.txt"
+    unknown.write_text("alpha\nbeta\n", encoding="utf-8")
+    python_file = repo_path / "hello.py"
+    python_file.write_text("def hello():\n    return 1\n", encoding="utf-8")
+
+    fallback_chunk = SimpleNamespace(content="chunked content", start_line=1, end_line=2, chunk_hash="hash")
+    service = SimpleNamespace(write_staging=MagicMock())
+    closed = []
+
+    class FakeSlidingWindowChunker:
+        def chunk_file(self, content: str, file_path: str, language: str | None = None):
+            return [fallback_chunk]
+
+    class FakeAstCodeChunker:
+        def chunk_file(self, content: str, file_path: str, language: str | None = None):
+            raise RuntimeError("ast boom")
+
+    def fake_get_chunker(strategy, language=None, chunker_config=None):
+        if strategy is ChunkerStrategy.SLIDING_WINDOW:
+            return FakeSlidingWindowChunker()
+        if strategy is ChunkerStrategy.AST_CODE:
+            return FakeAstCodeChunker()
+        raise AssertionError(f"unexpected strategy: {strategy}")
+
+    monkeypatch.setattr(
+        "ingestion.temporal.activities.chunking.get_settings",
+        MagicMock(return_value=SimpleNamespace(clone_base_dir=str(tmp_path))),
+    )
+    monkeypatch.setattr(
+        "ingestion.temporal.activities.chunking.make_db",
+        MagicMock(return_value=SimpleNamespace(close=lambda: closed.append(True))),
+    )
+    monkeypatch.setattr("ingestion.temporal.activities.chunking.get_chunker", fake_get_chunker)
+    monkeypatch.setattr(
+        "ingestion.temporal.activities.chunking.ChunkService",
+        MagicMock(return_value=service),
+    )
+    monkeypatch.setattr(
+        "ingestion.temporal.activities.chunking.ASTCodeChunker",
+        FakeAstCodeChunker,
+    )
+    monkeypatch.setattr(
+        "ingestion.temporal.activities.chunking.SlidingWindowChunker",
+        FakeSlidingWindowChunker,
+    )
+
+    result = asyncio.run(
+        chunk_files(
+            ChunkFilesInput(
+                repository_id="repo-id",
+                branch="main",
+                repo_path=str(repo_path),
+                chunker_strategy="ast_code",
+                file_filter=["notes.txt", "hello.py"],
+            )
+        )
+    )
+
+    assert result.chunk_count == 2
+    service.write_staging.assert_called_once()
+    written_chunks = service.write_staging.call_args.args[1]
+    assert len(written_chunks) == 2
+    assert {chunk["file_path"] for chunk in written_chunks} == {"notes.txt", "hello.py"}
+    assert closed == [True]
 
 
 @pytest.mark.unit
