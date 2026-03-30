@@ -11,7 +11,7 @@ Better context for coding agents.
 
 **Team**: Aarya Prakash, Derek Huynh, Merrick Liu, Rhys Balevicius
 
-### Repo Structure
+## Repo Structure
 
 ```
 monorepo/
@@ -41,13 +41,13 @@ monorepo/
 └── uv.lock                 # Single lockfile for the whole repo
 ```
 
-### Setup Instructions
+## Setup Instructions
 
 1. Install [Docker Desktop](https://docs.docker.com/desktop/)
 2. Install [`uv`](https://docs.astral.sh/uv/getting-started/installation/) for Python package management.
 3. Run `uv sync --all-packages --dev` to install dependencies for the entire monorepo.
 
-### Documentation
+## Documentation
 
 You can find documentation in the `docs/` directory. For the most part, it mirrors the structure of the repository. For example, the documentation for each package is in the `docs/packages/<package>/` directory.
 
@@ -60,12 +60,12 @@ Below are some key documentation:
 - [Evaluation Framework](docs/evaluation.md)
 - [Testing Guide](docs/testing.md)
 
-### Running the Services
+## Running the Services
 
 1. Run `docker compose up -d` to start Postgres, Milvus, Temporal, and other services.
 2. For running a `service`, use `uv run --package <service> ...`.
 
-### Running Tests
+## Running Tests
 
 ```shell
 uv run pytest
