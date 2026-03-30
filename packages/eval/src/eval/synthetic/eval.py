@@ -56,7 +56,7 @@ class SyntheticTaskEvaluationResult:
     stdout: str
     stderr: str
     repo_a_path: Path
-    repo_b_path: Path
+    repo_b_path: Path | None
 
 
 @dataclass(frozen=True)
@@ -360,12 +360,14 @@ class _PytestRun:
 def _run_pytest(
     *,
     repo_a_path: Path,
-    repo_b_path: Path,
+    repo_b_path: Path | None,
     pytest_targets: tuple[str, ...],
 ) -> _PytestRun:
     env = dict(os.environ)
     existing_pythonpath = env.get("PYTHONPATH", "")
-    extra_paths = [str(repo_a_path.resolve()), str(repo_b_path.resolve())]
+    extra_paths = [str(repo_a_path.resolve())]
+    if repo_b_path is not None:
+        extra_paths.append(str(repo_b_path.resolve()))
     env["PYTHONPATH"] = (
         ":".join(extra_paths) + (":" + existing_pythonpath if existing_pythonpath else "")
     )
@@ -536,7 +538,7 @@ def _write_result_json(path: Path, result: SyntheticTaskEvaluationResult) -> Non
     payload = {
         **asdict(result),
         "repo_a_path": str(result.repo_a_path.resolve()),
-        "repo_b_path": str(result.repo_b_path.resolve()),
+        "repo_b_path": str(result.repo_b_path.resolve()) if result.repo_b_path is not None else "",
         "failing_tests": list(result.failing_tests),
         "pytest_targets": list(result.pytest_targets),
     }
@@ -605,7 +607,7 @@ def _write_summary_json(path: Path, summary: SyntheticRunSummary) -> None:
                 "return_code": result.return_code,
                 "patch_apply_error": result.patch_apply_error,
                 "repo_a_path": str(result.repo_a_path.resolve()),
-                "repo_b_path": str(result.repo_b_path.resolve()),
+                "repo_b_path": str(result.repo_b_path.resolve()) if result.repo_b_path is not None else "",
             }
             for result in summary.results
         ],
@@ -704,7 +706,7 @@ def _result_from_json(raw: Mapping[str, object]) -> SyntheticTaskEvaluationResul
         stdout=_string_value(raw, "stdout"),
         stderr=_string_value(raw, "stderr"),
         repo_a_path=Path(_string_value(raw, "repo_a_path")),
-        repo_b_path=Path(_string_value(raw, "repo_b_path")),
+        repo_b_path=Path(_string_value(raw, "repo_b_path")) if _string_value(raw, "repo_b_path") else None,
     )
 
 

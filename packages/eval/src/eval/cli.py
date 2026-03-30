@@ -1754,7 +1754,7 @@ def _print_prepared_synthetic_workspace(workspace: PreparedSyntheticWorkspace) -
     print(f"Workspace directory: {workspace.workspace_dir.resolve()}")
     print(f"Shared provider repo: {shared_repo.full_name}")
     print(f"Shared provider repo id: {shared_repo.github_repo_id}")
-    print(f"Shared provider repo path: {workspace.repo_b_path.resolve()}")
+    print(f"Search-indexed repo path: {workspace.search_repo_path.resolve()}")
     print(f"Repository registry: {workspace.repo_registry_path.resolve()}")
 
 

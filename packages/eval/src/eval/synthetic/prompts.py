@@ -4,29 +4,47 @@ from pathlib import Path
 
 from shared.schemas.search import CodeSnippet, CombinedSnippet, SearchContextSource, WikiSnippet
 
-from .workspace import PreparedSyntheticTask, SyntheticTask
+from .workspace import FEATURE_TASK_TYPES, PreparedSyntheticTask, SyntheticTask
 
 
-def build_synthetic_system_message() -> str:
+def build_synthetic_system_message(task_type: str = "") -> str:
+    if task_type in FEATURE_TASK_TYPES:
+        return (
+            "You are an expert Python engineer implementing a feature from a test specification. "
+            "Respond with ONLY a git unified diff patch that can be applied with `git apply`. "
+            "Do not include markdown fences, commentary, or explanations. "
+            "Use paths relative to the repository root."
+        )
     return (
         "You are an expert Python engineer repairing a synthetic benchmark task. "
-        "Edit only the consumer repository. Respond with ONLY a git unified diff "
-        "patch that can be applied with `git apply`. Do not include markdown fences, "
-        "commentary, or explanations. Use paths relative to the consumer repository root."
+        "Respond with ONLY a git unified diff patch that can be applied with `git apply`. "
+        "Do not include markdown fences, commentary, or explanations. "
+        "Use paths relative to the repository root."
     )
 
 
 def build_synthetic_baseline_user_message(prepared_task: PreparedSyntheticTask) -> str:
-    parts = _base_prompt_parts(prepared_task.task)
+    task = prepared_task.task
+    is_dual_repo = bool(task.repo_b_name)
+    parts = _base_prompt_parts(task)
     parts.extend(_consumer_context_parts(prepared_task))
-    parts.extend(
-        [
-            "Available context:",
-            "- The provider library is indexed separately but its source is not shown here.",
-            "- Use only the task description, failing test context, and visible API names.",
-            "",
-        ]
-    )
+    if is_dual_repo:
+        parts.extend(
+            [
+                "Available context:",
+                "- The provider library is indexed separately but its source is not shown here.",
+                "- Use only the task description, failing test context, and visible API names.",
+                "",
+            ]
+        )
+    else:
+        parts.extend(
+            [
+                "Available context:",
+                "- Use the task description, failing test context, and the source files shown above.",
+                "",
+            ]
+        )
     parts.extend(_output_requirements())
     return "\n".join(parts)
 
@@ -219,55 +237,92 @@ def build_synthetic_combined_lighthouse_user_message(
 
 
 def build_synthetic_search_query(task: SyntheticTask) -> str:
-    api_names = ", ".join(task.visible_api_names) if task.visible_api_names else "none"
-    relevant_symbols = (
-        ", ".join(task.expected_relevant_symbols)
-        if task.expected_relevant_symbols
-        else "none"
-    )
-    return "\n".join(
-        [
-            task.title,
-            task.problem_statement,
-            f"Visible APIs: {api_names}",
-            f"Failing test context: {task.test_context}",
-            f"Likely provider symbols: {relevant_symbols}",
-        ]
-    ).strip()
+    parts = [task.title, task.problem_statement]
+
+    if task.visible_api_names:
+        parts.append(f"Relevant APIs: {', '.join(task.visible_api_names)}")
+    if task.test_context:
+        parts.append(f"Failing test context: {task.test_context}")
+    if task.expected_relevant_symbols:
+        parts.append(f"Likely relevant symbols: {', '.join(task.expected_relevant_symbols)}")
+
+    return "\n".join(parts).strip()
 
 
 def _base_prompt_parts(task: SyntheticTask) -> list[str]:
-    visible_api_names = ", ".join(task.visible_api_names) if task.visible_api_names else "none"
+    is_dual_repo = bool(task.repo_b_name)
+    is_feature = task.task_type in FEATURE_TASK_TYPES
+
     pytest_targets = ", ".join(task.pytest_targets)
-    consumer_edit_files = ", ".join(task.consumer_edit_files) if task.consumer_edit_files else "none"
-    consumer_test_files = ", ".join(task.consumer_test_files) if task.consumer_test_files else "none"
-    patch_example = task.consumer_edit_files[0] if task.consumer_edit_files else "consumer_app/module.py"
-    return [
-        "Synthetic repair task",
+    edit_files = ", ".join(task.consumer_edit_files) if task.consumer_edit_files else "none"
+    test_files = ", ".join(task.consumer_test_files) if task.consumer_test_files else "none"
+    patch_example = task.consumer_edit_files[0] if task.consumer_edit_files else "src/module.py"
+
+    if is_feature:
+        heading = "Synthetic feature implementation task"
+    else:
+        heading = "Synthetic repair task"
+
+    parts: list[str] = [
+        heading,
         "",
         f"Task ID: {task.task_id}",
         f"Task type: {task.task_type}",
-        f"Consumer repository: {task.repo_a_name}",
-        f"Indexed provider repository: {task.repo_b_name}",
+    ]
+
+    if is_dual_repo:
+        parts.extend([
+            f"Consumer repository: {task.repo_a_name}",
+            f"Indexed provider repository: {task.repo_b_name}",
+        ])
+    else:
+        parts.append(f"Repository: {task.repo_a_name}")
+
+    parts.extend([
         "",
         "Problem statement:",
         task.problem_statement.strip(),
         "",
-        f"Visible provider APIs: {visible_api_names}",
-        f"Consumer source files to edit for this task: {consumer_edit_files}",
-        f"Consumer test files for this task: {consumer_test_files}",
+    ])
+
+    if task.visible_api_names:
+        visible_api_names = ", ".join(task.visible_api_names)
+        if is_dual_repo:
+            parts.append(f"Visible provider APIs: {visible_api_names}")
+        else:
+            parts.append(f"Relevant APIs: {visible_api_names}")
+
+    parts.extend([
+        f"Source files to edit: {edit_files}",
+        f"Test files: {test_files}",
         f"Failing pytest targets: {pytest_targets}",
-        "Failing test context:",
-        task.test_context.strip(),
-        "",
-        "Constraints:",
-        "- Edit only the consumer repository.",
-        "- Do not modify the provider library.",
-        "- Keep the patch minimal and focused on the reported contract mismatch.",
-        "- Patch paths must be relative to the consumer repository root.",
+    ])
+
+    if task.test_context:
+        parts.extend([
+            "Failing test context:",
+            task.test_context.strip(),
+        ])
+
+    parts.append("")
+
+    constraints: list[str] = ["Constraints:"]
+    if is_dual_repo:
+        constraints.extend([
+            "- Edit only the consumer repository.",
+            "- Do not modify the provider library.",
+        ])
+    if is_feature:
+        constraints.append("- Implement the feature so all failing tests pass.")
+    else:
+        constraints.append("- Keep the patch minimal and focused on the reported defect.")
+    constraints.extend([
+        "- Patch paths must be relative to the repository root.",
         f"- Use diff headers like `a/{patch_example}` and `b/{patch_example}`.",
         "",
-    ]
+    ])
+    parts.extend(constraints)
+    return parts
 
 
 def _output_requirements() -> list[str]:
@@ -275,16 +330,28 @@ def _output_requirements() -> list[str]:
         "Output requirements:",
         "- Return ONLY a unified diff patch.",
         "- Use standard unified diff patch headers with `a/...` and `b/...` paths.",
-        "- The patch must apply to the consumer repository only.",
         "- Do not include explanations.",
     ]
 
 
 def _consumer_context_parts(prepared_task: PreparedSyntheticTask) -> list[str]:
     task = prepared_task.task
+    is_dual_repo = bool(task.repo_b_name)
+    is_feature = task.task_type in FEATURE_TASK_TYPES
+
+    if is_feature:
+        label = "Current repository context"
+        description = "The following files are from the current repository state."
+    elif is_dual_repo:
+        label = "Current consumer repository context"
+        description = "The following files are from the current buggy consumer repository state."
+    else:
+        label = "Current repository context"
+        description = "The following files are from the current buggy repository state."
+
     parts = [
-        "Current consumer repository context:",
-        "- The following files are from the current buggy consumer repository state.",
+        f"{label}:",
+        f"- {description}",
         "",
     ]
     for relative_path in _consumer_context_files(task):
