@@ -869,6 +869,7 @@ version = "0.1.0"
 source = { editable = "packages/db" }
 dependencies = [
     { name = "alembic" },
+    { name = "greenlet" },
     { name = "peewee" },
     { name = "psycopg2-binary" },
     { name = "sqlalchemy" },
@@ -877,6 +878,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "alembic", specifier = ">=1.13" },
+    { name = "greenlet", specifier = ">=3.0" },
     { name = "peewee", specifier = ">=3.17" },
     { name = "psycopg2-binary", specifier = ">=2.9" },
     { name = "sqlalchemy", specifier = ">=2.0" },

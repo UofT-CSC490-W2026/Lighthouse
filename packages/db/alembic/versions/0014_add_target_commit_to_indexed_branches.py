@@ -1,20 +1,19 @@
 """add target commit to indexed branches
 
-Revision ID: 0014_add_target_commit_to_indexed_branches
-Revises: 0013_add_publish_tracking_for_incremental_indexing
+Revision ID: 0014
+Revises: 0013
 Create Date: 2026-03-29 00:00:00.000000
 """
 
-from collections.abc import Sequence
+from __future__ import annotations
 
 from alembic import op
 import sqlalchemy as sa
 
-
-revision: str = "0014_add_target_commit_to_indexed_branches"
-down_revision: str | Sequence[str] | None = "0013_add_publish_tracking_for_incremental_indexing"
-branch_labels: str | Sequence[str] | None = None
-depends_on: str | Sequence[str] | None = None
+revision = "0014"
+down_revision = "0013"
+branch_labels = None
+depends_on = None
 
 
 def upgrade() -> None:
