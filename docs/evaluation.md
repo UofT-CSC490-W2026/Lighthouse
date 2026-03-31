@@ -180,6 +180,83 @@ These are now visible in:
 
 ---
 
+### 4.6 Deterministic one-by-one queue runner (no task/repo regeneration)
+
+For large sweeps where you need strict control and failure isolation, use singleton configs and run one config at a time.
+
+#### Step 1: Generate singleton configs + pending queue
+
+```bash
+uv run python eval/configs/generate_configs.py
+```
+
+This writes:
+
+- `eval/configs/generated/*.json` (one family/context/chunking/codegen/embedding config per file)
+- `eval/configs/pending_configs.txt` (authoritative queue of not-yet-evaluated configs)
+- `eval/configs/generated_manifest.json`
+
+All generated configs pin:
+
+- `repeat_count=3`
+- `k_values=[1,2,3]`
+- `task_count=30`
+- `top_k=10`
+
+#### Step 2: Pre-index once per family/chunking/embedding combination
+
+```bash
+uv run --package eval python eval/preindex_configs.py \
+  --config-glob "eval/configs/generated/*.json" \
+  --workspace-root .cache/eval/synthetic_workspace/queued \
+  --ingestion-url http://localhost:8001
+```
+
+This performs indexing exactly once per unique:
+
+- `family`
+- `chunking_strategy` (`base` or `ast`)
+- `embedding_strategy` + `embedding_model`
+
+and prepares synthetic wiki once per family/task selection.
+
+#### Step 3: Run one config at a time and stop on first failure
+
+```bash
+while [ -s eval/configs/pending_configs.txt ]; do
+  uv run --package eval python eval/run_one_config.py || break
+done
+```
+
+`run_one_config.py` behavior:
+
+- pops the first config from `pending_configs.txt`
+- runs `eval run-synthetic-matrix` for that single config
+- validates numeric fields in `matrix_rows.json` (including pass@k values and repeat vectors)
+- if valid: removes config from queue
+- if invalid or command fails: exits `1` and leaves queue unchanged
+
+Default run mode reuses prior preprocessing:
+
+- `--skip-index`
+- `--skip-wiki-preparation`
+
+so repeated loop iterations do not regenerate indexing/wiki state.
+
+#### Step 4: Aggregate completed runs for plotting
+
+```bash
+uv run python eval/aggregate_results.py \
+  --config-glob "eval/configs/generated/*.json" \
+  --matrix-root .cache/eval/synthetic_experiments/queued/matrix \
+  --output-json eval/results/aggregated_matrix_rows.json \
+  --output-csv eval/results/aggregated_matrix_rows.csv
+```
+
+Use `--strict` to fail aggregation if any config is missing results.
+
+---
+
 ### Synthetic Pass@k
 
 Pass@k is first-class for synthetic and is integrated into matrix output.  
