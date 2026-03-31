@@ -227,7 +227,7 @@ def main() -> int:
                     )
 
         ax.set_xlabel(x_label)
-        ax.set_ylabel("Mean score (% resolved)")
+        ax.set_ylabel("Score")
         ax.set_title(title)
         ax.legend()
         ax.grid(True, alpha=0.3)
@@ -237,14 +237,14 @@ def main() -> int:
 
     _scatter(
         x_key="mean_avg_latency_per_query_s",
-        title="Score vs latency / query (mean over families)",
-        x_label="Avg wall time / query (s)",
+        title="Latency vs Score",
+        x_label="Average latency / Query",
         out_name="score_vs_latency_per_query.png",
     )
     _scatter(
         x_key="mean_avg_cost_per_query_usd",
-        title="Score vs generation cost / query (mean over families)",
-        x_label="Avg est. generation cost / query (USD)",
+        title="Cost vs Score",
+        x_label="Average cost / Query",
         out_name="score_vs_cost_per_query.png",
     )
 

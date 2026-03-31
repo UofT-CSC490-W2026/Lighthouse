@@ -232,6 +232,7 @@ def _build_command(
     artifacts_root: Path,
     skip_index: bool,
     skip_wiki_preparation: bool,
+    skip_synthetic_validation: bool,
     ingestion_url: str,
     search_url: str,
 ) -> tuple[list[str], Path]:
@@ -273,6 +274,8 @@ def _build_command(
         command.append("--skip-index")
     if skip_wiki_preparation:
         command.append("--skip-wiki-preparation")
+    if skip_synthetic_validation:
+        command.append("--skip-validation")
     return command, matrix_out / "matrix_rows.json"
 
 
@@ -305,6 +308,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--allow-index",
         action="store_true",
         help="Allow indexing/wiki regeneration for this run (default is skip both).",
+    )
+    parser.add_argument(
+        "--skip-synthetic-validation",
+        action="store_true",
+        help=(
+            "Forward --skip-validation to run-synthetic-matrix. "
+            "Use as an unblock when a known synthetic task patch is broken."
+        ),
     )
     parser.add_argument(
         "--completed-runs-file",
@@ -363,6 +374,7 @@ def main() -> int:
         artifacts_root=artifacts_root,
         skip_index=not args.allow_index,
         skip_wiki_preparation=not args.allow_index,
+        skip_synthetic_validation=args.skip_synthetic_validation,
         ingestion_url=args.ingestion_url,
         search_url=args.search_url,
     )

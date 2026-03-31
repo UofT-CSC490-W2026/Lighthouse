@@ -1,0 +1,7 @@
+codegen_model,model_label,method,n_families,mean_score_pct,mean_avg_latency_per_query_s,mean_avg_cost_per_query_usd,families
+bedrock/google.gemma-3-12b-it,google.gemma-3-12b-it,combined,2,65.0,0.73,0.00095,synthetic-ab-contracts;synthetic-type-coercion
+bedrock/google.gemma-3-12b-it,google.gemma-3-12b-it,grep,2,59.0,0.495,0.0007,synthetic-ab-contracts;synthetic-type-coercion
+bedrock/us.amazon.nova-pro-v1:0,us.amazon.nova-pro-v1:0,combined,2,78.0,0.97,0.00195,synthetic-ab-contracts;synthetic-type-coercion
+bedrock/us.amazon.nova-pro-v1:0,us.amazon.nova-pro-v1:0,grep,2,70.0,0.64,0.00145,synthetic-ab-contracts;synthetic-type-coercion
+openai/gpt-5.4,gpt-5.4,combined,2,84.0,1.175,0.0024999999999999996,synthetic-ab-contracts;synthetic-type-coercion
+openai/gpt-5.4,gpt-5.4,grep,2,76.0,0.7849999999999999,0.00185,synthetic-ab-contracts;synthetic-type-coercion

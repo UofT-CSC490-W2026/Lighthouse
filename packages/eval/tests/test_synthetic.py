@@ -43,6 +43,12 @@ def test_select_synthetic_tasks_is_deterministic_for_seeded_subset() -> None:
 
 
 @pytest.mark.unit
+def test_select_synthetic_tasks_uses_sequential_prefix_order() -> None:
+    _, tasks, _ = select_synthetic_tasks(task_count=10, seed=999)
+    assert [task.task_id for task in tasks] == [f"ab-contracts-{idx:03d}" for idx in range(1, 11)]
+
+
+@pytest.mark.unit
 def test_select_synthetic_tasks_rejects_unimplemented_shared_repo_topology() -> None:
     with pytest.raises(NotImplementedError):
         select_synthetic_tasks(shared_library_repo_count=2)

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 import json
-import random
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -213,10 +212,8 @@ def select_synthetic_tasks(
     if effective_task_count == len(family.tasks):
         return family, family.tasks, effective_seed
 
-    shuffled = list(family.tasks)
-    random.Random(effective_seed).shuffle(shuffled)
-    selected_ids = {task.task_id for task in shuffled[:effective_task_count]}
-    selected_tasks = tuple(task for task in family.tasks if task.task_id in selected_ids)
+    # Use deterministic sequential slicing for reproducible task prefixes.
+    selected_tasks = tuple(family.tasks[:effective_task_count])
     return family, selected_tasks, effective_seed
 
 
