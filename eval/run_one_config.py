@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 from pathlib import Path
@@ -45,6 +46,12 @@ def _slug(value: str) -> str:
     while "--" in slug:
         slug = slug.replace("--", "-")
     return slug or "x"
+
+
+def _short_run_prefix(config_path: Path) -> str:
+    rel = str(config_path.relative_to(REPO_ROOT))
+    digest = hashlib.sha1(rel.encode("utf-8")).hexdigest()[:12]
+    return f"queued-{digest}"
 
 
 def _is_finite_number(value: Any) -> bool:
@@ -223,7 +230,8 @@ def _build_command(
     search_url: str,
 ) -> tuple[list[str], Path]:
     config_stem = _slug(config_path.stem)
-    run_prefix = f"queued-{config_stem}"
+    # Keep run prefixes short to avoid per-file path component length overflows.
+    run_prefix = _short_run_prefix(config_path)
     matrix_out = output_root / config_stem
     matrix_out.mkdir(parents=True, exist_ok=True)
 
