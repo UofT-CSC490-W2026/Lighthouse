@@ -186,8 +186,22 @@ For large sweeps where you need strict control and failure isolation, use single
 
 #### Step 1: Generate singleton configs + pending queue
 
+Full sweep (default):
+
+```bash
+uv run python eval/configs/generate_configs.py --profile full
+```
+
+`--profile full` is the default; it is equivalent to:
+
 ```bash
 uv run python eval/configs/generate_configs.py
+```
+
+Simplified sweep (combined vs grep, OpenAI `text-embedding-3-large`, AST chunking only, pass@1, one repeat):
+
+```bash
+uv run python eval/configs/generate_configs.py --profile simplified
 ```
 
 This writes:
@@ -196,12 +210,19 @@ This writes:
 - `eval/configs/pending_configs.txt` (authoritative queue of not-yet-evaluated configs)
 - `eval/configs/generated_manifest.json`
 
-All generated configs pin:
+**Full** profile pins:
 
 - `repeat_count=3`
 - `k_values=[1,2,3]`
 - `task_count=30`
 - `top_k=10`
+
+**Simplified** profile pins:
+
+- `context_sources`: `combined`, `grep`
+- `chunking_strategies`: `ast`
+- `embedding_strategy`: `openai`, `embedding_models`: `text-embedding-3-large`
+- `repeat_count=1`, `k_values=[1]`, `task_count=30`, `top_k=10`
 
 #### Step 2: Pre-index once per family/chunking/embedding combination
 
@@ -231,10 +252,20 @@ done
 `run_one_config.py` behavior:
 
 - pops the first config from `pending_configs.txt`
-- runs `eval run-synthetic-matrix` for that single config
+- if `matrix_rows.json` for that config **already exists and validates**, skips the subprocess and removes the config from the queue (safe resume)
+- optional `--completed-runs-file runs.txt`: if the matrix file is missing but `summary.json` files under `--runs-root` match the config with **full repeat coverage** for the lighthouse runs listed in that file, skips the subprocess and pops the queue (useful when matrix outputs were never written but runs are archived)
+- otherwise runs `eval run-synthetic-matrix` for that single config
 - validates numeric fields in `matrix_rows.json` (including pass@k values and repeat vectors)
 - if valid: removes config from queue
 - if invalid or command fails: exits `1` and leaves queue unchanged
+
+Example with historical run-id list:
+
+```bash
+uv run --package eval python eval/run_one_config.py \
+  --completed-runs-file runs.txt \
+  --runs-root .cache/eval/synthetic_runs/queued
+```
 
 Default run mode reuses prior preprocessing:
 
@@ -246,14 +277,32 @@ so repeated loop iterations do not regenerate indexing/wiki state.
 #### Step 4: Aggregate completed runs for plotting
 
 ```bash
-uv run python eval/aggregate_results.py \
+uv run --package eval python eval/aggregate_results.py \
   --config-glob "eval/configs/generated/*.json" \
   --matrix-root .cache/eval/synthetic_experiments/queued/matrix \
+  --runs-root .cache/eval/synthetic_runs/queued \
   --output-json eval/results/aggregated_matrix_rows.json \
   --output-csv eval/results/aggregated_matrix_rows.csv
 ```
 
-Use `--strict` to fail aggregation if any config is missing results.
+By default this also merges newline-separated run ids from repo-root `runs.txt` when a config has no `matrix_rows.json` but matching `summary.json` files exist under `--runs-root` (see `provenance` column: `matrix` vs `historical`). Use `--skip-historical-runs` to disable. Override the list path with `--historical-runs-file`.
+
+Rows include `avg_latency_per_query_s` and `avg_cost_per_query_usd` (wall time and estimated generation cost divided by `task_count`).
+
+Use `--strict` to fail aggregation if any config is missing both matrix output and a historical fallback.
+
+#### Step 5: Model-level tradeoff plots (simplified reporting)
+
+After aggregation, generate CSV + PNGs (requires dev dependency `matplotlib`):
+
+```bash
+uv run python eval/plot_model_tradeoffs.py \
+  --input-csv eval/results/aggregated_matrix_rows.csv \
+  --output-dir eval/results/plots \
+  --points-csv eval/results/plots/model_method_tradeoff_points.csv
+```
+
+Defaults match the paths above. Only `context_source` values in `--methods` (default `combined,grep`) are plotted. Each point is a **(codegen model, method)** mean over families: score vs avg latency/query and score vs avg cost/query. `combined` uses filled markers; `grep` uses open markers; a dotted segment connects the two methods per model when both exist.
 
 ---
 

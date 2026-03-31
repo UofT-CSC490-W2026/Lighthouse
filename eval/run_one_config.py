@@ -9,6 +9,12 @@ import subprocess
 import sys
 from typing import Any
 
+from eval.historical_runs import (
+    has_full_repeat_coverage,
+    list_completed_lighthouse_summaries,
+    load_run_id_list,
+)
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PENDING_PATH = REPO_ROOT / "eval" / "configs" / "pending_configs.txt"
 FAMILIES_ROOT = REPO_ROOT / "packages" / "eval" / "src" / "eval" / "synthetic" / "families"
@@ -300,6 +306,15 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Allow indexing/wiki regeneration for this run (default is skip both).",
     )
+    parser.add_argument(
+        "--completed-runs-file",
+        default=None,
+        help=(
+            "Optional file of run_id lines (e.g. runs.txt). If matrix_rows.json is missing but "
+            "lighthouse summaries under --runs-root match this config with full repeat coverage, "
+            "the config is popped from the queue without rerunning."
+        ),
+    )
     return parser
 
 
@@ -351,6 +366,63 @@ def main() -> int:
         ingestion_url=args.ingestion_url,
         search_url=args.search_url,
     )
+
+    if matrix_rows_path.is_file():
+        try:
+            _validate_outputs(config=config, matrix_rows_path=matrix_rows_path)
+        except Exception as exc:
+            print(
+                f"Existing matrix_rows failed validation, will rerun: {exc}",
+                file=sys.stderr,
+            )
+        else:
+            if should_pop:
+                try:
+                    _remove_config_from_pending(pending_path, config_path)
+                except Exception as exc:
+                    print(f"Queue update failed: {exc}", file=sys.stderr)
+                    return 1
+                print(
+                    "Skipped run (validated matrix_rows.json already present): "
+                    f"{config_path.relative_to(REPO_ROOT)}"
+                )
+            else:
+                print("Validated existing matrix_rows.json (explicit config; queue unchanged).")
+            return 0
+
+    completed_runs_path = (
+        Path(args.completed_runs_file).resolve() if args.completed_runs_file else None
+    )
+    if completed_runs_path is not None:
+        historical_ids = load_run_id_list(completed_runs_path)
+        matched = list_completed_lighthouse_summaries(
+            run_ids=historical_ids,
+            runs_root=runs_root,
+            config=config,
+        )
+        repeat_count = int(config["repeat_count"])
+        if matched and has_full_repeat_coverage(matched, repeat_count=repeat_count):
+            if should_pop:
+                try:
+                    _remove_config_from_pending(pending_path, config_path)
+                except Exception as exc:
+                    print(f"Queue update failed: {exc}", file=sys.stderr)
+                    return 1
+                try:
+                    hist_label = str(completed_runs_path.relative_to(REPO_ROOT))
+                except ValueError:
+                    hist_label = str(completed_runs_path)
+                print(
+                    "Skipped run (historical lighthouse summaries + repeat coverage via "
+                    f"{hist_label}): "
+                    f"{config_path.relative_to(REPO_ROOT)}"
+                )
+            else:
+                print(
+                    "Historical summaries match config with full repeat coverage "
+                    "(explicit config; queue unchanged)."
+                )
+            return 0
 
     print(f"Running config: {config_path.relative_to(REPO_ROOT)}")
     print("Command:")

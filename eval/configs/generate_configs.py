@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -12,25 +13,67 @@ GENERATED_ROOT = CONFIG_ROOT / "generated"
 PENDING_PATH = CONFIG_ROOT / "pending_configs.txt"
 MANIFEST_PATH = CONFIG_ROOT / "generated_manifest.json"
 
-CONTEXT_SOURCES = ("code", "wiki", "combined", "ast", "grep")
-CHUNKING_STRATEGIES = ("base", "ast")
-CODEGEN_MODELS = (
+CONTEXT_SOURCES_FULL = ("code", "wiki", "combined", "ast", "grep")
+CHUNKING_STRATEGIES_FULL = ("base", "ast")
+CODEGEN_MODELS_FULL = (
     "bedrock/us.anthropic.claude-sonnet-4-6",
     "bedrock/amazon.nova-pro-v1:0",
     "bedrock/google.gemma-3-12b-it",
     "openai/gpt-5.4",
 )
-EMBEDDING_PAIRS = (
+EMBEDDING_PAIRS_FULL = (
     ("bedrock", "amazon.titan-embed-text-v2:0"),
     ("openai", "text-embedding-3-large"),
 )
 
-FIXED_REPEAT_COUNT = 3
-FIXED_K_VALUES = (1, 2, 3)
+CONTEXT_SOURCES_SIMPLIFIED = ("combined", "grep")
+CHUNKING_STRATEGIES_SIMPLIFIED = ("ast",)
+CODEGEN_MODELS_SIMPLIFIED = CODEGEN_MODELS_FULL
+EMBEDDING_PAIRS_SIMPLIFIED = (("openai", "text-embedding-3-large"),)
+
 FIXED_TASK_COUNT = 30
 FIXED_TOP_K = 10
 
+FIXED_REPEAT_COUNT_FULL = 3
+FIXED_K_VALUES_FULL = (1, 2, 3)
+
+FIXED_REPEAT_COUNT_SIMPLIFIED = 1
+FIXED_K_VALUES_SIMPLIFIED = (1,)
+
 _SAFE_SLUG_RE = re.compile(r"[^a-z0-9]+")
+
+
+@dataclass(frozen=True)
+class Profile:
+    name: str
+    context_sources: tuple[str, ...]
+    chunking_strategies: tuple[str, ...]
+    codegen_models: tuple[str, ...]
+    embedding_pairs: tuple[tuple[str, str], ...]
+    repeat_count: int
+    k_values: tuple[int, ...]
+
+
+PROFILES: dict[str, Profile] = {
+    "full": Profile(
+        name="full",
+        context_sources=CONTEXT_SOURCES_FULL,
+        chunking_strategies=CHUNKING_STRATEGIES_FULL,
+        codegen_models=CODEGEN_MODELS_FULL,
+        embedding_pairs=EMBEDDING_PAIRS_FULL,
+        repeat_count=FIXED_REPEAT_COUNT_FULL,
+        k_values=FIXED_K_VALUES_FULL,
+    ),
+    "simplified": Profile(
+        name="simplified",
+        context_sources=CONTEXT_SOURCES_SIMPLIFIED,
+        chunking_strategies=CHUNKING_STRATEGIES_SIMPLIFIED,
+        codegen_models=CODEGEN_MODELS_SIMPLIFIED,
+        embedding_pairs=EMBEDDING_PAIRS_SIMPLIFIED,
+        repeat_count=FIXED_REPEAT_COUNT_SIMPLIFIED,
+        k_values=FIXED_K_VALUES_SIMPLIFIED,
+    ),
+}
 
 
 @dataclass(frozen=True)
@@ -73,16 +116,16 @@ def discover_family_infos() -> tuple[FamilyInfo, ...]:
     return tuple(discovered)
 
 
-def iter_specs() -> tuple[ConfigSpec, ...]:
+def iter_specs(profile: Profile) -> tuple[ConfigSpec, ...]:
     specs: list[ConfigSpec] = []
     for family_info in discover_family_infos():
         family = family_info.family_name
-        for context_source in CONTEXT_SOURCES:
-            for chunking_strategy in CHUNKING_STRATEGIES:
+        for context_source in profile.context_sources:
+            for chunking_strategy in profile.chunking_strategies:
                 if context_source == "ast" and chunking_strategy != "ast":
                     continue
-                for codegen_model in CODEGEN_MODELS:
-                    for embedding_strategy, embedding_model in EMBEDDING_PAIRS:
+                for codegen_model in profile.codegen_models:
+                    for embedding_strategy, embedding_model in profile.embedding_pairs:
                         specs.append(
                             ConfigSpec(
                                 family=family,
@@ -107,7 +150,7 @@ def config_filename(spec: ConfigSpec) -> str:
     )
 
 
-def config_payload(spec: ConfigSpec) -> dict[str, object]:
+def config_payload(spec: ConfigSpec, profile: Profile) -> dict[str, object]:
     family_task_counts = {item.family_name: item.task_count for item in discover_family_infos()}
     family_max = family_task_counts[spec.family]
     effective_task_count = min(FIXED_TASK_COUNT, family_max)
@@ -118,24 +161,38 @@ def config_payload(spec: ConfigSpec) -> dict[str, object]:
         "codegen_models": [spec.codegen_model],
         "embedding_models": [spec.embedding_model],
         "embedding_strategy": spec.embedding_strategy,
-        "repeat_count": FIXED_REPEAT_COUNT,
-        "k_values": list(FIXED_K_VALUES),
+        "repeat_count": profile.repeat_count,
+        "k_values": list(profile.k_values),
         "task_count": effective_task_count,
         "top_k": FIXED_TOP_K,
     }
 
 
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Generate singleton synthetic matrix configs + queue.")
+    parser.add_argument(
+        "--profile",
+        choices=sorted(PROFILES.keys()),
+        default="full",
+        help="full: all contexts/embeddings/repeats; simplified: combined+grep, openai+3-large, AST, pass@1",
+    )
+    return parser
+
+
 def main() -> int:
+    args = build_parser().parse_args()
+    profile = PROFILES[args.profile]
+
     GENERATED_ROOT.mkdir(parents=True, exist_ok=True)
     for existing in GENERATED_ROOT.glob("*.json"):
         existing.unlink()
 
-    specs = iter_specs()
+    specs = iter_specs(profile)
     generated_paths: list[Path] = []
     for spec in specs:
         target = GENERATED_ROOT / config_filename(spec)
         target.write_text(
-            json.dumps(config_payload(spec), indent=2, sort_keys=True) + "\n",
+            json.dumps(config_payload(spec, profile), indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
         generated_paths.append(target)
@@ -157,18 +214,19 @@ def main() -> int:
     }
 
     manifest = {
+        "profile": profile.name,
         "config_count": len(generated_paths),
         "families": sorted(item.family_name for item in family_infos),
-        "context_sources": list(CONTEXT_SOURCES),
-        "chunking_strategies": list(CHUNKING_STRATEGIES),
-        "codegen_models": list(CODEGEN_MODELS),
+        "context_sources": list(profile.context_sources),
+        "chunking_strategies": list(profile.chunking_strategies),
+        "codegen_models": list(profile.codegen_models),
         "embedding_pairs": [
             {"embedding_strategy": strategy, "embedding_model": model}
-            for strategy, model in EMBEDDING_PAIRS
+            for strategy, model in profile.embedding_pairs
         ],
         "fixed": {
-            "repeat_count": FIXED_REPEAT_COUNT,
-            "k_values": list(FIXED_K_VALUES),
+            "repeat_count": profile.repeat_count,
+            "k_values": list(profile.k_values),
             "requested_task_count": FIXED_TASK_COUNT,
             "top_k": FIXED_TOP_K,
         },
@@ -177,6 +235,7 @@ def main() -> int:
     }
     MANIFEST_PATH.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
+    print(f"Profile: {profile.name}")
     print(f"Wrote {len(generated_paths)} configs to {GENERATED_ROOT}")
     print(f"Wrote pending queue: {PENDING_PATH}")
     print(f"Wrote manifest: {MANIFEST_PATH}")
