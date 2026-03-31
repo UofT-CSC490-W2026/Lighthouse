@@ -19,7 +19,7 @@ PATCHES_GOLD = FAMILY_DIR / "patches" / "gold"
 REPO_A_TEMPLATE = FAMILY_DIR / "repo_a_template"
 REPO_B_TEMPLATE = FAMILY_DIR / "repo_b_template"
 
-TASK_IDS = tuple(f"{i:03d}" for i in range(1, 11))
+TASK_IDS = tuple(f"{i:03d}" for i in range(1, 31))
 
 
 def validate() -> list[str]:

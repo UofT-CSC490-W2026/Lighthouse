@@ -3,7 +3,7 @@
   "family_version": "1",
   "generation_config": {
     "task_type": "feature_api_integration",
-    "task_count": 10,
+    "task_count": 30,
     "shared_library_repo_count": 1,
     "consumer_repo_mode": "one_a_per_task",
     "python_version_target": "3.11",
@@ -327,6 +327,616 @@
         "apikit.validators.validate_email"
       ],
       "test_context": "TestCheckServerConfig and TestCheckContact both fail entirely with NotImplementedError because both check_server_config and check_contact are stubs."
+    },
+    {
+      "task_id": "api-feat-011",
+      "task_type": "feature_api_integration",
+      "title": "api_endpoint must use https",
+      "problem_statement": "Ensure api_endpoint always uses https when building API URLs.",
+      "repo_a_name": "synthetic/api-consumer-011",
+      "repo_b_name": "synthetic/apikit",
+      "repo_a_id": 950000011,
+      "repo_b_id": 950000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/api-feat-011.patch",
+      "gold_patch_path": "patches/gold/api-feat-011.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_011_api_endpoint_https"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/pipelines.py"
+      ],
+      "expected_relevant_symbols": [
+        "build_url"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "apikit.builders.build_url"
+      ],
+      "test_context": "Generated real task 011 exercises test_task_011_api_endpoint_https."
+    },
+    {
+      "task_id": "api-feat-012",
+      "task_type": "feature_api_integration",
+      "title": "api_endpoint must include version prefix",
+      "problem_statement": "Ensure api_endpoint prefixes versions with v in path segments.",
+      "repo_a_name": "synthetic/api-consumer-012",
+      "repo_b_name": "synthetic/apikit",
+      "repo_a_id": 950000012,
+      "repo_b_id": 950000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/api-feat-012.patch",
+      "gold_patch_path": "patches/gold/api-feat-012.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_012_api_endpoint_version_prefix"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/pipelines.py"
+      ],
+      "expected_relevant_symbols": [
+        "build_url"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "apikit.builders.build_url"
+      ],
+      "test_context": "Generated real task 012 exercises test_task_012_api_endpoint_version_prefix."
+    },
+    {
+      "task_id": "api-feat-013",
+      "task_type": "feature_api_integration",
+      "title": "export_row must flatten nested dictionaries",
+      "problem_statement": "Ensure export_row flattens nested dictionaries before CSV conversion.",
+      "repo_a_name": "synthetic/api-consumer-013",
+      "repo_b_name": "synthetic/apikit",
+      "repo_a_id": 950000013,
+      "repo_b_id": 950000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/api-feat-013.patch",
+      "gold_patch_path": "patches/gold/api-feat-013.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_013_export_row_uses_flatten"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/pipelines.py"
+      ],
+      "expected_relevant_symbols": [
+        "flatten_dict",
+        "build_csv_row"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "apikit.transforms.flatten_dict",
+        "apikit.builders.build_csv_row"
+      ],
+      "test_context": "Generated real task 013 exercises test_task_013_export_row_uses_flatten."
+    },
+    {
+      "task_id": "api-feat-014",
+      "task_type": "feature_api_integration",
+      "title": "export_row must preserve flattened order",
+      "problem_statement": "Ensure export_row preserves flatten_dict output order.",
+      "repo_a_name": "synthetic/api-consumer-014",
+      "repo_b_name": "synthetic/apikit",
+      "repo_a_id": 950000014,
+      "repo_b_id": 950000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/api-feat-014.patch",
+      "gold_patch_path": "patches/gold/api-feat-014.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_014_export_row_preserve_order"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/pipelines.py"
+      ],
+      "expected_relevant_symbols": [
+        "flatten_dict",
+        "build_csv_row"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "apikit.transforms.flatten_dict",
+        "apikit.builders.build_csv_row"
+      ],
+      "test_context": "Generated real task 014 exercises test_task_014_export_row_preserve_order."
+    },
+    {
+      "task_id": "api-feat-015",
+      "task_type": "feature_api_integration",
+      "title": "camel_keys must transform snake_case keys",
+      "problem_statement": "Ensure camel_keys delegates key normalization to snake_to_camel.",
+      "repo_a_name": "synthetic/api-consumer-015",
+      "repo_b_name": "synthetic/apikit",
+      "repo_a_id": 950000015,
+      "repo_b_id": 950000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/api-feat-015.patch",
+      "gold_patch_path": "patches/gold/api-feat-015.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_015_camel_keys_transforms_snake_case"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/pipelines.py"
+      ],
+      "expected_relevant_symbols": [
+        "snake_to_camel"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "apikit.transforms.snake_to_camel"
+      ],
+      "test_context": "Generated real task 015 exercises test_task_015_camel_keys_transforms_snake_case."
+    },
+    {
+      "task_id": "api-feat-016",
+      "task_type": "feature_api_integration",
+      "title": "camel_keys must keep first segment lowercase",
+      "problem_statement": "Ensure camelCase output keeps first segment lowercase.",
+      "repo_a_name": "synthetic/api-consumer-016",
+      "repo_b_name": "synthetic/apikit",
+      "repo_a_id": 950000016,
+      "repo_b_id": 950000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/api-feat-016.patch",
+      "gold_patch_path": "patches/gold/api-feat-016.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_016_camel_keys_lowercase_first_segment"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/pipelines.py"
+      ],
+      "expected_relevant_symbols": [
+        "snake_to_camel"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "apikit.transforms.snake_to_camel"
+      ],
+      "test_context": "Generated real task 016 exercises test_task_016_camel_keys_lowercase_first_segment."
+    },
+    {
+      "task_id": "api-feat-017",
+      "task_type": "feature_api_integration",
+      "title": "check_server_config host validation polarity",
+      "problem_statement": "Ensure valid hosts do not generate host errors.",
+      "repo_a_name": "synthetic/api-consumer-017",
+      "repo_b_name": "synthetic/apikit",
+      "repo_a_id": 950000017,
+      "repo_b_id": 950000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/api-feat-017.patch",
+      "gold_patch_path": "patches/gold/api-feat-017.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_017_check_server_config_valid_host"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/handlers.py"
+      ],
+      "expected_relevant_symbols": [
+        "validate_ip_v4",
+        "validate_port"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "apikit.validators.validate_ip_v4",
+        "apikit.validators.validate_port"
+      ],
+      "test_context": "Generated real task 017 exercises test_task_017_check_server_config_valid_host."
+    },
+    {
+      "task_id": "api-feat-018",
+      "task_type": "feature_api_integration",
+      "title": "check_server_config must flag invalid ports",
+      "problem_statement": "Ensure invalid ports are reported in error list.",
+      "repo_a_name": "synthetic/api-consumer-018",
+      "repo_b_name": "synthetic/apikit",
+      "repo_a_id": 950000018,
+      "repo_b_id": 950000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/api-feat-018.patch",
+      "gold_patch_path": "patches/gold/api-feat-018.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_018_check_server_config_invalid_port"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/handlers.py"
+      ],
+      "expected_relevant_symbols": [
+        "validate_port"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "apikit.validators.validate_port"
+      ],
+      "test_context": "Generated real task 018 exercises test_task_018_check_server_config_invalid_port."
+    },
+    {
+      "task_id": "api-feat-019",
+      "task_type": "feature_api_integration",
+      "title": "check_contact must not invert validation result",
+      "problem_statement": "Ensure check_contact directly returns validate_email result.",
+      "repo_a_name": "synthetic/api-consumer-019",
+      "repo_b_name": "synthetic/apikit",
+      "repo_a_id": 950000019,
+      "repo_b_id": 950000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/api-feat-019.patch",
+      "gold_patch_path": "patches/gold/api-feat-019.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_019_check_contact_truthiness"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/handlers.py"
+      ],
+      "expected_relevant_symbols": [
+        "validate_email"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "apikit.validators.validate_email"
+      ],
+      "test_context": "Generated real task 019 exercises test_task_019_check_contact_truthiness."
+    },
+    {
+      "task_id": "api-feat-020",
+      "task_type": "feature_api_integration",
+      "title": "check_contact must reject invalid emails",
+      "problem_statement": "Ensure invalid email addresses are reported as False.",
+      "repo_a_name": "synthetic/api-consumer-020",
+      "repo_b_name": "synthetic/apikit",
+      "repo_a_id": 950000020,
+      "repo_b_id": 950000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/api-feat-020.patch",
+      "gold_patch_path": "patches/gold/api-feat-020.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_020_check_contact_invalid_email"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/handlers.py"
+      ],
+      "expected_relevant_symbols": [
+        "validate_email"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "apikit.validators.validate_email"
+      ],
+      "test_context": "Generated real task 020 exercises test_task_020_check_contact_invalid_email."
+    },
+    {
+      "task_id": "api-feat-021",
+      "task_type": "feature_api_integration",
+      "title": "task_summary must use format_duration",
+      "problem_statement": "Ensure task_summary delegates duration formatting to format_duration.",
+      "repo_a_name": "synthetic/api-consumer-021",
+      "repo_b_name": "synthetic/apikit",
+      "repo_a_id": 950000021,
+      "repo_b_id": 950000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/api-feat-021.patch",
+      "gold_patch_path": "patches/gold/api-feat-021.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_021_task_summary_uses_formatter"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/reports.py"
+      ],
+      "expected_relevant_symbols": [
+        "format_duration"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "apikit.formatters.format_duration"
+      ],
+      "test_context": "Generated real task 021 exercises test_task_021_task_summary_uses_formatter."
+    },
+    {
+      "task_id": "api-feat-022",
+      "task_type": "feature_api_integration",
+      "title": "task_summary must preserve output prefix format",
+      "problem_statement": "Ensure task_summary uses colon-delimited prefix format.",
+      "repo_a_name": "synthetic/api-consumer-022",
+      "repo_b_name": "synthetic/apikit",
+      "repo_a_id": 950000022,
+      "repo_b_id": 950000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/api-feat-022.patch",
+      "gold_patch_path": "patches/gold/api-feat-022.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_022_task_summary_prefix_format"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/reports.py"
+      ],
+      "expected_relevant_symbols": [
+        "format_duration"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "apikit.formatters.format_duration"
+      ],
+      "test_context": "Generated real task 022 exercises test_task_022_task_summary_prefix_format."
+    },
+    {
+      "task_id": "api-feat-023",
+      "task_type": "feature_api_integration",
+      "title": "storage_report must use human-readable sizes",
+      "problem_statement": "Ensure storage_report delegates size formatting to format_file_size.",
+      "repo_a_name": "synthetic/api-consumer-023",
+      "repo_b_name": "synthetic/apikit",
+      "repo_a_id": 950000023,
+      "repo_b_id": 950000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/api-feat-023.patch",
+      "gold_patch_path": "patches/gold/api-feat-023.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_023_storage_report_human_units"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/reports.py"
+      ],
+      "expected_relevant_symbols": [
+        "format_file_size"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "apikit.formatters.format_file_size"
+      ],
+      "test_context": "Generated real task 023 exercises test_task_023_storage_report_human_units."
+    },
+    {
+      "task_id": "api-feat-024",
+      "task_type": "feature_api_integration",
+      "title": "storage_report must preserve label spacing",
+      "problem_statement": "Ensure storage_report includes \": \" between filename and size.",
+      "repo_a_name": "synthetic/api-consumer-024",
+      "repo_b_name": "synthetic/apikit",
+      "repo_a_id": 950000024,
+      "repo_b_id": 950000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/api-feat-024.patch",
+      "gold_patch_path": "patches/gold/api-feat-024.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_024_storage_report_spacing"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/reports.py"
+      ],
+      "expected_relevant_symbols": [
+        "format_file_size"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "apikit.formatters.format_file_size"
+      ],
+      "test_context": "Generated real task 024 exercises test_task_024_storage_report_spacing."
+    },
+    {
+      "task_id": "api-feat-025",
+      "task_type": "feature_api_integration",
+      "title": "tag_line must deduplicate tags",
+      "problem_statement": "Ensure tag_line deduplicates repeated tags.",
+      "repo_a_name": "synthetic/api-consumer-025",
+      "repo_b_name": "synthetic/apikit",
+      "repo_a_id": 950000025,
+      "repo_b_id": 950000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/api-feat-025.patch",
+      "gold_patch_path": "patches/gold/api-feat-025.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_025_tag_line_deduplicates"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/reports.py"
+      ],
+      "expected_relevant_symbols": [
+        "unique_sorted",
+        "pluralize"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "apikit.transforms.unique_sorted",
+        "apikit.formatters.pluralize"
+      ],
+      "test_context": "Generated real task 025 exercises test_task_025_tag_line_deduplicates."
+    },
+    {
+      "task_id": "api-feat-026",
+      "task_type": "feature_api_integration",
+      "title": "tag_line must use pluralize helper",
+      "problem_statement": "Ensure tag_line handles singular/plural via pluralize.",
+      "repo_a_name": "synthetic/api-consumer-026",
+      "repo_b_name": "synthetic/apikit",
+      "repo_a_id": 950000026,
+      "repo_b_id": 950000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/api-feat-026.patch",
+      "gold_patch_path": "patches/gold/api-feat-026.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_026_tag_line_singular_plural"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/reports.py"
+      ],
+      "expected_relevant_symbols": [
+        "pluralize"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "apikit.formatters.pluralize"
+      ],
+      "test_context": "Generated real task 026 exercises test_task_026_tag_line_singular_plural."
+    },
+    {
+      "task_id": "api-feat-027",
+      "task_type": "feature_api_integration",
+      "title": "tag_line must use comma separators",
+      "problem_statement": "Ensure tag_line joins tags with comma+space separator.",
+      "repo_a_name": "synthetic/api-consumer-027",
+      "repo_b_name": "synthetic/apikit",
+      "repo_a_id": 950000027,
+      "repo_b_id": 950000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/api-feat-027.patch",
+      "gold_patch_path": "patches/gold/api-feat-027.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_027_tag_line_separator"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/reports.py"
+      ],
+      "expected_relevant_symbols": [
+        "pluralize"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "apikit.formatters.pluralize"
+      ],
+      "test_context": "Generated real task 027 exercises test_task_027_tag_line_separator."
+    },
+    {
+      "task_id": "api-feat-028",
+      "task_type": "feature_api_integration",
+      "title": "api_endpoint must keep leading slash",
+      "problem_statement": "Ensure api_endpoint passes an absolute API path to build_url.",
+      "repo_a_name": "synthetic/api-consumer-028",
+      "repo_b_name": "synthetic/apikit",
+      "repo_a_id": 950000028,
+      "repo_b_id": 950000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/api-feat-028.patch",
+      "gold_patch_path": "patches/gold/api-feat-028.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_028_api_endpoint_leading_slash"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/pipelines.py"
+      ],
+      "expected_relevant_symbols": [
+        "build_url"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "apikit.builders.build_url"
+      ],
+      "test_context": "Generated real task 028 exercises test_task_028_api_endpoint_leading_slash."
+    },
+    {
+      "task_id": "api-feat-029",
+      "task_type": "feature_api_integration",
+      "title": "export_row must serialize values not keys",
+      "problem_statement": "Ensure export_row builds CSV rows from flattened values.",
+      "repo_a_name": "synthetic/api-consumer-029",
+      "repo_b_name": "synthetic/apikit",
+      "repo_a_id": 950000029,
+      "repo_b_id": 950000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/api-feat-029.patch",
+      "gold_patch_path": "patches/gold/api-feat-029.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_029_export_row_values_not_keys"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/pipelines.py"
+      ],
+      "expected_relevant_symbols": [
+        "flatten_dict",
+        "build_csv_row"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "apikit.transforms.flatten_dict",
+        "apikit.builders.build_csv_row"
+      ],
+      "test_context": "Generated real task 029 exercises test_task_029_export_row_values_not_keys."
+    },
+    {
+      "task_id": "api-feat-030",
+      "task_type": "feature_api_integration",
+      "title": "check_server_config host error message contract",
+      "problem_statement": "Ensure host validation error message matches expected wording.",
+      "repo_a_name": "synthetic/api-consumer-030",
+      "repo_b_name": "synthetic/apikit",
+      "repo_a_id": 950000030,
+      "repo_b_id": 950000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/api-feat-030.patch",
+      "gold_patch_path": "patches/gold/api-feat-030.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_030_check_server_config_host_message"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/handlers.py"
+      ],
+      "expected_relevant_symbols": [
+        "validate_ip_v4"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "apikit.validators.validate_ip_v4"
+      ],
+      "test_context": "Generated real task 030 exercises test_task_030_check_server_config_host_message."
     }
   ]
 }

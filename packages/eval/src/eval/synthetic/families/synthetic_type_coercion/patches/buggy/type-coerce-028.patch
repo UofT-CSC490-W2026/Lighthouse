@@ -1,0 +1,12 @@
+diff --git a/transforms/sanitizers.py b/transforms/sanitizers.py
+--- a/transforms/sanitizers.py
++++ b/transforms/sanitizers.py
+@@ -3,7 +3,7 @@
+ 
+ def normalize_whitespace(text: str) -> str:
+     """Replace consecutive whitespace with a single space and strip edges."""
+-    return " ".join(text.split())
++    return text.strip()
+ 
+ 
+ def truncate_decimal(value: float, places: int) -> float:

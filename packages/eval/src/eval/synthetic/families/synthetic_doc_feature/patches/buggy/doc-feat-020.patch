@@ -1,0 +1,9 @@
+diff --git a/consumer_app/summaries.py b/consumer_app/summaries.py
+--- a/consumer_app/summaries.py
++++ b/consumer_app/summaries.py
+@@ -15,4 +15,4 @@
+     records = load_records(csv_data)
+     filtered = filter_records(records, filter_field, filter_value)
+     total = sum_field(filtered, value_field)
+-    return format_summary(label, total, len(filtered))
++    return format_summary("Summary", total, len(filtered))

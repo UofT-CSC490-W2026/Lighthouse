@@ -10,6 +10,7 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PENDING_PATH = REPO_ROOT / "eval" / "configs" / "pending_configs.txt"
+FAMILIES_ROOT = REPO_ROOT / "packages" / "eval" / "src" / "eval" / "synthetic" / "families"
 DEFAULT_OUTPUT_ROOT = REPO_ROOT / ".cache" / "eval" / "synthetic_experiments" / "queued" / "matrix"
 DEFAULT_WORKSPACE_ROOT = REPO_ROOT / ".cache" / "eval" / "synthetic_workspace" / "queued"
 DEFAULT_PREDICTIONS_ROOT = REPO_ROOT / ".cache" / "eval" / "synthetic_predictions" / "queued"
@@ -59,6 +60,36 @@ def _read_config(config_path: Path) -> dict[str, Any]:
     if not isinstance(raw, dict):
         raise ValueError(f"Config must be a JSON object: {config_path}")
     return raw
+
+
+def _available_task_count_by_family() -> dict[str, int]:
+    mapping: dict[str, int] = {}
+    for child in sorted(FAMILIES_ROOT.iterdir()):
+        family_path = child / "family.json"
+        if not family_path.is_file():
+            continue
+        raw = json.loads(family_path.read_text(encoding="utf-8"))
+        mapping[str(raw["family_name"])] = int(raw["task_count"])
+    if not mapping:
+        raise RuntimeError(f"No family metadata found under {FAMILIES_ROOT}")
+    return mapping
+
+
+def _validate_config_bounds(config: dict[str, Any], config_path: Path) -> None:
+    families = config.get("families")
+    if not isinstance(families, list) or len(families) != 1:
+        raise ValueError(f"Config must contain singleton families list: {config_path}")
+    family_name = str(families[0])
+    requested_task_count = int(config["task_count"])
+    available_map = _available_task_count_by_family()
+    available = available_map.get(family_name)
+    if available is None:
+        raise ValueError(f"Unknown family in config: {family_name}")
+    if requested_task_count > available:
+        raise ValueError(
+            f"Config task_count={requested_task_count} exceeds available={available} "
+            f"for {family_name}. Regenerate configs with eval/configs/generate_configs.py."
+        )
 
 
 def _next_pending_config(pending_path: Path) -> Path:
@@ -295,6 +326,11 @@ def main() -> int:
         return 1
 
     config = _read_config(config_path)
+    try:
+        _validate_config_bounds(config, config_path)
+    except Exception as exc:
+        print(f"Config validation failed: {exc}", file=sys.stderr)
+        return 1
     command, matrix_rows_path = _build_command(
         config_path=config_path,
         output_root=output_root,

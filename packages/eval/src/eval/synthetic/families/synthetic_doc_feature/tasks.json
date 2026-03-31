@@ -3,7 +3,7 @@
   "family_version": "1",
   "generation_config": {
     "task_type": "feature_doc_guided",
-    "task_count": 10,
+    "task_count": 30,
     "shared_library_repo_count": 1,
     "consumer_repo_mode": "one_a_per_task",
     "python_version_target": "3.11",
@@ -379,6 +379,700 @@
         "domainlib.output.format_summary"
       ],
       "test_context": "Tests for category_report, total_summary, and grouped_totals fail with NotImplementedError. Other functions in each module still work correctly."
+    },
+    {
+      "task_id": "doc-feat-011",
+      "task_type": "feature_doc_guided",
+      "title": "doc-feature generated task 011",
+      "problem_statement": "Implement documented behavior for generated task 011.",
+      "repo_a_name": "synthetic/doc-feature-consumer-011",
+      "repo_b_name": "synthetic/domainlib",
+      "repo_a_id": 940000011,
+      "repo_b_id": 960000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-feat-011.patch",
+      "gold_patch_path": "patches/gold/doc-feat-011.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_011_category_report_respects_field"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/reports.py"
+      ],
+      "expected_relevant_symbols": [
+        "load_records",
+        "aggregate",
+        "format_table"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "domainlib.pipeline.load_records",
+        "domainlib.pipeline.aggregate",
+        "domainlib.output.format_table"
+      ],
+      "test_context": "Generated real task 011"
+    },
+    {
+      "task_id": "doc-feat-012",
+      "task_type": "feature_doc_guided",
+      "title": "doc-feature generated task 012",
+      "problem_statement": "Implement documented behavior for generated task 012.",
+      "repo_a_name": "synthetic/doc-feature-consumer-012",
+      "repo_b_name": "synthetic/domainlib",
+      "repo_a_id": 940000012,
+      "repo_b_id": 960000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-feat-012.patch",
+      "gold_patch_path": "patches/gold/doc-feat-012.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_012_category_report_title"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/reports.py"
+      ],
+      "expected_relevant_symbols": [
+        "load_records",
+        "aggregate",
+        "format_table"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "domainlib.pipeline.load_records",
+        "domainlib.pipeline.aggregate",
+        "domainlib.output.format_table"
+      ],
+      "test_context": "Generated real task 012"
+    },
+    {
+      "task_id": "doc-feat-013",
+      "task_type": "feature_doc_guided",
+      "title": "doc-feature generated task 013",
+      "problem_statement": "Implement documented behavior for generated task 013.",
+      "repo_a_name": "synthetic/doc-feature-consumer-013",
+      "repo_b_name": "synthetic/domainlib",
+      "repo_a_id": 940000013,
+      "repo_b_id": 960000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-feat-013.patch",
+      "gold_patch_path": "patches/gold/doc-feat-013.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_013_filtered_report_applies_filter"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/reports.py"
+      ],
+      "expected_relevant_symbols": [
+        "load_records",
+        "aggregate",
+        "format_table"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "domainlib.pipeline.load_records",
+        "domainlib.pipeline.aggregate",
+        "domainlib.output.format_table"
+      ],
+      "test_context": "Generated real task 013"
+    },
+    {
+      "task_id": "doc-feat-014",
+      "task_type": "feature_doc_guided",
+      "title": "doc-feature generated task 014",
+      "problem_statement": "Implement documented behavior for generated task 014.",
+      "repo_a_name": "synthetic/doc-feature-consumer-014",
+      "repo_b_name": "synthetic/domainlib",
+      "repo_a_id": 940000014,
+      "repo_b_id": 960000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-feat-014.patch",
+      "gold_patch_path": "patches/gold/doc-feat-014.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_014_filtered_report_filter_arg_order"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/reports.py"
+      ],
+      "expected_relevant_symbols": [
+        "load_records",
+        "aggregate",
+        "format_table"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "domainlib.pipeline.load_records",
+        "domainlib.pipeline.aggregate",
+        "domainlib.output.format_table"
+      ],
+      "test_context": "Generated real task 014"
+    },
+    {
+      "task_id": "doc-feat-015",
+      "task_type": "feature_doc_guided",
+      "title": "doc-feature generated task 015",
+      "problem_statement": "Implement documented behavior for generated task 015.",
+      "repo_a_name": "synthetic/doc-feature-consumer-015",
+      "repo_b_name": "synthetic/domainlib",
+      "repo_a_id": 940000015,
+      "repo_b_id": 960000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-feat-015.patch",
+      "gold_patch_path": "patches/gold/doc-feat-015.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_015_filtered_report_title"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/reports.py"
+      ],
+      "expected_relevant_symbols": [
+        "load_records",
+        "aggregate",
+        "format_table"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "domainlib.pipeline.load_records",
+        "domainlib.pipeline.aggregate",
+        "domainlib.output.format_table"
+      ],
+      "test_context": "Generated real task 015"
+    },
+    {
+      "task_id": "doc-feat-016",
+      "task_type": "feature_doc_guided",
+      "title": "doc-feature generated task 016",
+      "problem_statement": "Implement documented behavior for generated task 016.",
+      "repo_a_name": "synthetic/doc-feature-consumer-016",
+      "repo_b_name": "synthetic/domainlib",
+      "repo_a_id": 940000016,
+      "repo_b_id": 960000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-feat-016.patch",
+      "gold_patch_path": "patches/gold/doc-feat-016.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_016_total_summary_value_field"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/summaries.py"
+      ],
+      "expected_relevant_symbols": [
+        "load_records",
+        "sum_field",
+        "format_summary"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "domainlib.pipeline.load_records",
+        "domainlib.aggregation.sum_field",
+        "domainlib.output.format_summary"
+      ],
+      "test_context": "Generated real task 016"
+    },
+    {
+      "task_id": "doc-feat-017",
+      "task_type": "feature_doc_guided",
+      "title": "doc-feature generated task 017",
+      "problem_statement": "Implement documented behavior for generated task 017.",
+      "repo_a_name": "synthetic/doc-feature-consumer-017",
+      "repo_b_name": "synthetic/domainlib",
+      "repo_a_id": 940000017,
+      "repo_b_id": 960000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-feat-017.patch",
+      "gold_patch_path": "patches/gold/doc-feat-017.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_017_total_summary_count"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/summaries.py"
+      ],
+      "expected_relevant_symbols": [
+        "load_records",
+        "sum_field",
+        "format_summary"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "domainlib.pipeline.load_records",
+        "domainlib.aggregation.sum_field",
+        "domainlib.output.format_summary"
+      ],
+      "test_context": "Generated real task 017"
+    },
+    {
+      "task_id": "doc-feat-018",
+      "task_type": "feature_doc_guided",
+      "title": "doc-feature generated task 018",
+      "problem_statement": "Implement documented behavior for generated task 018.",
+      "repo_a_name": "synthetic/doc-feature-consumer-018",
+      "repo_b_name": "synthetic/domainlib",
+      "repo_a_id": 940000018,
+      "repo_b_id": 960000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-feat-018.patch",
+      "gold_patch_path": "patches/gold/doc-feat-018.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_018_filtered_summary_filters"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/summaries.py"
+      ],
+      "expected_relevant_symbols": [
+        "load_records",
+        "sum_field",
+        "format_summary"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "domainlib.pipeline.load_records",
+        "domainlib.aggregation.sum_field",
+        "domainlib.output.format_summary"
+      ],
+      "test_context": "Generated real task 018"
+    },
+    {
+      "task_id": "doc-feat-019",
+      "task_type": "feature_doc_guided",
+      "title": "doc-feature generated task 019",
+      "problem_statement": "Implement documented behavior for generated task 019.",
+      "repo_a_name": "synthetic/doc-feature-consumer-019",
+      "repo_b_name": "synthetic/domainlib",
+      "repo_a_id": 940000019,
+      "repo_b_id": 960000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-feat-019.patch",
+      "gold_patch_path": "patches/gold/doc-feat-019.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_019_filtered_summary_count"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/summaries.py"
+      ],
+      "expected_relevant_symbols": [
+        "load_records",
+        "sum_field",
+        "format_summary"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "domainlib.pipeline.load_records",
+        "domainlib.aggregation.sum_field",
+        "domainlib.output.format_summary"
+      ],
+      "test_context": "Generated real task 019"
+    },
+    {
+      "task_id": "doc-feat-020",
+      "task_type": "feature_doc_guided",
+      "title": "doc-feature generated task 020",
+      "problem_statement": "Implement documented behavior for generated task 020.",
+      "repo_a_name": "synthetic/doc-feature-consumer-020",
+      "repo_b_name": "synthetic/domainlib",
+      "repo_a_id": 940000020,
+      "repo_b_id": 960000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-feat-020.patch",
+      "gold_patch_path": "patches/gold/doc-feat-020.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_020_filtered_summary_label"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/summaries.py"
+      ],
+      "expected_relevant_symbols": [
+        "load_records",
+        "sum_field",
+        "format_summary"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "domainlib.pipeline.load_records",
+        "domainlib.aggregation.sum_field",
+        "domainlib.output.format_summary"
+      ],
+      "test_context": "Generated real task 020"
+    },
+    {
+      "task_id": "doc-feat-021",
+      "task_type": "feature_doc_guided",
+      "title": "doc-feature generated task 021",
+      "problem_statement": "Implement documented behavior for generated task 021.",
+      "repo_a_name": "synthetic/doc-feature-consumer-021",
+      "repo_b_name": "synthetic/domainlib",
+      "repo_a_id": 940000021,
+      "repo_b_id": 960000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-feat-021.patch",
+      "gold_patch_path": "patches/gold/doc-feat-021.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_021_grouped_totals_per_group"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/exports.py"
+      ],
+      "expected_relevant_symbols": [
+        "load_records",
+        "group_by",
+        "sum_field",
+        "format_table"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "domainlib.pipeline.load_records",
+        "domainlib.aggregation.group_by",
+        "domainlib.aggregation.sum_field",
+        "domainlib.output.format_table"
+      ],
+      "test_context": "Generated real task 021"
+    },
+    {
+      "task_id": "doc-feat-022",
+      "task_type": "feature_doc_guided",
+      "title": "doc-feature generated task 022",
+      "problem_statement": "Implement documented behavior for generated task 022.",
+      "repo_a_name": "synthetic/doc-feature-consumer-022",
+      "repo_b_name": "synthetic/domainlib",
+      "repo_a_id": 940000022,
+      "repo_b_id": 960000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-feat-022.patch",
+      "gold_patch_path": "patches/gold/doc-feat-022.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_022_grouped_totals_title"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/exports.py"
+      ],
+      "expected_relevant_symbols": [
+        "load_records",
+        "group_by",
+        "sum_field",
+        "format_table"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "domainlib.pipeline.load_records",
+        "domainlib.aggregation.group_by",
+        "domainlib.aggregation.sum_field",
+        "domainlib.output.format_table"
+      ],
+      "test_context": "Generated real task 022"
+    },
+    {
+      "task_id": "doc-feat-023",
+      "task_type": "feature_doc_guided",
+      "title": "doc-feature generated task 023",
+      "problem_statement": "Implement documented behavior for generated task 023.",
+      "repo_a_name": "synthetic/doc-feature-consumer-023",
+      "repo_b_name": "synthetic/domainlib",
+      "repo_a_id": 940000023,
+      "repo_b_id": 960000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-feat-023.patch",
+      "gold_patch_path": "patches/gold/doc-feat-023.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_023_grouped_totals_group_field"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/exports.py"
+      ],
+      "expected_relevant_symbols": [
+        "load_records",
+        "group_by",
+        "sum_field",
+        "format_table"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "domainlib.pipeline.load_records",
+        "domainlib.aggregation.group_by",
+        "domainlib.aggregation.sum_field",
+        "domainlib.output.format_table"
+      ],
+      "test_context": "Generated real task 023"
+    },
+    {
+      "task_id": "doc-feat-024",
+      "task_type": "feature_doc_guided",
+      "title": "doc-feature generated task 024",
+      "problem_statement": "Implement documented behavior for generated task 024.",
+      "repo_a_name": "synthetic/doc-feature-consumer-024",
+      "repo_b_name": "synthetic/domainlib",
+      "repo_a_id": 940000024,
+      "repo_b_id": 960000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-feat-024.patch",
+      "gold_patch_path": "patches/gold/doc-feat-024.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_024_grouped_summaries_sorted_output"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/exports.py"
+      ],
+      "expected_relevant_symbols": [
+        "load_records",
+        "group_by",
+        "sum_field",
+        "format_table"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "domainlib.pipeline.load_records",
+        "domainlib.aggregation.group_by",
+        "domainlib.aggregation.sum_field",
+        "domainlib.output.format_table"
+      ],
+      "test_context": "Generated real task 024"
+    },
+    {
+      "task_id": "doc-feat-025",
+      "task_type": "feature_doc_guided",
+      "title": "doc-feature generated task 025",
+      "problem_statement": "Implement documented behavior for generated task 025.",
+      "repo_a_name": "synthetic/doc-feature-consumer-025",
+      "repo_b_name": "synthetic/domainlib",
+      "repo_a_id": 940000025,
+      "repo_b_id": 960000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-feat-025.patch",
+      "gold_patch_path": "patches/gold/doc-feat-025.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_025_grouped_summaries_group_totals"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/exports.py"
+      ],
+      "expected_relevant_symbols": [
+        "load_records",
+        "group_by",
+        "sum_field",
+        "format_table"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "domainlib.pipeline.load_records",
+        "domainlib.aggregation.group_by",
+        "domainlib.aggregation.sum_field",
+        "domainlib.output.format_table"
+      ],
+      "test_context": "Generated real task 025"
+    },
+    {
+      "task_id": "doc-feat-026",
+      "task_type": "feature_doc_guided",
+      "title": "doc-feature generated task 026",
+      "problem_statement": "Implement documented behavior for generated task 026.",
+      "repo_a_name": "synthetic/doc-feature-consumer-026",
+      "repo_b_name": "synthetic/domainlib",
+      "repo_a_id": 940000026,
+      "repo_b_id": 960000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-feat-026.patch",
+      "gold_patch_path": "patches/gold/doc-feat-026.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_026_grouped_summaries_joiner"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/exports.py"
+      ],
+      "expected_relevant_symbols": [
+        "load_records",
+        "group_by",
+        "sum_field",
+        "format_table"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "domainlib.pipeline.load_records",
+        "domainlib.aggregation.group_by",
+        "domainlib.aggregation.sum_field",
+        "domainlib.output.format_table"
+      ],
+      "test_context": "Generated real task 026"
+    },
+    {
+      "task_id": "doc-feat-027",
+      "task_type": "feature_doc_guided",
+      "title": "doc-feature generated task 027",
+      "problem_statement": "Implement documented behavior for generated task 027.",
+      "repo_a_name": "synthetic/doc-feature-consumer-027",
+      "repo_b_name": "synthetic/domainlib",
+      "repo_a_id": 940000027,
+      "repo_b_id": 960000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-feat-027.patch",
+      "gold_patch_path": "patches/gold/doc-feat-027.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_027_category_report_preserve_case"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/reports.py"
+      ],
+      "expected_relevant_symbols": [
+        "load_records",
+        "aggregate",
+        "format_table"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "domainlib.pipeline.load_records",
+        "domainlib.pipeline.aggregate",
+        "domainlib.output.format_table"
+      ],
+      "test_context": "Generated real task 027"
+    },
+    {
+      "task_id": "doc-feat-028",
+      "task_type": "feature_doc_guided",
+      "title": "doc-feature generated task 028",
+      "problem_statement": "Implement documented behavior for generated task 028.",
+      "repo_a_name": "synthetic/doc-feature-consumer-028",
+      "repo_b_name": "synthetic/domainlib",
+      "repo_a_id": 940000028,
+      "repo_b_id": 960000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-feat-028.patch",
+      "gold_patch_path": "patches/gold/doc-feat-028.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_028_total_summary_no_extra_rows"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/summaries.py"
+      ],
+      "expected_relevant_symbols": [
+        "load_records",
+        "sum_field",
+        "format_summary"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "domainlib.pipeline.load_records",
+        "domainlib.aggregation.sum_field",
+        "domainlib.output.format_summary"
+      ],
+      "test_context": "Generated real task 028"
+    },
+    {
+      "task_id": "doc-feat-029",
+      "task_type": "feature_doc_guided",
+      "title": "doc-feature generated task 029",
+      "problem_statement": "Implement documented behavior for generated task 029.",
+      "repo_a_name": "synthetic/doc-feature-consumer-029",
+      "repo_b_name": "synthetic/domainlib",
+      "repo_a_id": 940000029,
+      "repo_b_id": 960000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-feat-029.patch",
+      "gold_patch_path": "patches/gold/doc-feat-029.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_029_grouped_summaries_label_key"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/exports.py"
+      ],
+      "expected_relevant_symbols": [
+        "load_records",
+        "group_by",
+        "sum_field",
+        "format_table"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "domainlib.pipeline.load_records",
+        "domainlib.aggregation.group_by",
+        "domainlib.aggregation.sum_field",
+        "domainlib.output.format_table"
+      ],
+      "test_context": "Generated real task 029"
+    },
+    {
+      "task_id": "doc-feat-030",
+      "task_type": "feature_doc_guided",
+      "title": "doc-feature generated task 030",
+      "problem_statement": "Implement documented behavior for generated task 030.",
+      "repo_a_name": "synthetic/doc-feature-consumer-030",
+      "repo_b_name": "synthetic/domainlib",
+      "repo_a_id": 940000030,
+      "repo_b_id": 960000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-feat-030.patch",
+      "gold_patch_path": "patches/gold/doc-feat-030.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_030_filtered_report_category_field"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/reports.py"
+      ],
+      "expected_relevant_symbols": [
+        "load_records",
+        "aggregate",
+        "format_table"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "domainlib.pipeline.load_records",
+        "domainlib.pipeline.aggregate",
+        "domainlib.output.format_table"
+      ],
+      "test_context": "Generated real task 030"
     }
   ]
 }

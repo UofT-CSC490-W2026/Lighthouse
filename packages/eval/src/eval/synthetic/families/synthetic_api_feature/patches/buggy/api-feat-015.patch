@@ -1,0 +1,9 @@
+diff --git a/consumer_app/pipelines.py b/consumer_app/pipelines.py
+--- a/consumer_app/pipelines.py
++++ b/consumer_app/pipelines.py
+@@ -14,4 +14,4 @@
+ 
+ 
+ def camel_keys(data: dict[str, object]) -> dict[str, object]:
+-    return {snake_to_camel(k): v for k, v in data.items()}
++    return {k: v for k, v in data.items()}

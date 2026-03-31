@@ -1,0 +1,9 @@
+diff --git a/transforms/sanitizers.py b/transforms/sanitizers.py
+--- a/transforms/sanitizers.py
++++ b/transforms/sanitizers.py
+@@ -9,4 +9,4 @@
+ def truncate_decimal(value: float, places: int) -> float:
+     """Truncate (not round) a float to the given number of decimal places."""
+     factor = 10 ** places
+-    return int(value * factor) / factor
++    return int(value) / factor

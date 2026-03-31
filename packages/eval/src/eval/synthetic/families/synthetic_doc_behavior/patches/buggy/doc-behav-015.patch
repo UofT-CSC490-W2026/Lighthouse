@@ -1,0 +1,9 @@
+diff --git a/consumer_app/formatting.py b/consumer_app/formatting.py
+--- a/consumer_app/formatting.py
++++ b/consumer_app/formatting.py
+@@ -15,4 +15,4 @@
+ 
+ def author_display(first: str, last: str) -> str:
+     """Return the formatted author display name."""
+-    return normalize_name(first, last)
++    return f"{first} {last}".strip()

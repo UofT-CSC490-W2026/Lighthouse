@@ -1,0 +1,10 @@
+diff --git a/consumer_app/reports.py b/consumer_app/reports.py
+--- a/consumer_app/reports.py
++++ b/consumer_app/reports.py
+@@ -13,5 +13,5 @@
+ def filtered_category_report(csv_data: str, filter_field: str, filter_value: str, category_field: str) -> str:
+     records = load_records(csv_data)
+     filtered = filter_records(records, filter_field, filter_value)
+-    counts = aggregate(filtered, filter_field)
++    counts = aggregate(filtered, category_field)
+     return format_table(counts, title="Filtered Report")

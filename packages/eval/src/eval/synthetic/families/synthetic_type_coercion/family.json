@@ -2,7 +2,7 @@
   "family_name": "synthetic-type-coercion",
   "family_version": "1",
   "task_type": "data_type_coercion",
-  "task_count": 10,
+  "task_count": 30,
   "shared_library_repo_count": 0,
   "consumer_repo_mode": "one_a_per_task",
   "python_version_target": "3.11",

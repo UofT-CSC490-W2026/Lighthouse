@@ -1,0 +1,12 @@
+diff --git a/mathkit/comparison.py b/mathkit/comparison.py
+--- a/mathkit/comparison.py
++++ b/mathkit/comparison.py
+@@ -3,7 +3,7 @@
+ 
+ def clamp(value: float, low: float, high: float) -> float:
+     """Constrain value to the inclusive range [low, high]."""
+-    if value > low:
++    if value < low:
+         return low
+     if value > high:
+         return high

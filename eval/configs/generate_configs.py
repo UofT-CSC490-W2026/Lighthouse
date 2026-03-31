@@ -43,19 +43,31 @@ class ConfigSpec:
     embedding_model: str
 
 
+@dataclass(frozen=True)
+class FamilyInfo:
+    family_name: str
+    task_count: int
+
+
 def _slug(value: str) -> str:
     compact = _SAFE_SLUG_RE.sub("-", value.lower()).strip("-")
     return compact or "x"
 
 
-def discover_families() -> tuple[str, ...]:
-    discovered: list[str] = []
+def discover_family_infos() -> tuple[FamilyInfo, ...]:
+    discovered: list[FamilyInfo] = []
     for child in sorted(FAMILIES_ROOT.iterdir()):
         if not child.is_dir():
             continue
-        if not (child / "family.json").is_file():
+        family_path = child / "family.json"
+        if not family_path.is_file():
             continue
-        discovered.append(child.name.replace("_", "-"))
+        family_raw = json.loads(family_path.read_text(encoding="utf-8"))
+        family_name = str(family_raw.get("family_name", child.name.replace("_", "-"))).strip()
+        task_count = int(family_raw.get("task_count", 0))
+        if task_count < 1:
+            raise RuntimeError(f"Invalid task_count in {family_path}: {task_count}")
+        discovered.append(FamilyInfo(family_name=family_name, task_count=task_count))
     if not discovered:
         raise RuntimeError(f"No synthetic families discovered under {FAMILIES_ROOT}")
     return tuple(discovered)
@@ -63,7 +75,8 @@ def discover_families() -> tuple[str, ...]:
 
 def iter_specs() -> tuple[ConfigSpec, ...]:
     specs: list[ConfigSpec] = []
-    for family in discover_families():
+    for family_info in discover_family_infos():
+        family = family_info.family_name
         for context_source in CONTEXT_SOURCES:
             for chunking_strategy in CHUNKING_STRATEGIES:
                 if context_source == "ast" and chunking_strategy != "ast":
@@ -95,6 +108,9 @@ def config_filename(spec: ConfigSpec) -> str:
 
 
 def config_payload(spec: ConfigSpec) -> dict[str, object]:
+    family_task_counts = {item.family_name: item.task_count for item in discover_family_infos()}
+    family_max = family_task_counts[spec.family]
+    effective_task_count = min(FIXED_TASK_COUNT, family_max)
     return {
         "families": [spec.family],
         "context_sources": [spec.context_source],
@@ -104,7 +120,7 @@ def config_payload(spec: ConfigSpec) -> dict[str, object]:
         "embedding_strategy": spec.embedding_strategy,
         "repeat_count": FIXED_REPEAT_COUNT,
         "k_values": list(FIXED_K_VALUES),
-        "task_count": FIXED_TASK_COUNT,
+        "task_count": effective_task_count,
         "top_k": FIXED_TOP_K,
     }
 
@@ -130,9 +146,19 @@ def main() -> int:
     ]
     PENDING_PATH.write_text("\n".join(pending_entries) + "\n", encoding="utf-8")
 
+    family_infos = discover_family_infos()
+    requested_vs_effective = {
+        item.family_name: {
+            "requested_task_count": FIXED_TASK_COUNT,
+            "available_task_count": item.task_count,
+            "effective_task_count": min(FIXED_TASK_COUNT, item.task_count),
+        }
+        for item in family_infos
+    }
+
     manifest = {
         "config_count": len(generated_paths),
-        "families": sorted(discover_families()),
+        "families": sorted(item.family_name for item in family_infos),
         "context_sources": list(CONTEXT_SOURCES),
         "chunking_strategies": list(CHUNKING_STRATEGIES),
         "codegen_models": list(CODEGEN_MODELS),
@@ -143,9 +169,10 @@ def main() -> int:
         "fixed": {
             "repeat_count": FIXED_REPEAT_COUNT,
             "k_values": list(FIXED_K_VALUES),
-            "task_count": FIXED_TASK_COUNT,
+            "requested_task_count": FIXED_TASK_COUNT,
             "top_k": FIXED_TOP_K,
         },
+        "task_count_by_family": requested_vs_effective,
         "pending_file": str(PENDING_PATH.relative_to(REPO_ROOT)),
     }
     MANIFEST_PATH.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -153,6 +180,11 @@ def main() -> int:
     print(f"Wrote {len(generated_paths)} configs to {GENERATED_ROOT}")
     print(f"Wrote pending queue: {PENDING_PATH}")
     print(f"Wrote manifest: {MANIFEST_PATH}")
+    if any(item.task_count < FIXED_TASK_COUNT for item in family_infos):
+        print(
+            "Note: requested task_count=30 exceeds available tasks for some families; "
+            "configs were capped per family (see generated_manifest.json)."
+        )
     return 0
 
 

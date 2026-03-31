@@ -1,0 +1,12 @@
+diff --git a/consumer_app/reports.py b/consumer_app/reports.py
+--- a/consumer_app/reports.py
++++ b/consumer_app/reports.py
+@@ -9,7 +9,7 @@
+ 
+ 
+ def storage_report(files: list[tuple[str, int]]) -> list[str]:
+-    return [f"{name}:{format_file_size(size)}" for name, size in files]
++    return [f"{name}: {format_file_size(size)}" for name, size in files]
+ 
+ 
+ def tag_line(tags: list[str]) -> str:

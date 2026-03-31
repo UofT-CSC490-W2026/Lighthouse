@@ -1,0 +1,9 @@
+diff --git a/transforms/converters.py b/transforms/converters.py
+--- a/transforms/converters.py
++++ b/transforms/converters.py
+@@ -8,4 +8,4 @@
+ 
+ def kg_to_pounds(kg: float) -> float:
+     """Convert kilograms to pounds."""
+-    return kg * 2.2
++    return kg * 2.20462

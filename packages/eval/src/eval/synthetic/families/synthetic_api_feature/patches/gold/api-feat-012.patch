@@ -1,0 +1,12 @@
+diff --git a/consumer_app/pipelines.py b/consumer_app/pipelines.py
+--- a/consumer_app/pipelines.py
++++ b/consumer_app/pipelines.py
+@@ -5,7 +5,7 @@
+ 
+ 
+ def api_endpoint(host: str, version: int, resource: str) -> str:
+-    return build_url("https", host, f"/api/{version}/{resource}")
++    return build_url("https", host, f"/api/v{version}/{resource}")
+ 
+ 
+ def export_row(record: dict) -> str:

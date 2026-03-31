@@ -1,0 +1,9 @@
+diff --git a/mathkit/ranges.py b/mathkit/ranges.py
+--- a/mathkit/ranges.py
++++ b/mathkit/ranges.py
+@@ -10,4 +10,4 @@
+     """Return the number of integers in the closed interval [start, end]."""
+     if end < start:
+         return 0
+-    return end - start + 1
++    return end - start

@@ -1,0 +1,12 @@
+diff --git a/consumer_app/exports.py b/consumer_app/exports.py
+--- a/consumer_app/exports.py
++++ b/consumer_app/exports.py
+@@ -18,7 +18,7 @@
+     records = load_records(csv_data)
+     groups = group_by(records, group_field)
+     lines = []
+-    for key in sorted(groups.keys()):
++    for key in groups.keys():
+         group_records = groups[key]
+         total = sum_field(group_records, value_field)
+         lines.append(format_summary(key, total, len(group_records)))

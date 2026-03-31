@@ -1,0 +1,9 @@
+diff --git a/transforms/validators.py b/transforms/validators.py
+--- a/transforms/validators.py
++++ b/transforms/validators.py
+@@ -15,4 +15,4 @@
+     stripped = text.strip()
+     if not stripped:
+         raise ValueError("Text must not be empty or whitespace-only")
+-    return stripped
++    return stripped.lower()

@@ -11,6 +11,7 @@ from eval.synthetic.workspace import prepare_synthetic_workspace
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG_GLOB = "eval/configs/generated/*.json"
 DEFAULT_WORKSPACE_ROOT = REPO_ROOT / ".cache" / "eval" / "synthetic_workspace" / "queued"
+FAMILIES_ROOT = REPO_ROOT / "packages" / "eval" / "src" / "eval" / "synthetic" / "families"
 
 
 def _read_config(path: Path) -> dict[str, Any]:
@@ -27,16 +28,39 @@ def _singleton_value(config: dict[str, Any], field_name: str) -> Any:
     return values[0]
 
 
+def _available_task_count_by_family() -> dict[str, int]:
+    mapping: dict[str, int] = {}
+    for child in sorted(FAMILIES_ROOT.iterdir()):
+        family_path = child / "family.json"
+        if not family_path.is_file():
+            continue
+        raw = json.loads(family_path.read_text(encoding="utf-8"))
+        family_name = str(raw["family_name"])
+        task_count = int(raw["task_count"])
+        mapping[family_name] = task_count
+    if not mapping:
+        raise RuntimeError(f"No family metadata found under {FAMILIES_ROOT}")
+    return mapping
+
+
 def _preindex_keys(config_paths: list[Path]) -> tuple[list[tuple[Any, ...]], list[tuple[Any, ...]]]:
     index_keys: set[tuple[Any, ...]] = set()
     wiki_keys: set[tuple[Any, ...]] = set()
+    available_task_counts = _available_task_count_by_family()
+    capped_examples: list[tuple[str, int, int]] = []
     for path in config_paths:
         cfg = _read_config(path)
         family = str(_singleton_value(cfg, "families"))
+        if family not in available_task_counts:
+            raise ValueError(f"Unknown family in config {path}: {family}")
         chunking = str(_singleton_value(cfg, "chunking_strategies"))
         embedding_model = str(_singleton_value(cfg, "embedding_models"))
         embedding_strategy = str(cfg.get("embedding_strategy", "")).strip()
-        task_count = int(cfg.get("task_count", 30))
+        requested_task_count = int(cfg.get("task_count", 30))
+        available_task_count = available_task_counts[family]
+        task_count = min(requested_task_count, available_task_count)
+        if task_count != requested_task_count:
+            capped_examples.append((family, requested_task_count, task_count))
         seed = cfg.get("seed")
         shared_library_repo_count = cfg.get("shared_library_repo_count")
         index_keys.add(
@@ -51,6 +75,12 @@ def _preindex_keys(config_paths: list[Path]) -> tuple[list[tuple[Any, ...]], lis
             )
         )
         wiki_keys.add((family, task_count, seed, shared_library_repo_count))
+    if capped_examples:
+        sample = capped_examples[0]
+        print(
+            "Warning: some configs requested more tasks than available. "
+            f"Example family={sample[0]} requested={sample[1]} effective={sample[2]}"
+        )
     return sorted(index_keys), sorted(wiki_keys)
 
 

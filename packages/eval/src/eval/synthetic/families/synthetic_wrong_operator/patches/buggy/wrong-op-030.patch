@@ -1,0 +1,11 @@
+diff --git a/mathkit/strings.py b/mathkit/strings.py
+--- a/mathkit/strings.py
++++ b/mathkit/strings.py
+@@ -10,6 +10,6 @@
+ 
+ def truncate(text: str, max_length: int, suffix: str = "...") -> str:
+     """Shorten text to at most max_length characters, appending suffix when truncated."""
+-    if len(text) <= max_length:
++    if len(text) < max_length:
+         return text
+     return text[: max_length - len(suffix)] + suffix

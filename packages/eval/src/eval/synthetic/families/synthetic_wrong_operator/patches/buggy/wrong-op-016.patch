@@ -1,0 +1,12 @@
+diff --git a/mathkit/comparison.py b/mathkit/comparison.py
+--- a/mathkit/comparison.py
++++ b/mathkit/comparison.py
+@@ -6,7 +6,7 @@
+     if value < low:
+         return low
+     if value > high:
+-        return high
++        return low
+     return value
+ 
+ 

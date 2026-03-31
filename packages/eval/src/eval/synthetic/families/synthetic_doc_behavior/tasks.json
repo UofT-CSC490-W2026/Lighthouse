@@ -3,7 +3,7 @@
   "family_version": "1",
   "generation_config": {
     "task_type": "doc_behavior_mismatch",
-    "task_count": 10,
+    "task_count": 30,
     "shared_library_repo_count": 1,
     "consumer_repo_mode": "one_a_per_task",
     "python_version_target": "3.11",
@@ -315,6 +315,606 @@
         "doclib.numbers.clamp_to_range"
       ],
       "test_context": "test_bounded_progress_nan fails because float(nan) is still nan and min/max propagates it. test_bounded_progress_swapped_bounds and test_compute_score_ratio_nan_numerator also fail."
+    },
+    {
+      "task_id": "doc-behav-011",
+      "task_type": "doc_behavior_mismatch",
+      "title": "doc-behavior generated task 011",
+      "problem_statement": "Fix documented behavior for generated task 011.",
+      "repo_a_name": "synthetic/doc-consumer-011",
+      "repo_b_name": "synthetic/doclib",
+      "repo_a_id": 940000011,
+      "repo_b_id": 940000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-behav-011.patch",
+      "gold_patch_path": "patches/gold/doc-behav-011.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_011_article_slug_specials"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/formatting.py"
+      ],
+      "expected_relevant_symbols": [
+        "slugify"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "doclib.text.slugify"
+      ],
+      "test_context": "Generated real task 011"
+    },
+    {
+      "task_id": "doc-behav-012",
+      "task_type": "doc_behavior_mismatch",
+      "title": "doc-behavior generated task 012",
+      "problem_statement": "Fix documented behavior for generated task 012.",
+      "repo_a_name": "synthetic/doc-consumer-012",
+      "repo_b_name": "synthetic/doclib",
+      "repo_a_id": 940000012,
+      "repo_b_id": 940000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-behav-012.patch",
+      "gold_patch_path": "patches/gold/doc-behav-012.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_012_article_slug_hyphen_normalization"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/formatting.py"
+      ],
+      "expected_relevant_symbols": [
+        "slugify"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "doclib.text.slugify"
+      ],
+      "test_context": "Generated real task 012"
+    },
+    {
+      "task_id": "doc-behav-013",
+      "task_type": "doc_behavior_mismatch",
+      "title": "doc-behavior generated task 013",
+      "problem_statement": "Fix documented behavior for generated task 013.",
+      "repo_a_name": "synthetic/doc-consumer-013",
+      "repo_b_name": "synthetic/doclib",
+      "repo_a_id": 940000013,
+      "repo_b_id": 940000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-behav-013.patch",
+      "gold_patch_path": "patches/gold/doc-behav-013.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_013_preview_text_truncation"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/formatting.py"
+      ],
+      "expected_relevant_symbols": [
+        "slugify"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "doclib.text.slugify"
+      ],
+      "test_context": "Generated real task 013"
+    },
+    {
+      "task_id": "doc-behav-014",
+      "task_type": "doc_behavior_mismatch",
+      "title": "doc-behavior generated task 014",
+      "problem_statement": "Fix documented behavior for generated task 014.",
+      "repo_a_name": "synthetic/doc-consumer-014",
+      "repo_b_name": "synthetic/doclib",
+      "repo_a_id": 940000014,
+      "repo_b_id": 940000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-behav-014.patch",
+      "gold_patch_path": "patches/gold/doc-behav-014.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_014_preview_text_word_based"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/formatting.py"
+      ],
+      "expected_relevant_symbols": [
+        "slugify"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "doclib.text.slugify"
+      ],
+      "test_context": "Generated real task 014"
+    },
+    {
+      "task_id": "doc-behav-015",
+      "task_type": "doc_behavior_mismatch",
+      "title": "doc-behavior generated task 015",
+      "problem_statement": "Fix documented behavior for generated task 015.",
+      "repo_a_name": "synthetic/doc-consumer-015",
+      "repo_b_name": "synthetic/doclib",
+      "repo_a_id": 940000015,
+      "repo_b_id": 940000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-behav-015.patch",
+      "gold_patch_path": "patches/gold/doc-behav-015.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_015_author_display_title_case"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/formatting.py"
+      ],
+      "expected_relevant_symbols": [
+        "slugify"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "doclib.text.slugify"
+      ],
+      "test_context": "Generated real task 015"
+    },
+    {
+      "task_id": "doc-behav-016",
+      "task_type": "doc_behavior_mismatch",
+      "title": "doc-behavior generated task 016",
+      "problem_statement": "Fix documented behavior for generated task 016.",
+      "repo_a_name": "synthetic/doc-consumer-016",
+      "repo_b_name": "synthetic/doclib",
+      "repo_a_id": 940000016,
+      "repo_b_id": 940000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-behav-016.patch",
+      "gold_patch_path": "patches/gold/doc-behav-016.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_016_author_display_both_names"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/formatting.py"
+      ],
+      "expected_relevant_symbols": [
+        "slugify"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "doclib.text.slugify"
+      ],
+      "test_context": "Generated real task 016"
+    },
+    {
+      "task_id": "doc-behav-017",
+      "task_type": "doc_behavior_mismatch",
+      "title": "doc-behavior generated task 017",
+      "problem_statement": "Fix documented behavior for generated task 017.",
+      "repo_a_name": "synthetic/doc-consumer-017",
+      "repo_b_name": "synthetic/doclib",
+      "repo_a_id": 940000017,
+      "repo_b_id": 940000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-behav-017.patch",
+      "gold_patch_path": "patches/gold/doc-behav-017.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_017_compute_score_ratio_nan"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/validation.py"
+      ],
+      "expected_relevant_symbols": [
+        "safe_divide"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "doclib.numbers.safe_divide"
+      ],
+      "test_context": "Generated real task 017"
+    },
+    {
+      "task_id": "doc-behav-018",
+      "task_type": "doc_behavior_mismatch",
+      "title": "doc-behavior generated task 018",
+      "problem_statement": "Fix documented behavior for generated task 018.",
+      "repo_a_name": "synthetic/doc-consumer-018",
+      "repo_b_name": "synthetic/doclib",
+      "repo_a_id": 940000018,
+      "repo_b_id": 940000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-behav-018.patch",
+      "gold_patch_path": "patches/gold/doc-behav-018.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_018_compute_score_ratio_operand_order"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/validation.py"
+      ],
+      "expected_relevant_symbols": [
+        "safe_divide"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "doclib.numbers.safe_divide"
+      ],
+      "test_context": "Generated real task 018"
+    },
+    {
+      "task_id": "doc-behav-019",
+      "task_type": "doc_behavior_mismatch",
+      "title": "doc-behavior generated task 019",
+      "problem_statement": "Fix documented behavior for generated task 019.",
+      "repo_a_name": "synthetic/doc-consumer-019",
+      "repo_b_name": "synthetic/doclib",
+      "repo_a_id": 940000019,
+      "repo_b_id": 940000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-behav-019.patch",
+      "gold_patch_path": "patches/gold/doc-behav-019.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_019_bounded_progress_nan"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/validation.py"
+      ],
+      "expected_relevant_symbols": [
+        "safe_divide"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "doclib.numbers.safe_divide"
+      ],
+      "test_context": "Generated real task 019"
+    },
+    {
+      "task_id": "doc-behav-020",
+      "task_type": "doc_behavior_mismatch",
+      "title": "doc-behavior generated task 020",
+      "problem_statement": "Fix documented behavior for generated task 020.",
+      "repo_a_name": "synthetic/doc-consumer-020",
+      "repo_b_name": "synthetic/doclib",
+      "repo_a_id": 940000020,
+      "repo_b_id": 940000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-behav-020.patch",
+      "gold_patch_path": "patches/gold/doc-behav-020.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_020_bounded_progress_upper_bound"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/validation.py"
+      ],
+      "expected_relevant_symbols": [
+        "safe_divide"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "doclib.numbers.safe_divide"
+      ],
+      "test_context": "Generated real task 020"
+    },
+    {
+      "task_id": "doc-behav-021",
+      "task_type": "doc_behavior_mismatch",
+      "title": "doc-behavior generated task 021",
+      "problem_statement": "Fix documented behavior for generated task 021.",
+      "repo_a_name": "synthetic/doc-consumer-021",
+      "repo_b_name": "synthetic/doclib",
+      "repo_a_id": 940000021,
+      "repo_b_id": 940000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-behav-021.patch",
+      "gold_patch_path": "patches/gold/doc-behav-021.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_021_completion_summary_zero_total"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/reporting.py"
+      ],
+      "expected_relevant_symbols": [
+        "percentage_of"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "doclib.numbers.percentage_of"
+      ],
+      "test_context": "Generated real task 021"
+    },
+    {
+      "task_id": "doc-behav-022",
+      "task_type": "doc_behavior_mismatch",
+      "title": "doc-behavior generated task 022",
+      "problem_statement": "Fix documented behavior for generated task 022.",
+      "repo_a_name": "synthetic/doc-consumer-022",
+      "repo_b_name": "synthetic/doclib",
+      "repo_a_id": 940000022,
+      "repo_b_id": 940000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-behav-022.patch",
+      "gold_patch_path": "patches/gold/doc-behav-022.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_022_completion_summary_operand_order"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/reporting.py"
+      ],
+      "expected_relevant_symbols": [
+        "percentage_of"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "doclib.numbers.percentage_of"
+      ],
+      "test_context": "Generated real task 022"
+    },
+    {
+      "task_id": "doc-behav-023",
+      "task_type": "doc_behavior_mismatch",
+      "title": "doc-behavior generated task 023",
+      "problem_statement": "Fix documented behavior for generated task 023.",
+      "repo_a_name": "synthetic/doc-consumer-023",
+      "repo_b_name": "synthetic/doclib",
+      "repo_a_id": 940000023,
+      "repo_b_id": 940000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-behav-023.patch",
+      "gold_patch_path": "patches/gold/doc-behav-023.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_023_deadline_label_none"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/reporting.py"
+      ],
+      "expected_relevant_symbols": [
+        "percentage_of"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "doclib.numbers.percentage_of"
+      ],
+      "test_context": "Generated real task 023"
+    },
+    {
+      "task_id": "doc-behav-024",
+      "task_type": "doc_behavior_mismatch",
+      "title": "doc-behavior generated task 024",
+      "problem_statement": "Fix documented behavior for generated task 024.",
+      "repo_a_name": "synthetic/doc-consumer-024",
+      "repo_b_name": "synthetic/doclib",
+      "repo_a_id": 940000024,
+      "repo_b_id": 940000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-behav-024.patch",
+      "gold_patch_path": "patches/gold/doc-behav-024.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_024_deadline_label_respects_input"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/reporting.py"
+      ],
+      "expected_relevant_symbols": [
+        "percentage_of"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "doclib.numbers.percentage_of"
+      ],
+      "test_context": "Generated real task 024"
+    },
+    {
+      "task_id": "doc-behav-025",
+      "task_type": "doc_behavior_mismatch",
+      "title": "doc-behavior generated task 025",
+      "problem_statement": "Fix documented behavior for generated task 025.",
+      "repo_a_name": "synthetic/doc-consumer-025",
+      "repo_b_name": "synthetic/doclib",
+      "repo_a_id": 940000025,
+      "repo_b_id": 940000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-behav-025.patch",
+      "gold_patch_path": "patches/gold/doc-behav-025.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_025_days_until_deadline_backward"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/reporting.py"
+      ],
+      "expected_relevant_symbols": [
+        "percentage_of"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "doclib.numbers.percentage_of"
+      ],
+      "test_context": "Generated real task 025"
+    },
+    {
+      "task_id": "doc-behav-026",
+      "task_type": "doc_behavior_mismatch",
+      "title": "doc-behavior generated task 026",
+      "problem_statement": "Fix documented behavior for generated task 026.",
+      "repo_a_name": "synthetic/doc-consumer-026",
+      "repo_b_name": "synthetic/doclib",
+      "repo_a_id": 940000026,
+      "repo_b_id": 940000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-behav-026.patch",
+      "gold_patch_path": "patches/gold/doc-behav-026.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_026_days_until_deadline_forward"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/reporting.py"
+      ],
+      "expected_relevant_symbols": [
+        "percentage_of"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "doclib.numbers.percentage_of"
+      ],
+      "test_context": "Generated real task 026"
+    },
+    {
+      "task_id": "doc-behav-027",
+      "task_type": "doc_behavior_mismatch",
+      "title": "doc-behavior generated task 027",
+      "problem_statement": "Fix documented behavior for generated task 027.",
+      "repo_a_name": "synthetic/doc-consumer-027",
+      "repo_b_name": "synthetic/doclib",
+      "repo_a_id": 940000027,
+      "repo_b_id": 940000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-behav-027.patch",
+      "gold_patch_path": "patches/gold/doc-behav-027.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_027_next_review_date_progresses"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/reporting.py"
+      ],
+      "expected_relevant_symbols": [
+        "percentage_of"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "doclib.numbers.percentage_of"
+      ],
+      "test_context": "Generated real task 027"
+    },
+    {
+      "task_id": "doc-behav-028",
+      "task_type": "doc_behavior_mismatch",
+      "title": "doc-behavior generated task 028",
+      "problem_statement": "Fix documented behavior for generated task 028.",
+      "repo_a_name": "synthetic/doc-consumer-028",
+      "repo_b_name": "synthetic/doclib",
+      "repo_a_id": 940000028,
+      "repo_b_id": 940000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-behav-028.patch",
+      "gold_patch_path": "patches/gold/doc-behav-028.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_028_next_review_business_days"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/reporting.py"
+      ],
+      "expected_relevant_symbols": [
+        "percentage_of"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "doclib.numbers.percentage_of"
+      ],
+      "test_context": "Generated real task 028"
+    },
+    {
+      "task_id": "doc-behav-029",
+      "task_type": "doc_behavior_mismatch",
+      "title": "doc-behavior generated task 029",
+      "problem_statement": "Fix documented behavior for generated task 029.",
+      "repo_a_name": "synthetic/doc-consumer-029",
+      "repo_b_name": "synthetic/doclib",
+      "repo_a_id": 940000029,
+      "repo_b_id": 940000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-behav-029.patch",
+      "gold_patch_path": "patches/gold/doc-behav-029.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_029_bounded_progress_precision"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/validation.py"
+      ],
+      "expected_relevant_symbols": [
+        "safe_divide"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "doclib.numbers.safe_divide"
+      ],
+      "test_context": "Generated real task 029"
+    },
+    {
+      "task_id": "doc-behav-030",
+      "task_type": "doc_behavior_mismatch",
+      "title": "doc-behavior generated task 030",
+      "problem_statement": "Fix documented behavior for generated task 030.",
+      "repo_a_name": "synthetic/doc-consumer-030",
+      "repo_b_name": "synthetic/doclib",
+      "repo_a_id": 940000030,
+      "repo_b_id": 940000000,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/doc-behav-030.patch",
+      "gold_patch_path": "patches/gold/doc-behav-030.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_030_preview_text_suffix"
+      ],
+      "expected_relevant_files": [
+        "consumer_app/formatting.py"
+      ],
+      "expected_relevant_symbols": [
+        "slugify"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki"
+      ],
+      "visible_api_names": [
+        "doclib.text.slugify"
+      ],
+      "test_context": "Generated real task 030"
     }
   ]
 }

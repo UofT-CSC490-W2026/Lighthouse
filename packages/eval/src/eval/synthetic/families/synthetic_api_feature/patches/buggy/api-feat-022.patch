@@ -1,0 +1,12 @@
+diff --git a/consumer_app/reports.py b/consumer_app/reports.py
+--- a/consumer_app/reports.py
++++ b/consumer_app/reports.py
+@@ -5,7 +5,7 @@
+ 
+ 
+ def task_summary(task_name: str, seconds: int) -> str:
+-    return f"{task_name}: {format_duration(seconds)}"
++    return f"{task_name} - {format_duration(seconds)}"
+ 
+ 
+ def storage_report(files: list[tuple[str, int]]) -> list[str]:

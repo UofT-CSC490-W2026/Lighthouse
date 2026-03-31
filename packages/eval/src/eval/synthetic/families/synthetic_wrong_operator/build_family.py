@@ -9,7 +9,7 @@ TASKS_PATH = FAMILY_DIR / "tasks.json"
 FAMILY_CONFIG_PATH = FAMILY_DIR / "family.json"
 PATCHES_DIR = FAMILY_DIR / "patches"
 
-TASK_IDS = tuple(f"{index:03d}" for index in range(1, 11))
+TASK_IDS = tuple(f"{index:03d}" for index in range(1, 31))
 
 
 def main() -> None:

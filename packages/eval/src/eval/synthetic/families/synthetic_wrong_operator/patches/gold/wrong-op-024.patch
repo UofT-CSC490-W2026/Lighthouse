@@ -1,0 +1,12 @@
+diff --git a/mathkit/statistics.py b/mathkit/statistics.py
+--- a/mathkit/statistics.py
++++ b/mathkit/statistics.py
+@@ -5,7 +5,7 @@
+     """Return the arithmetic mean. Raise ValueError when the list is empty."""
+     if not values:
+         raise ValueError("Cannot compute mean of empty list")
+-    return sum(values) / (len(values) - 1)
++    return sum(values) / len(values)
+ 
+ 
+ def median(values: list[float]) -> float:

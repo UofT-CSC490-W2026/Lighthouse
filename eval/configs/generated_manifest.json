@@ -42,8 +42,40 @@
       3
     ],
     "repeat_count": 3,
-    "task_count": 30,
+    "requested_task_count": 30,
     "top_k": 10
   },
-  "pending_file": "eval/configs/pending_configs.txt"
+  "pending_file": "eval/configs/pending_configs.txt",
+  "task_count_by_family": {
+    "synthetic-ab-contracts": {
+      "available_task_count": 30,
+      "effective_task_count": 30,
+      "requested_task_count": 30
+    },
+    "synthetic-api-feature": {
+      "available_task_count": 30,
+      "effective_task_count": 30,
+      "requested_task_count": 30
+    },
+    "synthetic-doc-behavior": {
+      "available_task_count": 30,
+      "effective_task_count": 30,
+      "requested_task_count": 30
+    },
+    "synthetic-doc-feature": {
+      "available_task_count": 30,
+      "effective_task_count": 30,
+      "requested_task_count": 30
+    },
+    "synthetic-type-coercion": {
+      "available_task_count": 30,
+      "effective_task_count": 30,
+      "requested_task_count": 30
+    },
+    "synthetic-wrong-operator": {
+      "available_task_count": 30,
+      "effective_task_count": 30,
+      "requested_task_count": 30
+    }
+  }
 }

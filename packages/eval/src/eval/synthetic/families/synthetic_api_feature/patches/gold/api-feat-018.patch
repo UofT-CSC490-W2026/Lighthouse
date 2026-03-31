@@ -1,0 +1,12 @@
+diff --git a/consumer_app/handlers.py b/consumer_app/handlers.py
+--- a/consumer_app/handlers.py
++++ b/consumer_app/handlers.py
+@@ -7,7 +7,7 @@
+     errors: list[str] = []
+     if not validate_ip_v4(host):
+         errors.append(f"invalid host: {host}")
+-    if validate_port(port):
++    if not validate_port(port):
+         errors.append(f"invalid port: {port}")
+     return errors
+ 

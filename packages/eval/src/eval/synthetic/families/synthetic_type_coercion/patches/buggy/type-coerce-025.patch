@@ -1,0 +1,12 @@
+diff --git a/transforms/validators.py b/transforms/validators.py
+--- a/transforms/validators.py
++++ b/transforms/validators.py
+@@ -12,7 +12,7 @@
+ 
+ def validate_non_empty(text: str) -> str:
+     """Validate that text is non-empty after stripping whitespace."""
+-    stripped = text.strip()
++    stripped = text
+     if not stripped:
+         raise ValueError("Text must not be empty or whitespace-only")
+     return stripped

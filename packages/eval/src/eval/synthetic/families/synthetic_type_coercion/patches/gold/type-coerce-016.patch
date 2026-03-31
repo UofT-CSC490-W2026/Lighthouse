@@ -1,0 +1,12 @@
+diff --git a/transforms/formatters.py b/transforms/formatters.py
+--- a/transforms/formatters.py
++++ b/transforms/formatters.py
+@@ -3,7 +3,7 @@
+ 
+ def format_percentage(value: float, decimals: int = 1) -> str:
+     """Format a ratio (0.0-1.0) as a percentage string."""
+-    return f"{value * 100:.1f}%"
++    return f"{value * 100:.{decimals}f}%"
+ 
+ 
+ def format_bytes(size: int) -> str:

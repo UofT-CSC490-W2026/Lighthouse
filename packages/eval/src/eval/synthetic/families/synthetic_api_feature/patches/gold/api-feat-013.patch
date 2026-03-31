@@ -1,0 +1,12 @@
+diff --git a/consumer_app/pipelines.py b/consumer_app/pipelines.py
+--- a/consumer_app/pipelines.py
++++ b/consumer_app/pipelines.py
+@@ -10,7 +10,7 @@
+ 
+ def export_row(record: dict) -> str:
+     flat = flatten_dict(record)
+-    return build_csv_row([str(v) for v in record.values()])
++    return build_csv_row([str(v) for v in flat.values()])
+ 
+ 
+ def camel_keys(data: dict[str, object]) -> dict[str, object]:

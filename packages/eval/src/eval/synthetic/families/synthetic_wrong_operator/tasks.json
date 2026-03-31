@@ -3,7 +3,7 @@
   "family_version": "1",
   "generation_config": {
     "task_type": "logic_wrong_operator",
-    "task_count": 10,
+    "task_count": 30,
     "shared_library_repo_count": 0,
     "consumer_repo_mode": "one_a_per_task",
     "python_version_target": "3.11",
@@ -285,6 +285,606 @@
       ],
       "visible_api_names": [],
       "test_context": "test_truncate_long fails because truncate(\"hello world\", 8) returns \"hello world...\" instead of \"hello...\". The slice takes 11 characters instead of 5 before appending the suffix."
+    },
+    {
+      "task_id": "wrong-op-011",
+      "task_type": "logic_wrong_operator",
+      "title": "wrong-operator generated task 011",
+      "problem_statement": "Fix generated operator bug 011.",
+      "repo_a_name": "synthetic/mathkit-011",
+      "repo_b_name": "",
+      "repo_a_id": 920000011,
+      "repo_b_id": 0,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/wrong-op-011.patch",
+      "gold_patch_path": "patches/gold/wrong-op-011.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_011_safe_subtract_plus"
+      ],
+      "expected_relevant_files": [
+        "mathkit/arithmetic.py"
+      ],
+      "expected_relevant_symbols": [
+        "safe_subtract"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki",
+        "ast",
+        "combined"
+      ],
+      "visible_api_names": [],
+      "test_context": "Generated real task 011"
+    },
+    {
+      "task_id": "wrong-op-012",
+      "task_type": "logic_wrong_operator",
+      "title": "wrong-operator generated task 012",
+      "problem_statement": "Fix generated operator bug 012.",
+      "repo_a_name": "synthetic/mathkit-012",
+      "repo_b_name": "",
+      "repo_a_id": 920000012,
+      "repo_b_id": 0,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/wrong-op-012.patch",
+      "gold_patch_path": "patches/gold/wrong-op-012.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_012_safe_subtract_multiply"
+      ],
+      "expected_relevant_files": [
+        "mathkit/arithmetic.py"
+      ],
+      "expected_relevant_symbols": [
+        "safe_subtract"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki",
+        "ast",
+        "combined"
+      ],
+      "visible_api_names": [],
+      "test_context": "Generated real task 012"
+    },
+    {
+      "task_id": "wrong-op-013",
+      "task_type": "logic_wrong_operator",
+      "title": "wrong-operator generated task 013",
+      "problem_statement": "Fix generated operator bug 013.",
+      "repo_a_name": "synthetic/mathkit-013",
+      "repo_b_name": "",
+      "repo_a_id": 920000013,
+      "repo_b_id": 0,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/wrong-op-013.patch",
+      "gold_patch_path": "patches/gold/wrong-op-013.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_013_integer_divide_modulo"
+      ],
+      "expected_relevant_files": [
+        "mathkit/arithmetic.py"
+      ],
+      "expected_relevant_symbols": [
+        "safe_subtract"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki",
+        "ast",
+        "combined"
+      ],
+      "visible_api_names": [],
+      "test_context": "Generated real task 013"
+    },
+    {
+      "task_id": "wrong-op-014",
+      "task_type": "logic_wrong_operator",
+      "title": "wrong-operator generated task 014",
+      "problem_statement": "Fix generated operator bug 014.",
+      "repo_a_name": "synthetic/mathkit-014",
+      "repo_b_name": "",
+      "repo_a_id": 920000014,
+      "repo_b_id": 0,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/wrong-op-014.patch",
+      "gold_patch_path": "patches/gold/wrong-op-014.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_014_integer_divide_negative_floor"
+      ],
+      "expected_relevant_files": [
+        "mathkit/arithmetic.py"
+      ],
+      "expected_relevant_symbols": [
+        "safe_subtract"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki",
+        "ast",
+        "combined"
+      ],
+      "visible_api_names": [],
+      "test_context": "Generated real task 014"
+    },
+    {
+      "task_id": "wrong-op-015",
+      "task_type": "logic_wrong_operator",
+      "title": "wrong-operator generated task 015",
+      "problem_statement": "Fix generated operator bug 015.",
+      "repo_a_name": "synthetic/mathkit-015",
+      "repo_b_name": "",
+      "repo_a_id": 920000015,
+      "repo_b_id": 0,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/wrong-op-015.patch",
+      "gold_patch_path": "patches/gold/wrong-op-015.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_015_clamp_lower_bound"
+      ],
+      "expected_relevant_files": [
+        "mathkit/comparison.py"
+      ],
+      "expected_relevant_symbols": [
+        "clamp"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki",
+        "ast",
+        "combined"
+      ],
+      "visible_api_names": [],
+      "test_context": "Generated real task 015"
+    },
+    {
+      "task_id": "wrong-op-016",
+      "task_type": "logic_wrong_operator",
+      "title": "wrong-operator generated task 016",
+      "problem_statement": "Fix generated operator bug 016.",
+      "repo_a_name": "synthetic/mathkit-016",
+      "repo_b_name": "",
+      "repo_a_id": 920000016,
+      "repo_b_id": 0,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/wrong-op-016.patch",
+      "gold_patch_path": "patches/gold/wrong-op-016.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_016_clamp_upper_inclusive"
+      ],
+      "expected_relevant_files": [
+        "mathkit/comparison.py"
+      ],
+      "expected_relevant_symbols": [
+        "clamp"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki",
+        "ast",
+        "combined"
+      ],
+      "visible_api_names": [],
+      "test_context": "Generated real task 016"
+    },
+    {
+      "task_id": "wrong-op-017",
+      "task_type": "logic_wrong_operator",
+      "title": "wrong-operator generated task 017",
+      "problem_statement": "Fix generated operator bug 017.",
+      "repo_a_name": "synthetic/mathkit-017",
+      "repo_b_name": "",
+      "repo_a_id": 920000017,
+      "repo_b_id": 0,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/wrong-op-017.patch",
+      "gold_patch_path": "patches/gold/wrong-op-017.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_017_is_in_range_boolean"
+      ],
+      "expected_relevant_files": [
+        "mathkit/comparison.py"
+      ],
+      "expected_relevant_symbols": [
+        "clamp"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki",
+        "ast",
+        "combined"
+      ],
+      "visible_api_names": [],
+      "test_context": "Generated real task 017"
+    },
+    {
+      "task_id": "wrong-op-018",
+      "task_type": "logic_wrong_operator",
+      "title": "wrong-operator generated task 018",
+      "problem_statement": "Fix generated operator bug 018.",
+      "repo_a_name": "synthetic/mathkit-018",
+      "repo_b_name": "",
+      "repo_a_id": 920000018,
+      "repo_b_id": 0,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/wrong-op-018.patch",
+      "gold_patch_path": "patches/gold/wrong-op-018.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_018_is_in_range_boundaries"
+      ],
+      "expected_relevant_files": [
+        "mathkit/comparison.py"
+      ],
+      "expected_relevant_symbols": [
+        "clamp"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki",
+        "ast",
+        "combined"
+      ],
+      "visible_api_names": [],
+      "test_context": "Generated real task 018"
+    },
+    {
+      "task_id": "wrong-op-019",
+      "task_type": "logic_wrong_operator",
+      "title": "wrong-operator generated task 019",
+      "problem_statement": "Fix generated operator bug 019.",
+      "repo_a_name": "synthetic/mathkit-019",
+      "repo_b_name": "",
+      "repo_a_id": 920000019,
+      "repo_b_id": 0,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/wrong-op-019.patch",
+      "gold_patch_path": "patches/gold/wrong-op-019.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_019_overlaps_or"
+      ],
+      "expected_relevant_files": [
+        "mathkit/ranges.py"
+      ],
+      "expected_relevant_symbols": [
+        "overlaps"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki",
+        "ast",
+        "combined"
+      ],
+      "visible_api_names": [],
+      "test_context": "Generated real task 019"
+    },
+    {
+      "task_id": "wrong-op-020",
+      "task_type": "logic_wrong_operator",
+      "title": "wrong-operator generated task 020",
+      "problem_statement": "Fix generated operator bug 020.",
+      "repo_a_name": "synthetic/mathkit-020",
+      "repo_b_name": "",
+      "repo_a_id": 920000020,
+      "repo_b_id": 0,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/wrong-op-020.patch",
+      "gold_patch_path": "patches/gold/wrong-op-020.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_020_overlaps_touching"
+      ],
+      "expected_relevant_files": [
+        "mathkit/ranges.py"
+      ],
+      "expected_relevant_symbols": [
+        "overlaps"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki",
+        "ast",
+        "combined"
+      ],
+      "visible_api_names": [],
+      "test_context": "Generated real task 020"
+    },
+    {
+      "task_id": "wrong-op-021",
+      "task_type": "logic_wrong_operator",
+      "title": "wrong-operator generated task 021",
+      "problem_statement": "Fix generated operator bug 021.",
+      "repo_a_name": "synthetic/mathkit-021",
+      "repo_b_name": "",
+      "repo_a_id": 920000021,
+      "repo_b_id": 0,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/wrong-op-021.patch",
+      "gold_patch_path": "patches/gold/wrong-op-021.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_021_span_length_off_by_two"
+      ],
+      "expected_relevant_files": [
+        "mathkit/ranges.py"
+      ],
+      "expected_relevant_symbols": [
+        "overlaps"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki",
+        "ast",
+        "combined"
+      ],
+      "visible_api_names": [],
+      "test_context": "Generated real task 021"
+    },
+    {
+      "task_id": "wrong-op-022",
+      "task_type": "logic_wrong_operator",
+      "title": "wrong-operator generated task 022",
+      "problem_statement": "Fix generated operator bug 022.",
+      "repo_a_name": "synthetic/mathkit-022",
+      "repo_b_name": "",
+      "repo_a_id": 920000022,
+      "repo_b_id": 0,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/wrong-op-022.patch",
+      "gold_patch_path": "patches/gold/wrong-op-022.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_022_span_length_missing_inclusive"
+      ],
+      "expected_relevant_files": [
+        "mathkit/ranges.py"
+      ],
+      "expected_relevant_symbols": [
+        "overlaps"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki",
+        "ast",
+        "combined"
+      ],
+      "visible_api_names": [],
+      "test_context": "Generated real task 022"
+    },
+    {
+      "task_id": "wrong-op-023",
+      "task_type": "logic_wrong_operator",
+      "title": "wrong-operator generated task 023",
+      "problem_statement": "Fix generated operator bug 023.",
+      "repo_a_name": "synthetic/mathkit-023",
+      "repo_b_name": "",
+      "repo_a_id": 920000023,
+      "repo_b_id": 0,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/wrong-op-023.patch",
+      "gold_patch_path": "patches/gold/wrong-op-023.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_023_mean_integer_division"
+      ],
+      "expected_relevant_files": [
+        "mathkit/statistics.py"
+      ],
+      "expected_relevant_symbols": [
+        "mean"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki",
+        "ast",
+        "combined"
+      ],
+      "visible_api_names": [],
+      "test_context": "Generated real task 023"
+    },
+    {
+      "task_id": "wrong-op-024",
+      "task_type": "logic_wrong_operator",
+      "title": "wrong-operator generated task 024",
+      "problem_statement": "Fix generated operator bug 024.",
+      "repo_a_name": "synthetic/mathkit-024",
+      "repo_b_name": "",
+      "repo_a_id": 920000024,
+      "repo_b_id": 0,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/wrong-op-024.patch",
+      "gold_patch_path": "patches/gold/wrong-op-024.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_024_mean_wrong_divisor"
+      ],
+      "expected_relevant_files": [
+        "mathkit/statistics.py"
+      ],
+      "expected_relevant_symbols": [
+        "mean"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki",
+        "ast",
+        "combined"
+      ],
+      "visible_api_names": [],
+      "test_context": "Generated real task 024"
+    },
+    {
+      "task_id": "wrong-op-025",
+      "task_type": "logic_wrong_operator",
+      "title": "wrong-operator generated task 025",
+      "problem_statement": "Fix generated operator bug 025.",
+      "repo_a_name": "synthetic/mathkit-025",
+      "repo_b_name": "",
+      "repo_a_id": 920000025,
+      "repo_b_id": 0,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/wrong-op-025.patch",
+      "gold_patch_path": "patches/gold/wrong-op-025.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_025_median_even_indices"
+      ],
+      "expected_relevant_files": [
+        "mathkit/statistics.py"
+      ],
+      "expected_relevant_symbols": [
+        "mean"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki",
+        "ast",
+        "combined"
+      ],
+      "visible_api_names": [],
+      "test_context": "Generated real task 025"
+    },
+    {
+      "task_id": "wrong-op-026",
+      "task_type": "logic_wrong_operator",
+      "title": "wrong-operator generated task 026",
+      "problem_statement": "Fix generated operator bug 026.",
+      "repo_a_name": "synthetic/mathkit-026",
+      "repo_b_name": "",
+      "repo_a_id": 920000026,
+      "repo_b_id": 0,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/wrong-op-026.patch",
+      "gold_patch_path": "patches/gold/wrong-op-026.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_026_median_odd_index"
+      ],
+      "expected_relevant_files": [
+        "mathkit/statistics.py"
+      ],
+      "expected_relevant_symbols": [
+        "mean"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki",
+        "ast",
+        "combined"
+      ],
+      "visible_api_names": [],
+      "test_context": "Generated real task 026"
+    },
+    {
+      "task_id": "wrong-op-027",
+      "task_type": "logic_wrong_operator",
+      "title": "wrong-operator generated task 027",
+      "problem_statement": "Fix generated operator bug 027.",
+      "repo_a_name": "synthetic/mathkit-027",
+      "repo_b_name": "",
+      "repo_a_id": 920000027,
+      "repo_b_id": 0,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/wrong-op-027.patch",
+      "gold_patch_path": "patches/gold/wrong-op-027.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_027_count_words_split_space"
+      ],
+      "expected_relevant_files": [
+        "mathkit/strings.py"
+      ],
+      "expected_relevant_symbols": [
+        "count_words"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki",
+        "ast",
+        "combined"
+      ],
+      "visible_api_names": [],
+      "test_context": "Generated real task 027"
+    },
+    {
+      "task_id": "wrong-op-028",
+      "task_type": "logic_wrong_operator",
+      "title": "wrong-operator generated task 028",
+      "problem_statement": "Fix generated operator bug 028.",
+      "repo_a_name": "synthetic/mathkit-028",
+      "repo_b_name": "",
+      "repo_a_id": 920000028,
+      "repo_b_id": 0,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/wrong-op-028.patch",
+      "gold_patch_path": "patches/gold/wrong-op-028.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_028_count_words_empty"
+      ],
+      "expected_relevant_files": [
+        "mathkit/strings.py"
+      ],
+      "expected_relevant_symbols": [
+        "count_words"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki",
+        "ast",
+        "combined"
+      ],
+      "visible_api_names": [],
+      "test_context": "Generated real task 028"
+    },
+    {
+      "task_id": "wrong-op-029",
+      "task_type": "logic_wrong_operator",
+      "title": "wrong-operator generated task 029",
+      "problem_statement": "Fix generated operator bug 029.",
+      "repo_a_name": "synthetic/mathkit-029",
+      "repo_b_name": "",
+      "repo_a_id": 920000029,
+      "repo_b_id": 0,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/wrong-op-029.patch",
+      "gold_patch_path": "patches/gold/wrong-op-029.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_029_truncate_suffix_budget"
+      ],
+      "expected_relevant_files": [
+        "mathkit/strings.py"
+      ],
+      "expected_relevant_symbols": [
+        "count_words"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki",
+        "ast",
+        "combined"
+      ],
+      "visible_api_names": [],
+      "test_context": "Generated real task 029"
+    },
+    {
+      "task_id": "wrong-op-030",
+      "task_type": "logic_wrong_operator",
+      "title": "wrong-operator generated task 030",
+      "problem_statement": "Fix generated operator bug 030.",
+      "repo_a_name": "synthetic/mathkit-030",
+      "repo_b_name": "",
+      "repo_a_id": 920000030,
+      "repo_b_id": 0,
+      "branch": "main",
+      "buggy_patch_path": "patches/buggy/wrong-op-030.patch",
+      "gold_patch_path": "patches/gold/wrong-op-030.patch",
+      "pytest_targets": [
+        "tests/test_generated_real_tasks.py::test_task_030_truncate_exact_length"
+      ],
+      "expected_relevant_files": [
+        "mathkit/strings.py"
+      ],
+      "expected_relevant_symbols": [
+        "count_words"
+      ],
+      "context_modes_supported": [
+        "code",
+        "wiki",
+        "ast",
+        "combined"
+      ],
+      "visible_api_names": [],
+      "test_context": "Generated real task 030"
     }
   ]
 }

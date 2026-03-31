@@ -1,0 +1,11 @@
+diff --git a/transforms/formatters.py b/transforms/formatters.py
+--- a/transforms/formatters.py
++++ b/transforms/formatters.py
+@@ -10,6 +10,6 @@
+     """Format byte count as human-readable string."""
+     if size < 1024:
+         return f"{size} B"
+-    if size < 1024:
++    if size < 1024 * 1024:
+         return f"{size / 1024:.1f} KB"
+     return f"{size / (1024 * 1024):.1f} MB"

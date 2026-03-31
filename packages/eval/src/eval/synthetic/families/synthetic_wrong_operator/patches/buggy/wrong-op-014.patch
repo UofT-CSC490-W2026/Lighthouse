@@ -1,0 +1,9 @@
+diff --git a/mathkit/arithmetic.py b/mathkit/arithmetic.py
+--- a/mathkit/arithmetic.py
++++ b/mathkit/arithmetic.py
+@@ -10,4 +10,4 @@
+     """Return the integer quotient of a divided by b, or zero when b is zero."""
+     if b == 0:
+         return 0
+-    return a // b
++    return int(a / b)

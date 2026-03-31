@@ -1,0 +1,12 @@
+diff --git a/consumer_app/exports.py b/consumer_app/exports.py
+--- a/consumer_app/exports.py
++++ b/consumer_app/exports.py
+@@ -10,7 +10,7 @@
+     groups = group_by(records, group_field)
+     totals = {}
+     for key, group_records in groups.items():
+-        totals[key] = sum_field(group_records, value_field)
++        totals[key] = sum_field(records, value_field)
+     return format_table(totals, title="Group Totals")
+ 
+ 

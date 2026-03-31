@@ -1,0 +1,12 @@
+diff --git a/consumer_app/formatting.py b/consumer_app/formatting.py
+--- a/consumer_app/formatting.py
++++ b/consumer_app/formatting.py
+@@ -5,7 +5,7 @@
+ 
+ def article_slug(title: str) -> str:
+     """Generate a URL slug for an article title."""
+-    return slugify(title)
++    return title.strip().lower()
+ 
+ 
+ def preview_text(body: str, max_words: int = 20) -> str:

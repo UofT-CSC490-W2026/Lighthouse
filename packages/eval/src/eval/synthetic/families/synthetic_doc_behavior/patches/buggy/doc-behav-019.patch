@@ -1,0 +1,9 @@
+diff --git a/consumer_app/validation.py b/consumer_app/validation.py
+--- a/consumer_app/validation.py
++++ b/consumer_app/validation.py
+@@ -10,4 +10,4 @@
+ 
+ def bounded_progress(value: float) -> float:
+     """Clamp a progress value to 0-100."""
+-    return clamp_to_range(value, 0.0, 100.0)
++    return value

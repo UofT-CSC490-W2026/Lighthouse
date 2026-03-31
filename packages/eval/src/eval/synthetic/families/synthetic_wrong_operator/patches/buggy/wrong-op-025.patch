@@ -1,0 +1,10 @@
+diff --git a/mathkit/statistics.py b/mathkit/statistics.py
+--- a/mathkit/statistics.py
++++ b/mathkit/statistics.py
+@@ -15,5 +15,5 @@
+     ordered = sorted(values)
+     mid = len(ordered) // 2
+     if len(ordered) % 2 == 0:
+-        return (ordered[mid - 1] + ordered[mid]) / 2
++        return (ordered[mid] + ordered[mid + 1]) / 2
+     return ordered[mid]

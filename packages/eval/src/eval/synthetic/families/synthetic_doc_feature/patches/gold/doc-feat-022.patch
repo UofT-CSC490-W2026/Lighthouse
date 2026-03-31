@@ -1,0 +1,12 @@
+diff --git a/consumer_app/exports.py b/consumer_app/exports.py
+--- a/consumer_app/exports.py
++++ b/consumer_app/exports.py
+@@ -11,7 +11,7 @@
+     totals = {}
+     for key, group_records in groups.items():
+         totals[key] = sum_field(group_records, value_field)
+-    return format_table(totals, title="Totals")
++    return format_table(totals, title="Group Totals")
+ 
+ 
+ def grouped_summaries(csv_data: str, group_field: str, value_field: str) -> str:

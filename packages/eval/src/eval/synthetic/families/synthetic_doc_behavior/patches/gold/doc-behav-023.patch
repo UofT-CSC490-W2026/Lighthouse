@@ -1,0 +1,12 @@
+diff --git a/consumer_app/reporting.py b/consumer_app/reporting.py
+--- a/consumer_app/reporting.py
++++ b/consumer_app/reporting.py
+@@ -13,7 +13,7 @@
+ 
+ def deadline_label(d: date | None) -> str:
+     """Return a formatted deadline label."""
+-    return d.isoformat() if d else ""
++    return format_iso_date(d)
+ 
+ 
+ def days_until_deadline(today: date, deadline: date) -> int:

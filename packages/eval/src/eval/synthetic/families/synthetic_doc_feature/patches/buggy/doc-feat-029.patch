@@ -1,0 +1,10 @@
+diff --git a/consumer_app/exports.py b/consumer_app/exports.py
+--- a/consumer_app/exports.py
++++ b/consumer_app/exports.py
+@@ -21,5 +21,5 @@
+     for key in sorted(groups.keys()):
+         group_records = groups[key]
+         total = sum_field(group_records, value_field)
+-        lines.append(format_summary(key, total, len(group_records)))
++        lines.append(format_summary(group_field, total, len(group_records)))
+     return "\n".join(lines)

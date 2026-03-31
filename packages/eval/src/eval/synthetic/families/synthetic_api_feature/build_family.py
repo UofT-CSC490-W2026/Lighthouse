@@ -10,7 +10,7 @@ FAMILY_CONFIG_PATH = FAMILY_DIR / "family.json"
 PATCHES_BUGGY = FAMILY_DIR / "patches" / "buggy"
 PATCHES_GOLD = FAMILY_DIR / "patches" / "gold"
 
-TASK_IDS = tuple(f"{i:03d}" for i in range(1, 11))
+TASK_IDS = tuple(f"{i:03d}" for i in range(1, 31))
 
 
 def validate() -> list[str]:

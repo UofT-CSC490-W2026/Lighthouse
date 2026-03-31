@@ -1,0 +1,12 @@
+diff --git a/consumer_app/reports.py b/consumer_app/reports.py
+--- a/consumer_app/reports.py
++++ b/consumer_app/reports.py
+@@ -5,7 +5,7 @@
+ 
+ 
+ def category_report(csv_data: str, category_field: str) -> str:
+-    records = load_records(csv_data.lower())
++    records = load_records(csv_data)
+     counts = aggregate(records, category_field)
+     return format_table(counts, title="Category Report")
+ 
