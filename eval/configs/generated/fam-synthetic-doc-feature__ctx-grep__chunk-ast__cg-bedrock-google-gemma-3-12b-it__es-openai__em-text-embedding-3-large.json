@@ -16,11 +16,9 @@
     "synthetic-doc-feature"
   ],
   "k_values": [
-    1,
-    2,
-    3
+    1
   ],
-  "repeat_count": 3,
+  "repeat_count": 1,
   "task_count": 30,
   "top_k": 10
 }

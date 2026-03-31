@@ -1,0 +1,24 @@
+{
+  "chunking_strategies": [
+    "ast"
+  ],
+  "codegen_models": [
+    "bedrock/qwen.qwen3-coder-next"
+  ],
+  "context_sources": [
+    "grep"
+  ],
+  "embedding_models": [
+    "text-embedding-3-large"
+  ],
+  "embedding_strategy": "openai",
+  "families": [
+    "synthetic-api-feature"
+  ],
+  "k_values": [
+    1
+  ],
+  "repeat_count": 1,
+  "task_count": 30,
+  "top_k": 10
+}

@@ -1,27 +1,21 @@
 {
   "chunking_strategies": [
-    "base",
     "ast"
   ],
   "codegen_models": [
     "bedrock/us.anthropic.claude-sonnet-4-6",
     "bedrock/amazon.nova-pro-v1:0",
     "bedrock/google.gemma-3-12b-it",
+    "bedrock/qwen.qwen3-coder-next",
+    "bedrock/meta.llama3-3-70b-instruct-v1:0",
     "openai/gpt-5.4"
   ],
-  "config_count": 432,
+  "config_count": 72,
   "context_sources": [
-    "code",
-    "wiki",
     "combined",
-    "ast",
     "grep"
   ],
   "embedding_pairs": [
-    {
-      "embedding_model": "amazon.titan-embed-text-v2:0",
-      "embedding_strategy": "bedrock"
-    },
     {
       "embedding_model": "text-embedding-3-large",
       "embedding_strategy": "openai"
@@ -37,15 +31,14 @@
   ],
   "fixed": {
     "k_values": [
-      1,
-      2,
-      3
+      1
     ],
-    "repeat_count": 3,
+    "repeat_count": 1,
     "requested_task_count": 30,
     "top_k": 10
   },
   "pending_file": "eval/configs/pending_configs.txt",
+  "profile": "simplified",
   "task_count_by_family": {
     "synthetic-ab-contracts": {
       "available_task_count": 30,

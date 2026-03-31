@@ -19,6 +19,8 @@ CODEGEN_MODELS_FULL = (
     "bedrock/us.anthropic.claude-sonnet-4-6",
     "bedrock/amazon.nova-pro-v1:0",
     "bedrock/google.gemma-3-12b-it",
+    "bedrock/qwen.qwen3-coder-next",
+    "bedrock/meta.llama3-3-70b-instruct-v1:0",
     "openai/gpt-5.4",
 )
 EMBEDDING_PAIRS_FULL = (
