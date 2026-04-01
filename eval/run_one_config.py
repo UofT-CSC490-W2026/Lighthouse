@@ -233,6 +233,7 @@ def _build_command(
     skip_index: bool,
     skip_wiki_preparation: bool,
     skip_synthetic_validation: bool,
+    overwrite: bool,
     ingestion_url: str,
     search_url: str,
 ) -> tuple[list[str], Path]:
@@ -276,6 +277,8 @@ def _build_command(
         command.append("--skip-wiki-preparation")
     if skip_synthetic_validation:
         command.append("--skip-validation")
+    if overwrite:
+        command.append("--overwrite")
     return command, matrix_out / "matrix_rows.json"
 
 
@@ -315,6 +318,14 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Forward --skip-validation to run-synthetic-matrix. "
             "Use as an unblock when a known synthetic task patch is broken."
+        ),
+    )
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help=(
+            "Forward --overwrite to run-synthetic-matrix and force rerun even if prior "
+            "artifacts exist for this config prefix."
         ),
     )
     parser.add_argument(
@@ -375,11 +386,12 @@ def main() -> int:
         skip_index=not args.allow_index,
         skip_wiki_preparation=not args.allow_index,
         skip_synthetic_validation=args.skip_synthetic_validation,
+        overwrite=args.overwrite,
         ingestion_url=args.ingestion_url,
         search_url=args.search_url,
     )
 
-    if matrix_rows_path.is_file():
+    if matrix_rows_path.is_file() and not args.overwrite:
         try:
             _validate_outputs(config=config, matrix_rows_path=matrix_rows_path)
         except Exception as exc:
@@ -405,7 +417,7 @@ def main() -> int:
     completed_runs_path = (
         Path(args.completed_runs_file).resolve() if args.completed_runs_file else None
     )
-    if completed_runs_path is not None:
+    if completed_runs_path is not None and not args.overwrite:
         historical_ids = load_run_id_list(completed_runs_path)
         matched = list_completed_lighthouse_summaries(
             run_ids=historical_ids,
